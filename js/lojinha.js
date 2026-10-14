@@ -37,8 +37,8 @@ async function hashPIN(p){const e=new TextEncoder().encode(p);const b=await cryp
 const closeM=id=>document.getElementById(id).style.display='none';
 const openM=id=>document.getElementById(id).style.display='flex';
 function toast(msg,tp=''){const t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(tp?' '+tp:'');setTimeout(()=>t.classList.remove('show'),3200);}
-function tipoBadge(t){const m={venda_paciente:'<span class="bg bg-g">Venda Pac.</span>',venda_profissional:'<span class="bg bg-b">Notinha</span>',entrada_estoque:'<span class="bg bg-p">Estoque</span>',pagamento_notinha:'<span class="bg bg-g">Pagamento</span>',bonificacao:'<span class="bg bg-a">Bonificacao</span>',sangria:'<span class="bg bg-r">Sangria</span>',suprimento:'<span class="bg bg-g">Suprimento</span>',edicao_profissional:'<span class="bg bg-x">Edicao</span>',ajuste_estoque:'<span class="bg bg-a">Balanço</span>',edicao_produto:'<span class="bg bg-x">Produto</span>'};return m[t]||('<span class="bg bg-x">'+t+'</span>');}
-function pagBadge(p){if(!p)return'<span style="color:var(--muted)">-</span>';const m={dinheiro:'Dinheiro',pix:'PIX',debito:'Debito',credito:'Credito',notinha:'Notinha'};return m[p]||p;}
+function tipoBadge(t){const m={venda_paciente:'<span class="bg bg-g">Venda Pac.</span>',venda_profissional:'<span class="bg bg-b">Notinha</span>',entrada_estoque:'<span class="bg bg-p">Estoque</span>',pagamento_notinha:'<span class="bg bg-g">Pagamento</span>',bonificacao:'<span class="bg bg-a">Bonificação</span>',sangria:'<span class="bg bg-r">Sangria</span>',suprimento:'<span class="bg bg-g">Suprimento</span>',edicao_profissional:'<span class="bg bg-x">Edição</span>',ajuste_estoque:'<span class="bg bg-a">Balanço</span>',edicao_produto:'<span class="bg bg-x">Produto</span>'};return m[t]||('<span class="bg bg-x">'+t+'</span>');}
+function pagBadge(p){if(!p)return'<span style="color:var(--muted)">-</span>';const m={dinheiro:'Dinheiro',pix:'PIX',debito:'Débito',credito:'Crédito',notinha:'Notinha'};return m[p]||p;}
 
 function gerarLink(profId){
   const url=window.location.href.split('?')[0]+'?prof='+profId;
@@ -58,7 +58,7 @@ async function loadPosicao(){
   prods.forEach(p=>{
     const est=p.estoque_atual||0;const tr=document.createElement('tr');
     const estCor=est<=0?'color:var(--red)':est<=5?'color:var(--amb)':'color:var(--grn)';
-    tr.innerHTML='<td style="font-weight:500">'+p.nome+'</td><td>'+p.grupo+'</td><td style="font-family:var(--mo);font-weight:700;'+estCor+'">'+est+' '+( p.unidade||'un')+'</td><td style="font-family:var(--mo)">'+fmt(p.preco_venda)+'</td><td style="font-family:var(--mo);color:var(--muted)">'+fmt(p.preco_custo)+'</td><td>'+(p.ativo?'<span class="bg bg-g">Ativo</span>':'<span class="bg bg-x">Inativo</span>')+'</td><td><button class="btn btn-s btn-sm" onclick=\'editProd('+JSON.stringify(p)+')\'>Editar</button></td>';
+    tr.innerHTML='<td style="font-weight:500">'+balEsc(p.nome)+'</td><td>'+(p.grupo==='conveniencia'?'Conveniência':p.grupo==='livraria'?'Livraria':p.grupo)+'</td><td style="font-family:var(--mo);font-weight:700;'+estCor+'">'+est+' '+( p.unidade||'un')+'</td><td style="font-family:var(--mo)">'+fmt(p.preco_venda)+'</td><td style="font-family:var(--mo);color:var(--muted)">'+fmt(p.preco_custo)+'</td><td>'+(p.ativo?'<span class="bg bg-g">Ativo</span>':'<span class="bg bg-x">Inativo</span>')+'</td><td><button class="btn btn-s btn-sm" onclick=\'editProd('+JSON.stringify(p)+')\'>Editar</button></td>';
     tb.appendChild(tr);
   });
 }
@@ -272,7 +272,7 @@ async function loadCfg(){
 }
 async function salvarCfg(){
   CFG={taxa_debito:parseFloat(document.getElementById('cfg-deb').value)||0,taxa_credito:parseFloat(document.getElementById('cfg-cred').value)||0,valor_bonificacao_padrao:parseFloat(document.getElementById('cfg-bonif').value)||0};
-  await db.collection('configuracoes').doc('geral').set(CFG);toast('Configuracoes salvas!','ok');
+  await db.collection('configuracoes').doc('geral').set(CFG);toast('Configurações salvas!','ok');
 }
 
 async function loadDashboard(){
@@ -292,9 +292,9 @@ async function loadDashboard(){
     document.getElementById('d-vd').textContent=fmt(vd);document.getElementById('d-vd-s').textContent=vq+' vendas hoje';
     const tb=document.getElementById('d-movs');tb.innerHTML='';
     const ul=movs.slice(0,8);
-    if(!ul.length)tb.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Nenhuma movimentacao hoje</td></tr>';
+    if(!ul.length)tb.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Nenhuma movimentação hoje</td></tr>';
     else ul.forEach(m=>{const tr=document.createElement('tr');tr.innerHTML='<td>'+tipoBadge(m.tipo)+'</td><td>'+(m.produto_nome||m.descricao||'-')+'</td><td style="font-family:var(--mo)">'+fmt(m.valor_total)+'</td><td style="color:var(--muted);font-size:12px">'+(fmtDT(m.timestamp).split(' ')[1]||'-')+'</td>';tb.appendChild(tr);});
-    document.getElementById('d-grupos').innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-size:13px;font-weight:500">Conveniencia</span><span style="font-family:var(--mo);font-weight:700">'+fmt(gc)+'</span></div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><span style="font-size:13px;font-weight:500">Livraria</span><span style="font-family:var(--mo);font-weight:700">'+fmt(gl)+'</span></div><div style="border-top:1px solid var(--bdr);padding-top:12px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;font-weight:600">Total</span><span style="font-family:var(--mo);font-weight:700;color:var(--grn)">'+fmt(gc+gl)+'</span></div>';
+    document.getElementById('d-grupos').innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-size:13px;font-weight:500">Conveniência</span><span style="font-family:var(--mo);font-weight:700">'+fmt(gc)+'</span></div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><span style="font-size:13px;font-weight:500">Livraria</span><span style="font-family:var(--mo);font-weight:700">'+fmt(gl)+'</span></div><div style="border-top:1px solid var(--bdr);padding-top:12px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;font-weight:600">Total</span><span style="font-family:var(--mo);font-weight:700;color:var(--grn)">'+fmt(gc+gl)+'</span></div>';
   }catch(e){toast('Erro: '+e.message,'ko');console.error(e);}
 }
 
@@ -478,7 +478,7 @@ async function confirmarBaixaNotinha(){
 }
 function abrirBonif(){
   const lista=document.getElementById('bonif-lista');lista.innerHTML='';
-  PRC.forEach(p=>{const v=CFG.valor_bonificacao_padrao!=null?CFG.valor_bonificacao_padrao:100;const div=document.createElement('div');div.style.cssText='display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid var(--bdr);border-radius:6px;font-size:13px';div.innerHTML='<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:500"><input type="checkbox" value="'+p.id+'" data-nm="'+p.nome+'" data-val="'+v+'" style="width:15px;height:15px"> '+p.nome+'</label><span style="font-family:var(--mo);color:var(--amb)">'+fmt(v)+'</span>';lista.appendChild(div);});
+  PRC.forEach(p=>{const v=CFG.valor_bonificacao_padrao!=null?CFG.valor_bonificacao_padrao:100;const div=document.createElement('div');div.style.cssText='display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid var(--bdr);border-radius:6px;font-size:13px';div.innerHTML='<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:500"><input type="checkbox" value="'+p.id+'" data-nm="'+balEsc(p.nome)+'" data-val="'+v+'" style="width:15px;height:15px"> '+balEsc(p.nome)+'</label><span style="font-family:var(--mo);color:var(--amb)">'+fmt(v)+'</span>';lista.appendChild(div);});
   openM('m-bonif');
 }
 async function confirmarBonif(){
@@ -667,13 +667,13 @@ async function loadProfTable(){
   const docs=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>a.nome.localeCompare(b.nome));
   docs.forEach(p=>{
     const sd=p.saldo_devedor||0;const tr=document.createElement('tr');
-    const sdTxt=sd>0?fmt(sd):sd<0?'Credito '+fmt(Math.abs(sd)):'Em dia';
+    const sdTxt=sd>0?fmt(sd):sd<0?'Crédito '+fmt(Math.abs(sd)):'Em dia';
     const sdClr=sd>0?'var(--red)':sd<0?'var(--grn)':'var(--muted)';
     const bonif=p.bonificacao_mensal!=null?p.bonificacao_mensal:(CFG.valor_bonificacao_padrao!=null?CFG.valor_bonificacao_padrao:100);
     const be=document.createElement('button');be.className='btn btn-s btn-sm';be.textContent='Editar';be.onclick=()=>editProf(p);
     const bt=document.createElement('button');bt.className='btn btn-s btn-sm';bt.textContent=p.ativo?'Desativar':'Ativar';bt.onclick=()=>toggleProf(p.id,p.ativo);
     const status=(p.ativo?'<span class="bg bg-g">Ativo</span>':'<span class="bg bg-x">Inativo</span>')+(ehOculto(p)?' <span class="bg bg-x">Oculto</span>':'');
-    tr.innerHTML='<td style="font-weight:500">'+p.nome+'</td><td style="font-family:var(--mo);color:'+sdClr+'">'+sdTxt+'</td><td style="font-family:var(--mo)">'+fmt(bonif)+'</td><td>'+status+'</td><td></td>';
+    tr.innerHTML='<td style="font-weight:500">'+balEsc(p.nome)+'</td><td style="font-family:var(--mo);color:'+sdClr+'">'+sdTxt+'</td><td style="font-family:var(--mo)">'+fmt(bonif)+'</td><td>'+status+'</td><td></td>';
     const acoes=tr.querySelector('td:last-child');acoes.style.cssText='display:flex;gap:6px';
     acoes.appendChild(be);acoes.appendChild(bt);
     if(isAdmin()){const bo=document.createElement('button');bo.className='btn btn-s btn-sm';bo.textContent=ehOculto(p)?'Exibir':'Ocultar';bo.title='Ocultar a notinha da tela Notinhas e do extrato geral';bo.onclick=()=>toggleOculto(p.id,ehOculto(p));acoes.appendChild(bo);}

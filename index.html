@@ -7,10 +7,10 @@
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#F5F5F7">
 <link rel="icon" type="image/png" href="img/levsoul-marca.png">
-<link rel="stylesheet" href="css/painel.css?v=5">
-<link rel="stylesheet" href="css/loja.css?v=5">
-<link rel="stylesheet" href="css/guias.css?v=5">
-<link rel="stylesheet" href="css/profissional.css?v=5">
+<link rel="stylesheet" href="css/painel.css?v=6">
+<link rel="stylesheet" href="css/loja.css?v=6">
+<link rel="stylesheet" href="css/guias.css?v=6">
+<link rel="stylesheet" href="css/profissional.css?v=6">
 </head>
 <body>
 <div class="toast" id="toast"></div>
@@ -96,15 +96,15 @@
 
 <!-- DASHBOARD -->
 <div class="sec active" id="s-dashboard">
-  <div class="sh"><h2>Visao Geral</h2><button class="btn btn-p btn-sm" onclick="nav('venda')">+ Nova Venda</button></div>
+  <div class="sh"><h2>Visão geral</h2><button class="btn btn-p btn-sm" onclick="nav('venda')">+ Nova Venda</button></div>
   <div class="g4" style="margin-bottom:18px">
-    <div class="card"><div class="ct-lbl">Caixa Fisico</div><div class="ct-val" id="d-fisico">R$ 0,00</div><div class="ct-sub">Dinheiro hoje</div></div>
+    <div class="card"><div class="ct-lbl">Caixa Físico</div><div class="ct-val" id="d-fisico">R$ 0,00</div><div class="ct-sub">Dinheiro hoje</div></div>
     <div class="card"><div class="ct-lbl">Caixa Banco</div><div class="ct-val" id="d-banco">R$ 0,00</div><div class="ct-sub">PIX + cartoes (liquido)</div></div>
     <div class="card"><div class="ct-lbl">Notinhas Abertas</div><div class="ct-val" id="d-not" style="color:var(--red)">R$ 0,00</div><div class="ct-sub" id="d-not-s">0 profissionais</div></div>
     <div class="card"><div class="ct-lbl">Vendas Hoje</div><div class="ct-val" id="d-vd">R$ 0,00</div><div class="ct-sub" id="d-vd-s">0 vendas</div></div>
   </div>
   <div class="g2">
-    <div><h3 style="font-size:14px;font-weight:700;margin-bottom:10px">Ultimas movimentacoes</h3><div class="tw"><table><thead><tr><th>Tipo</th><th>Produto/Desc.</th><th>Valor</th><th>Hora</th></tr></thead><tbody id="d-movs"></tbody></table></div></div>
+    <div><h3 style="font-size:14px;font-weight:700;margin-bottom:10px">Últimas movimentações</h3><div class="tw"><table><thead><tr><th>Tipo</th><th>Produto/Desc.</th><th>Valor</th><th>Hora</th></tr></thead><tbody id="d-movs"></tbody></table></div></div>
     <div><h3 style="font-size:14px;font-weight:700;margin-bottom:10px">Vendas por grupo - hoje</h3><div class="card" id="d-grupos"></div></div>
   </div>
 </div>
@@ -191,14 +191,14 @@
 <!-- POSICAO ESTOQUE -->
 <div class="sec" id="s-posicao">
   <div class="sh"><h2>Posicao de Estoque</h2><button class="btn btn-p btn-sm" onclick="nav('estoque')">+ Entrada de Estoque</button></div>
-  <div class="itabs"><button class="itab active" onclick="filtroPos('todos',this)">Todos</button><button class="itab" onclick="filtroPos('conveniencia',this)">Conveniencia</button><button class="itab" onclick="filtroPos('livraria',this)">Livraria</button></div>
-  <div class="tw"><table><thead><tr><th>Produto</th><th>Grupo</th><th>Estoque Atual</th><th>Preco Venda</th><th>Ultimo Custo</th><th>Status</th><th>Acoes</th></tr></thead><tbody id="pos-tb"></tbody></table></div>
+  <div class="itabs"><button class="itab active" onclick="filtroPos('todos',this)">Todos</button><button class="itab" onclick="filtroPos('conveniencia',this)">Conveniência</button><button class="itab" onclick="filtroPos('livraria',this)">Livraria</button></div>
+  <div class="tw"><table><thead><tr><th>Produto</th><th>Grupo</th><th>Estoque Atual</th><th>Preço Venda</th><th>Último Custo</th><th>Status</th><th>Ações</th></tr></thead><tbody id="pos-tb"></tbody></table></div>
 </div>
 
 <!-- PROFISSIONAIS -->
 <div class="sec" id="s-profissionais">
-  <div class="sh"><h2>Profissionais</h2><div style="display:flex;gap:8px"><button class="btn btn-s btn-sm" onclick="abrirBaixaNotinha()">💰 Baixa em Notinha</button><button class="btn btn-a btn-sm" onclick="abrirBonif()">🎁 Bonificacao Mensal</button><button class="btn btn-p btn-sm" onclick="abrirProf()">+ Novo Profissional</button></div></div>
-  <div class="tw"><table><thead><tr><th>Nome</th><th>Saldo Devedor</th><th>Bonificacao/Mes</th><th>Status</th><th>Acoes</th></tr></thead><tbody id="pr-tb"></tbody></table></div>
+  <div class="sh"><h2>Profissionais</h2><div style="display:flex;gap:8px"><button class="btn btn-s btn-sm" onclick="abrirBaixaNotinha()">Baixa em notinha</button><button class="btn btn-a btn-sm" onclick="abrirBonif()">Bonificação mensal</button><button class="btn btn-p btn-sm" onclick="abrirProf()">Novo profissional</button></div></div>
+  <div class="tw"><table><thead><tr><th>Nome</th><th>Saldo Devedor</th><th>Bonificação/mês</th><th>Status</th><th>Ações</th></tr></thead><tbody id="pr-tb"></tbody></table></div>
 </div>
 
 <!-- HISTORICO -->
@@ -216,8 +216,8 @@
 <div class="sec" id="s-exportar">
   <div class="sh"><h2>Exportar para Excel (CSV)</h2></div>
   <div style="max-width:460px"><div class="card">
-    <div class="fg"><label class="fl">Periodo</label><div class="fr"><div><input type="date" class="fc" id="ex-ini"></div><div><input type="date" class="fc" id="ex-fim"></div></div></div>
-    <div class="fg"><label class="fl">Tipo de dados</label><select class="fc" id="ex-tipo"><option value="todos">Todas as movimentacoes</option><option value="vendas">Somente vendas (pacientes)</option><option value="notinhas">Notinhas (profissionais)</option><option value="estoque">Entradas de estoque</option><option value="caixa">Sangrias e suprimentos</option></select></div>
+    <div class="fg"><label class="fl">Período</label><div class="fr"><div><input type="date" class="fc" id="ex-ini"></div><div><input type="date" class="fc" id="ex-fim"></div></div></div>
+    <div class="fg"><label class="fl">Tipo de dados</label><select class="fc" id="ex-tipo"><option value="todos">Todas as movimentações</option><option value="vendas">Somente vendas (pacientes)</option><option value="notinhas">Notinhas (profissionais)</option><option value="estoque">Entradas de estoque</option><option value="caixa">Sangrias e suprimentos</option></select></div>
     <button class="btn btn-p" style="width:100%;justify-content:center;padding:12px" onclick="exportCSV()">Baixar CSV</button>
     <p style="font-size:11px;color:var(--muted);text-align:center;margin-top:10px">No Excel: Dados > De Texto/CSV > Delimitador: ponto-e-virgula</p>
   </div></div>
@@ -225,13 +225,13 @@
 
 <!-- CONFIG -->
 <div class="sec" id="s-cfg">
-  <div class="sh"><h2>Configuracoes</h2></div>
+  <div class="sh"><h2>Configurações</h2></div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;max-width:800px">
-    <div class="card"><h3 style="font-size:14px;font-weight:700;margin-bottom:14px">Taxas de Cartao</h3>
-      <div class="fg"><label class="fl">Taxa Debito (%)</label><input type="number" class="fc" id="cfg-deb" step="0.1" min="0" placeholder="Ex: 1.5"></div>
-      <div class="fg"><label class="fl">Taxa Credito (%)</label><input type="number" class="fc" id="cfg-cred" step="0.1" min="0" placeholder="Ex: 3.0"></div>
-      <div class="fg"><label class="fl">Bonificacao Padrao (R$/mes)</label><input type="number" class="fc" id="cfg-bonif" step="1" min="0" placeholder="Ex: 100"></div>
-      <button class="btn btn-p btn-sm" onclick="salvarCfg()">Salvar Configuracoes</button>
+    <div class="card"><h3 style="font-size:14px;font-weight:700;margin-bottom:14px">Taxas de cartão</h3>
+      <div class="fg"><label class="fl">Taxa débito (%)</label><input type="number" class="fc" id="cfg-deb" step="0.1" min="0" placeholder="Ex: 1.5"></div>
+      <div class="fg"><label class="fl">Taxa crédito (%)</label><input type="number" class="fc" id="cfg-cred" step="0.1" min="0" placeholder="Ex: 3.0"></div>
+      <div class="fg"><label class="fl">Bonificação padrão (R$/mês)</label><input type="number" class="fc" id="cfg-bonif" step="1" min="0" placeholder="Ex: 100"></div>
+      <button class="btn btn-p btn-sm" onclick="salvarCfg()">Salvar configurações</button>
     </div>
     <div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h3 style="font-size:14px;font-weight:700">Secretarias</h3><button class="btn btn-s btn-sm" onclick="abrirSec()">+ Adicionar</button></div><div id="sec-lista"></div></div>
   </div>
@@ -243,19 +243,19 @@
 
 <div class="mo" id="m-link" style="display:none"><div class="mb"><div class="mh"><h3>Link da Notinha</h3><button class="btn btn-s btn-sm" onclick="closeM('m-link')">X</button></div><div class="mbody"><p style="font-size:13px;color:var(--txt2);margin-bottom:12px">Compartilhe este link com o profissional para ele ver a propria notinha:</p><div style="display:flex;gap:8px"><input type="text" class="fc" id="link-url" readonly style="font-size:12px;font-family:var(--mo)"><button class="btn btn-p btn-sm" onclick="copiarLink()">Copiar</button></div></div><div class="mf"><button class="btn btn-s" onclick="closeM('m-link')">Fechar</button></div></div></div>
 
-<div class="mo" id="m-prod" style="display:none"><div class="mb"><div class="mh"><h3 id="mp-ttl">Novo Produto</h3><button class="btn btn-s btn-sm" onclick="closeM('m-prod')">X</button></div><div class="mbody"><input type="hidden" id="mp-id"><div class="fg"><label class="fl">Nome</label><input type="text" class="fc" id="mp-nm"></div><div class="fr"><div class="fg"><label class="fl">Grupo</label><select class="fc" id="mp-gr"><option value="conveniencia">Conveniencia</option><option value="livraria">Livraria</option></select></div><div class="fg"><label class="fl">Unidade</label><input type="text" class="fc" id="mp-un" placeholder="un, cx, kg..."></div></div><div class="fr"><div class="fg"><label class="fl">Preco de Custo (R$)</label><input type="number" class="fc" id="mp-cst" step="0.01" min="0" placeholder="0,00"></div><div class="fg"><label class="fl">Preco de Venda (R$)</label><input type="number" class="fc" id="mp-prc" step="0.01" min="0" placeholder="0,00"></div></div></div><div class="mf"><button class="btn btn-s" onclick="closeM('m-prod')">Cancelar</button><button class="btn btn-p" onclick="salvarProd()">Salvar</button></div></div></div>
+<div class="mo" id="m-prod" style="display:none"><div class="mb"><div class="mh"><h3 id="mp-ttl">Novo Produto</h3><button class="btn btn-s btn-sm" onclick="closeM('m-prod')">X</button></div><div class="mbody"><input type="hidden" id="mp-id"><div class="fg"><label class="fl">Nome</label><input type="text" class="fc" id="mp-nm"></div><div class="fr"><div class="fg"><label class="fl">Grupo</label><select class="fc" id="mp-gr"><option value="conveniencia">Conveniência</option><option value="livraria">Livraria</option></select></div><div class="fg"><label class="fl">Unidade</label><input type="text" class="fc" id="mp-un" placeholder="un, cx, kg..."></div></div><div class="fr"><div class="fg"><label class="fl">Preço de custo (R$)</label><input type="number" class="fc" id="mp-cst" step="0.01" min="0" placeholder="0,00"></div><div class="fg"><label class="fl">Preço de venda (R$)</label><input type="number" class="fc" id="mp-prc" step="0.01" min="0" placeholder="0,00"></div></div></div><div class="mf"><button class="btn btn-s" onclick="closeM('m-prod')">Cancelar</button><button class="btn btn-p" onclick="salvarProd()">Salvar</button></div></div></div>
 
 <div class="mo" id="m-prof" style="display:none"><div class="mb">
   <div class="mh"><h3 id="mpr-ttl">Novo Profissional</h3><button class="btn btn-s btn-sm" onclick="closeM('m-prof')">X</button></div>
   <div class="mbody">
     <input type="hidden" id="mpr-id">
     <div class="fg"><label class="fl">Nome</label><input type="text" class="fc" id="mpr-nm"></div>
-    <div class="fg"><label class="fl">Bonificacao Mensal (R$)</label><input type="number" class="fc" id="mpr-bonif" step="1" min="0" placeholder="Ex: 100"></div>
+    <div class="fg"><label class="fl">Bonificação mensal (R$)</label><input type="number" class="fc" id="mpr-bonif" step="1" min="0" placeholder="Ex: 100"></div>
     <div id="mpr-saldo-blk" style="display:none">
       <div style="background:var(--ambl);border:1px solid var(--amb);border-radius:6px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:var(--amb)">
         ⚠️ <strong>Atencao:</strong> Este campo e apenas para correcao de erro de preenchimento. Para registrar pagamentos use o botao "Baixa em Notinha".
       </div>
-      <div class="fg"><label class="fl">Corrigir Saldo Devedor (R$)</label><input type="number" class="fc" id="mpr-saldo" step="0.01" placeholder="Saldo atual sera substituido"></div>
+      <div class="fg"><label class="fl">Corrigir Saldo Devedor (R$)</label><input type="number" class="fc" id="mpr-saldo" step="0.01" placeholder="Saldo atual será substituído"></div>
     </div>
   </div>
   <div class="mf"><button class="btn btn-s" onclick="closeM('m-prof')">Cancelar</button><button class="btn btn-p" onclick="salvarProf()">Salvar</button></div>
@@ -263,9 +263,9 @@
 
 <div class="mo" id="m-sec" style="display:none"><div class="mb"><div class="mh"><h3>Nova Secretaria</h3><button class="btn btn-s btn-sm" onclick="closeM('m-sec')">X</button></div><div class="mbody"><div class="fg"><label class="fl">Nome</label><input type="text" class="fc" id="ms-nm"></div><div class="fg"><label class="fl">PIN (4-8 numeros)</label><input type="password" class="fc" id="ms-pin" maxlength="8" inputmode="numeric" placeholder="****"></div><div class="fg"><label class="fl">Confirmar PIN</label><input type="password" class="fc" id="ms-pin2" maxlength="8" inputmode="numeric" placeholder="****"></div></div><div class="mf"><button class="btn btn-s" onclick="closeM('m-sec')">Cancelar</button><button class="btn btn-p" onclick="salvarSec()">Salvar</button></div></div></div>
 
-<div class="mo" id="m-pgto" style="display:none"><div class="mb"><div class="mh"><h3>Registrar Pagamento</h3><button class="btn btn-s btn-sm" onclick="closeM('m-pgto')">X</button></div><div class="mbody"><p style="font-size:13px;color:var(--txt2);margin-bottom:14px" id="mpg-info"></p><div class="fg"><label class="fl">Valor Pago (R$)</label><input type="number" class="fc" id="mpg-val" step="0.01" min="0.01"></div><div class="fg"><label class="fl">Forma de Pagamento</label><select class="fc" id="mpg-pag"><option value="dinheiro">Dinheiro</option><option value="pix">PIX</option><option value="debito">Debito</option><option value="credito">Credito</option></select></div></div><div class="mf"><button class="btn btn-s" onclick="closeM('m-pgto')">Cancelar</button><button class="btn btn-p" onclick="confirmarPgto()">Confirmar</button></div></div></div>
+<div class="mo" id="m-pgto" style="display:none"><div class="mb"><div class="mh"><h3>Registrar Pagamento</h3><button class="btn btn-s btn-sm" onclick="closeM('m-pgto')">X</button></div><div class="mbody"><p style="font-size:13px;color:var(--txt2);margin-bottom:14px" id="mpg-info"></p><div class="fg"><label class="fl">Valor Pago (R$)</label><input type="number" class="fc" id="mpg-val" step="0.01" min="0.01"></div><div class="fg"><label class="fl">Forma de Pagamento</label><select class="fc" id="mpg-pag"><option value="dinheiro">Dinheiro</option><option value="pix">PIX</option><option value="debito">Débito</option><option value="credito">Crédito</option></select></div></div><div class="mf"><button class="btn btn-s" onclick="closeM('m-pgto')">Cancelar</button><button class="btn btn-p" onclick="confirmarPgto()">Confirmar</button></div></div></div>
 
-<div class="mo" id="m-bonif" style="display:none"><div class="mb"><div class="mh"><h3>Bonificacao Mensal</h3><button class="btn btn-s btn-sm" onclick="closeM('m-bonif')">X</button></div><div class="mbody"><p style="font-size:13px;color:var(--txt2);margin-bottom:14px">Selecione os profissionais que recebem bonificacao este mes:</p><div id="bonif-lista" style="display:flex;flex-direction:column;gap:8px"></div></div><div class="mf"><button class="btn btn-s" onclick="closeM('m-bonif')">Cancelar</button><button class="btn btn-a" onclick="confirmarBonif()">Aplicar Bonificacao</button></div></div></div>
+<div class="mo" id="m-bonif" style="display:none"><div class="mb"><div class="mh"><h3>Bonificação mensal</h3><button class="btn btn-s btn-sm" onclick="closeM('m-bonif')">X</button></div><div class="mbody"><p style="font-size:13px;color:var(--txt2);margin-bottom:14px">Selecione os profissionais que recebem bonificação este mês:</p><div id="bonif-lista" style="display:flex;flex-direction:column;gap:8px"></div></div><div class="mf"><button class="btn btn-s" onclick="closeM('m-bonif')">Cancelar</button><button class="btn btn-a" onclick="confirmarBonif()">Aplicar bonificação</button></div></div></div>
 
 <div class="mo" id="m-cx" style="display:none"><div class="mb"><div class="mh"><h3 id="mcx-ttl">Sangria</h3><button class="btn btn-s btn-sm" onclick="closeM('m-cx')">X</button></div><div class="mbody"><div class="fg"><label class="fl">Valor (R$)</label><input type="number" class="fc" id="mcx-val" step="0.01" min="0.01"></div><div class="fg"><label class="fl">Motivo</label><input type="text" class="fc" id="mcx-mot" placeholder="Troco, fornecedor..."></div></div><div class="mf"><button class="btn btn-s" onclick="closeM('m-cx')">Cancelar</button><button class="btn btn-p" onclick="confirmarCxMov()">Confirmar</button></div></div></div>
 
@@ -286,31 +286,31 @@
 </div></div>
 
 <div class="mo" id="m-baixa" style="display:none"><div class="mb">
-  <div class="mh"><h3>💰 Baixa em Notinha</h3><button class="btn btn-s btn-sm" onclick="closeM('m-baixa')">X</button></div>
+  <div class="mh"><h3>Baixa em notinha</h3><button class="btn btn-s btn-sm" onclick="closeM('m-baixa')">X</button></div>
   <div class="mbody">
     <div class="fg"><label class="fl">Profissional</label><select class="fc" id="baixa-prof"><option value="">Selecione...</option></select></div>
     <div class="fg" id="baixa-saldo-info" style="display:none;padding:10px 12px;background:var(--redl);border-radius:6px;font-size:13px;color:var(--red)"></div>
     <div class="fg"><label class="fl">Valor Pago (R$)</label><input type="number" class="fc" id="baixa-val" step="0.01" min="0.01" placeholder="0,00"></div>
     <div class="fg"><label class="fl">Forma de Pagamento</label>
       <select class="fc" id="baixa-pag">
-        <option value="dinheiro">💵 Dinheiro</option>
-        <option value="pix">⚡ PIX</option>
-        <option value="debito">💳 Cartao Debito</option>
-        <option value="credito">💳 Cartao Credito</option>
+        <option value="dinheiro">Dinheiro</option>
+        <option value="pix">PIX</option>
+        <option value="debito">Cartão débito</option>
+        <option value="credito">Cartão crédito</option>
       </select>
     </div>
-    <div class="fg"><label class="fl">Observacao <small style="font-weight:400;color:var(--muted)">opcional</small></label><input type="text" class="fc" id="baixa-obs" placeholder="Ex: pagamento parcial, cheque..."></div>
+    <div class="fg"><label class="fl">Observação <small style="font-weight:400;color:var(--muted)">opcional</small></label><input type="text" class="fc" id="baixa-obs" placeholder="Ex: pagamento parcial, cheque..."></div>
   </div>
-  <div class="mf"><button class="btn btn-s" onclick="closeM('m-baixa')">Cancelar</button><button class="btn btn-p" onclick="confirmarBaixaNotinha()">Confirmar Pagamento</button></div>
+  <div class="mf"><button class="btn btn-s" onclick="closeM('m-baixa')">Cancelar</button><button class="btn btn-p" onclick="confirmarBaixaNotinha()">Confirmar pagamento</button></div>
 </div></div>
 
 <!-- FIREBASE SDK -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-<script src="js/lojinha.js?v=5"></script>
-<script src="js/guias.js?v=5"></script>
-<script src="js/profissional.js?v=5"></script>
-<script src="js/loja_nova.js?v=5"></script>
-<script src="js/moldura.js?v=5"></script>
+<script src="js/lojinha.js?v=6"></script>
+<script src="js/guias.js?v=6"></script>
+<script src="js/profissional.js?v=6"></script>
+<script src="js/loja_nova.js?v=6"></script>
+<script src="js/moldura.js?v=6"></script>
 </body>
 </html>

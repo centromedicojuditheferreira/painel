@@ -267,6 +267,10 @@ tr.err-row td:not(:last-child){opacity:.4;text-decoration:line-through}
 .dia2 .r.p{color:var(--vermelho)}.dia2 .r.f{color:var(--laranja)}
 .dia2.on,.dia2.on:hover{background:var(--tint)}
 .dia2.on .s,.dia2.on .d,.dia2.on .r{color:#fff}
+@media (max-width:560px){   /* celular: a faixa de dias rola de lado em vez de espremer */
+  .dias-grade{grid-template-columns:repeat(7,minmax(58px,1fr));overflow-x:auto;scrollbar-width:none}
+  .dias-grade::-webkit-scrollbar{display:none}
+}
 .lista-corpo{flex:1;min-height:0;overflow-y:auto}
 .dia-cab{position:sticky;top:0;z-index:1;display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:8px 16px;background:var(--fundo);border-bottom:1px solid var(--linha)}
 .dia-cab b{font-size:13px;font-weight:600}
@@ -282,6 +286,13 @@ tr.err-row td:not(:last-child){opacity:.4;text-decoration:line-through}
 .linha .tr{font-size:12px;color:var(--cinza)}
 .tag{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600}
 .tag::before{content:"";flex:none;width:8px;height:8px;background:currentColor}
+@media (max-width:560px){   /* celular: a situação (ou o valor) desce para baixo do nome, para o nome caber */
+  #s-guias .linha:has(>.dir),.linha.lj-mov,.linha.lj-es{flex-wrap:wrap;row-gap:4px}
+  #s-guias .linha>.dir,.linha.lj-mov>.dir,.linha.lj-es>.dir{order:3;flex:1 0 100%;max-width:none;flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:flex-start;gap:2px 10px;text-align:left}
+  #s-guias .linha:has(>.h)>.dir,.linha.lj-mov>.dir{padding-left:56px}
+  #s-guias .linha:has(>.mal-ic)>.dir{padding-left:44px}
+  .linha.lj-es>.dir{padding-left:64px}
+}
 .lista-mais{padding:12px 16px}
 .lista-vazio{padding:24px 16px;font-size:15px;color:var(--cinza)}
 .painel-cab{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:14px 16px;border-bottom:1px solid var(--linha)}
@@ -582,6 +593,8 @@ textarea.pp-nota:focus{border-color:var(--cinza)}
 input.lj-grande-in{font-size:17px;font-weight:600;font-variant-numeric:tabular-nums}
 .lj-taxa{font-size:13px;color:var(--cinza);font-variant-numeric:tabular-nums}
 .lj-taxa[hidden]{display:none}
+.lj-preenche{align-self:flex-start;margin-top:-4px;border:0;background:transparent;padding:0;font:600 13px var(--fn);color:var(--tint);cursor:pointer}
+.lj-preenche:hover{text-decoration:underline}
 .lj-aviso{min-height:18px;font-size:13px;font-weight:600;color:var(--verde)}
 .lj-aviso.erro{color:var(--vermelho)}
 .lj-corrige{display:flex;flex-direction:column;gap:6px;padding:12px;background:var(--fundo)}

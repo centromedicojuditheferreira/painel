@@ -17,16 +17,29 @@ var LJ = (function () {
   var IC = { dir: 'M9.5 6l6 6-6 6', esq: 'M14.5 6l-6 6 6 6', busca: 'M4.5 11a6.5 6.5 0 1 0 13 0 6.5 6.5 0 1 0-13 0M16 16l4 4',
     menos: 'M6 12h12', mais: 'M12 6v12M6 12h12', x: 'M6 6l12 12M18 6 6 18', min: 'M6 16h12', sobe: 'M6 15l6-6 6 6',
     sacola: 'M5 8h14l-1 12.5H6zM9 10V7a3 3 0 0 1 6 0v3' };
-  /* "1.234,56", "148,50" ou "148.5" → número (NaN quando não dá) */
+  /* "1.234,56", "148,50" ou "148.5" → número (NaN quando não dá).
+     "1.500" sem vírgula é ambíguo (1,5 ou mil e quinhentos?) e dá NaN, para a pessoa digitar de novo; letras, "Infinity" e "1e9" também. */
   function numOuNaN(txt) {
     var s = String(txt == null ? '' : txt).replace(/\s/g, '').replace(/R\$/gi, '');
-    if (!s) return NaN;
+    if (!/^-?[\d.,]+$/.test(s)) return NaN;
     if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');
-    var v = parseFloat(s);
-    return isNaN(v) ? NaN : v;
+    else if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) return NaN;
+    var v = Number(s);
+    return isFinite(v) ? v : NaN;
   }
   function num(txt) { var v = numOuNaN(txt); return isNaN(v) ? 0 : v; }
+  function invalido(txt) { return String(txt == null ? '' : txt).trim() !== '' && isNaN(numOuNaN(txt)); }
   function br(v) { return (Math.round((Number(v) || 0) * 100) / 100).toFixed(2).replace('.', ','); }
+  /* o mesmo arredondamento do toFixed(2) das telas antigas (calcCustoTotal/calcCustoUn), com vírgula */
+  function fx2(v) { return v.toFixed(2).replace('.', ','); }
+  /* depois que a gravação deu certo: atualiza a tela; se a atualização falhar, só avisa.
+     Nunca devolve o formulário preenchido, para ninguém lançar a mesma coisa duas vezes. */
+  function semQuebrar(p) {
+    return Promise.resolve(p).catch(function (e) {
+      if (window.console) console.error(e);
+      toast('Gravado. Só não consegui atualizar a tela: recarregue a página (F5) antes de continuar.', 'ko');
+    });
+  }
   function iniciais(n) { var p = String(n || '').trim().split(/\s+/).filter(Boolean); if (!p.length) return '?'; return (p[0][0] + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase(); }
   function dataDe(ts) { if (!ts) return null; return ts.toDate ? ts.toDate() : new Date(ts); }
   function d2(n) { return String(n).padStart(2, '0'); }
@@ -195,10 +208,15 @@ var LJ = (function () {
 
   /* ── marcar como erro: a mesma sequência de confirmarErro() ── */
   function marcarErro(id, mot) {
+    var marcou = false;
     return db.collection('movimentacoes').doc(id).get().then(function (docSnap) {
       var m = docSnap.data();
+      if (!m) throw new Error('Lançamento não encontrado.');
+      /* já marcado (por outro computador, ou tela desatualizada): não desfaz de novo o saldo e o estoque */
+      if (m.marcado_erro === true) { var j = new Error('Este lançamento já estava marcado como erro.'); j.jaMarcado = true; throw j; }
       var p = db.collection('movimentacoes').doc(id).update({ marcado_erro: true, motivo_erro: mot });
       return p.then(function () {
+        marcou = true;
         if (m.tipo === 'venda_profissional' && m.profissional_id) return db.collection('profissionais').doc(m.profissional_id).update({ saldo_devedor: FV().increment(-(m.valor_total || 0)) });
       }).then(function () {
         if (m.tipo === 'pagamento_notinha' && m.profissional_id) return db.collection('profissionais').doc(m.profissional_id).update({ saldo_devedor: FV().increment(m.valor_total || 0) });
@@ -211,6 +229,10 @@ var LJ = (function () {
       }).then(function () {
         if (m.tipo === 'ajuste_estoque' && m.produto_id) return db.collection('produtos').doc(m.produto_id).update({ estoque_atual: FV().increment(-(m.quantidade || 0)) });
       });
+    }).catch(function (e) {
+      if (!marcou) throw e;
+      var x = new Error('Ficou marcado como erro, mas o acerto do saldo ou do estoque não foi feito (' + (e.message || e) + '). Não marque de novo: avise o administrador.');
+      x.marcou = true; throw x;
     });
   }
   function compensaTxt(m) {
@@ -262,11 +284,17 @@ var LJ = (function () {
         if (!mot) { ctx.erroMotivo = true; ctx.repinta(); return; }
         ctx.ocupado = true; s.disabled = true; s.textContent = 'Salvando…';
         marcarErro(m.id, mot).then(function () {
+          m.marcado_erro = true; m.motivo_erro = mot;
           ctx.ocupado = false; ctx.modo = null; ctx.motivo = ''; ctx.erroMotivo = false;
           toast('Lançamento marcado como erro.', 'ok');
-          return loadCaches();
-        }).then(function () { ctx.depois(); })
-          .catch(function (e) { ctx.ocupado = false; toast('Erro: ' + (e.message || e), 'ko'); ctx.repinta(); });
+          return loadCaches().then(function () { return ctx.depois(); }, function (e) { ctx.repinta(); throw e; }).catch(function (e) { return semQuebrar(Promise.reject(e)); });
+        }, function (e) {
+          ctx.ocupado = false;
+          if (e.marcou || e.jaMarcado) { m.marcado_erro = true; if (!m.motivo_erro) m.motivo_erro = e.jaMarcado ? '(já estava marcado)' : mot; ctx.modo = null; ctx.motivo = ''; }
+          toast(e.jaMarcado ? e.message : 'Erro: ' + (e.message || e), 'ko');
+          if (e.marcou || e.jaMarcado) semQuebrar(loadCaches().then(function () { return ctx.depois(); }));
+          else ctx.repinta();
+        });
       });
       l.appendChild(s); c.appendChild(l);
       P.corpo.appendChild(c);
@@ -478,6 +506,11 @@ var LJ = (function () {
       }).catch(function (e) { lancErro = e.message || String(e); if (P.aberto) pinta(); });
     }
     function recarregar() { lanc = null; return notinhas(); }
+    /* depois de gravar: recarrega os dados e a janela; se a recarga falhar, a janela fica sem o formulário (nada de lançar duas vezes) */
+    function atualizaDepois() {
+      return loadCaches().then(function () { return recarregar(); }).then(function () { var px = prDe(atual); if (px) carregaLanc(px); })
+        .catch(function (e) { if (P.aberto) pinta(); return semQuebrar(Promise.reject(e)); });
+    }
     function pinta() {
       var p = prDe(atual);
       if (!p) { P.fechar(); return; }
@@ -500,7 +533,7 @@ var LJ = (function () {
       P.corpo.appendChild(el('div', 'lj-kpis', '<div><span>Compras em ' + mesN + '</span><b>' + esc(fmt(comp)) + '</b></div><div><span>Pagamentos em ' + mesN + '</span><b>' + esc(fmt(pag)) + '</b></div>' +
         '<div><span>Última compra</span><b>' + esc(ult ? ddmm(ult) : '—') + '</b></div>'));
       P.corpo.appendChild(seg([['lista', 'Lançamentos'], ['pagar', 'Pagamento'], ['extrato', 'Extrato'], ['link', 'Link'], ['editar', 'Cadastro']], modo,
-        function (v) { modo = v; aviso = ''; avisoErro = false; pinta(); }, 'seg-cheio'));
+        function (v) { modo = v; aviso = ''; avisoErro = false; form = {}; pinta(); }, 'seg-cheio'));   /* cada aba começa com os dados de agora, como as janelas antigas */
       if (modo === 'lista') pintaLista(p);
       else if (modo === 'pagar') pintaPagar(p);
       else if (modo === 'extrato') P.corpo.appendChild(blocoExtrato(p.id, 'ext'));
@@ -532,18 +565,19 @@ var LJ = (function () {
       var m = lancAtual;
       P.topo.innerHTML = '';
       P.topo.appendChild(bt('pop-volta', svg(IC.esq, 16, 2.2) + esc(p.nome), function () { lancAtual = null; pinta(); }));
-      if (!ctxL) ctxL = { repinta: function () { if (P.aberto) pinta(); }, depois: function () { lancAtual = null; recarregar().then(function () { carregaLanc(prDe(atual) || p); }); } };
+      if (!ctxL) ctxL = { repinta: function () { if (P.aberto) pinta(); }, depois: function () { lancAtual = null; form = {}; return Promise.resolve(recarregar()).then(function () { carregaLanc(prDe(atual) || p); }); } };
       vistaLanc(P, m, ctxL);
       P.rodape.hidden = true;
     }
     function pintaPagar(p) {
       var s = p.saldo_devedor || 0;
-      if (form.valor === undefined) form.valor = s > 0 ? br(s) : '';
+      if (form.valor === undefined) form.valor = '';          /* começa vazio, como em confirmarPgto() */
       if (!form.forma) form.forma = 'dinheiro';
       var box = el('div', 'lj-form');
       var iv = entrada('text', form.valor, '0,00', 'decimal'); iv.classList.add('lj-grande-in');
       iv.addEventListener('input', function () { form.valor = iv.value; atualizaTaxa(); });
       box.appendChild(campo('Valor pago (R$)', iv));
+      if (s > 0.004) box.appendChild(bt('lj-preenche', 'Usar o saldo todo: ' + esc(fmt(s)), function () { form.valor = br(s); form.erro = false; pinta(); }));
       var fp = el('div', 'lj-campo');
       fp.appendChild(el('span', '', 'Forma de pagamento'));
       fp.appendChild(seg([['dinheiro', 'Dinheiro'], ['pix', 'PIX'], ['debito', 'Débito'], ['credito', 'Crédito']], form.forma, function (v) { form.forma = v; pinta(); }, 'seg-cheio'));
@@ -569,17 +603,22 @@ var LJ = (function () {
         if (pag === 'debito') { tx2 = val * (CFG.taxa_debito || 0) / 100; liq = val - tx2; }
         if (pag === 'credito') { tx2 = val * (CFG.taxa_credito || 0) / 100; liq = val - tx2; }
         /* = confirmarPgto() / confirmarBaixaNotinha() */
+        var gravou = false;
         db.collection('movimentacoes').add({ tipo: 'pagamento_notinha', profissional_id: p.id, profissional_nome: p.nome, descricao: 'Pagamento de notinha' + (obs ? ' — ' + obs : ''),
           valor_total: val, valor_liquido: liq, taxa_valor: tx2, forma_pagamento: pag, quantidade: null, produto_id: null, produto_nome: null, produto_grupo: null, preco_unitario: null,
           cliente_tipo: 'profissional', secretaria_id: CU.id, secretaria_nome: CU.nome, timestamp: FV().serverTimestamp(), marcado_erro: false, motivo_erro: null })
-          .then(function () { return db.collection('profissionais').doc(p.id).update({ saldo_devedor: FV().increment(-val) }); })
-          .then(function () { return loadCaches(); })
+          .then(function () { gravou = true; return db.collection('profissionais').doc(p.id).update({ saldo_devedor: FV().increment(-val) }); })
           .then(function () {
             ocupado = false; form = {}; modo = 'lista'; aviso = 'Pagamento de ' + fmt(val) + ' registrado!'; avisoErro = false;
             toast('Pagamento de ' + fmt(val) + ' registrado!', 'ok');
-            return recarregar();
-          }).then(function () { carregaLanc(prDe(atual) || p); })
-          .catch(function (e) { ocupado = false; aviso = 'Não deu certo: ' + (e.message || e); avisoErro = true; if (P.aberto) pinta(); });
+            atualizaDepois();
+          }, function (e) {
+            ocupado = false; avisoErro = true;
+            if (!gravou) { aviso = 'Não deu certo: ' + (e.message || e); if (P.aberto) pinta(); return; }
+            form = {}; modo = 'lista';
+            aviso = 'O pagamento foi gravado, mas o saldo da notinha não baixou (' + (e.message || e) + '). Não lance de novo: avise o administrador.';
+            atualizaDepois();
+          });
       });
       box.appendChild(ok);
       P.corpo.appendChild(box);
@@ -598,7 +637,11 @@ var LJ = (function () {
       P.corpo.appendChild(box);
     }
     function pintaEditar(p) {
-      if (form.nome === undefined) { form.nome = p.nome; form.bonif = br(p.bonificacao_mensal != null ? p.bonificacao_mensal : bonifPadrao()); form.saldo = br(p.saldo_devedor || 0); }
+      if (form.nome === undefined) { form.nome = p.nome; form.bonif = br(p.bonificacao_mensal != null ? p.bonificacao_mensal : bonifPadrao()); }
+      /* o campo do saldo acompanha o saldo de agora enquanto ninguém mexer nele (um pagamento, uma venda ou
+         um "marcar como erro" mudam o saldo com a janela aberta); só vira correção se a pessoa digitar outro valor */
+      var sAgora = p.saldo_devedor || 0;
+      if (form.saldo === undefined || (form.saldo === form.saldoIni && form.saldoBase !== sAgora)) { form.saldo = form.saldoIni = br(sAgora); form.saldoBase = sAgora; }
       var box = el('div', 'lj-form');
       var inN = entrada('text', form.nome); inN.addEventListener('input', function () { form.nome = inN.value; });
       box.appendChild(campo('Nome', inN));
@@ -612,22 +655,29 @@ var LJ = (function () {
       cs.appendChild(inS);
       box.appendChild(cs);
       if (form.erroNome) box.appendChild(el('span', 'mal-erro-txt', 'Informe o nome.'));
+      if (form.erroNum) box.appendChild(el('span', 'mal-erro-txt', 'Confira os valores: use vírgula para os centavos (ex.: 100 ou 100,00).'));
       var lin = el('div', 'lj-bts lj-entre');
       var esq = el('div', 'lj-bts');
       var bAt = bt('btn btn-s txt-vermelho', 'Desativar profissional', function () {
         if (ocupado) return; ocupado = true; bAt.disabled = true;
         /* = toggleProf() */
         var pc = PRC.find(function (x) { return x.id === p.id; }) || { nome: 'Profissional' };
-        var ativo = p.ativo !== false;
+        var ativo = p.ativo !== false, gravou = false;
         db.collection('profissionais').doc(p.id).update({ ativo: !ativo })
           .then(function () {
+            gravou = true;
             return db.collection('movimentacoes').add({ tipo: 'edicao_profissional', descricao: (ativo ? 'Profissional desativado' : 'Profissional reativado') + ': ' + pc.nome, profissional_id: p.id, profissional_nome: pc.nome,
               valor_total: 0, valor_liquido: 0, taxa_valor: 0, forma_pagamento: null, produto_id: null, produto_nome: null, produto_grupo: null, quantidade: null, preco_unitario: null, cliente_tipo: null,
               secretaria_id: CU.id, secretaria_nome: CU.nome, timestamp: FV().serverTimestamp(), marcado_erro: false, motivo_erro: null });
           })
-          .then(function () { return loadCaches(); })
-          .then(function () { ocupado = false; toast(ativo ? 'Profissional desativado.' : 'Profissional reativado.', 'ok'); P.fechar(); return notinhas(); })
-          .catch(function (e) { ocupado = false; aviso = 'Não deu certo: ' + (e.message || e); avisoErro = true; if (P.aberto) pinta(); });
+          .then(function () { fim(''); }, function (e) {
+            if (gravou) { fim(' O registro no histórico falhou (' + (e.message || e) + ').'); return; }
+            ocupado = false; aviso = 'Não deu certo: ' + (e.message || e); avisoErro = true; if (P.aberto) pinta();
+          });
+        function fim(extra) {
+          ocupado = false; toast((ativo ? 'Profissional desativado.' : 'Profissional reativado.') + extra, extra ? 'ko' : 'ok'); P.fechar();
+          semQuebrar(loadCaches().then(function () { return notinhas(); }));
+        }
       });
       esq.appendChild(bAt);
       if (isAdmin()) {
@@ -636,9 +686,10 @@ var LJ = (function () {
           if (ocupado) return; ocupado = true; bOc.disabled = true;
           /* = toggleOculto() */
           db.collection('profissionais').doc(p.id).update({ oculto: !oc })
-            .then(function () { return loadCaches(); })
-            .then(function () { ocupado = false; toast(oc ? 'Notinha visível novamente.' : 'Notinha ocultada.', 'ok'); P.fechar(); return notinhas(); })
-            .catch(function (e) { ocupado = false; aviso = 'Não deu certo: ' + (e.message || e); avisoErro = true; if (P.aberto) pinta(); });
+            .then(function () {
+              ocupado = false; toast(oc ? 'Notinha visível novamente.' : 'Notinha ocultada.', 'ok'); P.fechar();
+              semQuebrar(loadCaches().then(function () { return notinhas(); }));
+            }, function (e) { ocupado = false; aviso = 'Não deu certo: ' + (e.message || e); avisoErro = true; if (P.aberto) pinta(); });
         });
         bOc.title = 'Ocultar a notinha da tela Notinhas e do extrato geral';
         esq.appendChild(bOc);
@@ -647,28 +698,39 @@ var LJ = (function () {
       var sv = bt('btn btn-p', 'Salvar', function () {
         if (ocupado) return;
         var nm = String(form.nome || '').trim();
-        if (!nm) { form.erroNome = true; pinta(); return; }
+        form.erroNome = !nm;
+        /* o saldo só é corrigido se a pessoa digitou outro valor no campo */
+        var mexeuSaldo = String(form.saldo == null ? '' : form.saldo).trim() !== String(form.saldoIni == null ? '' : form.saldoIni).trim();
+        form.erroNum = invalido(form.bonif) || (mexeuSaldo && invalido(form.saldo));
+        if (form.erroNome || form.erroNum) { pinta(); return; }
         ocupado = true; sv.disabled = true; sv.textContent = 'Salvando…';
         /* = salvarProf() editando */
         var bonif = num(form.bonif);
         var before = PRC.find(function (x) { return x.id === p.id; });
         var upd = { nome: nm, bonificacao_mensal: bonif };
-        var novoSaldo = numOuNaN(form.saldo);
+        var novoSaldo = mexeuSaldo ? numOuNaN(form.saldo) : NaN;
         var antes = before ? before.saldo_devedor || 0 : 0;
         var logs = [];
-        if (!isNaN(novoSaldo) && Math.abs(novoSaldo - antes) >= 0.005) { upd.saldo_devedor = novoSaldo; logs.push('Saldo corrigido manualmente para ' + fmt(novoSaldo)); }
+        if (!isNaN(novoSaldo) && novoSaldo !== antes) { upd.saldo_devedor = novoSaldo; logs.push('Saldo corrigido manualmente para ' + fmt(novoSaldo)); }
         if (before && before.nome !== nm) logs.push('Nome alterado de "' + before.nome + '" para "' + nm + '"');
+        var gravou = false;
         db.collection('profissionais').doc(p.id).update(upd)
           .then(function () {
+            gravou = true;
             if (!logs.length) return;
             return db.collection('movimentacoes').add({ tipo: 'edicao_profissional', descricao: logs.join(' | '), profissional_id: p.id, profissional_nome: nm, valor_total: 0, valor_liquido: 0, taxa_valor: 0,
               forma_pagamento: null, produto_id: null, produto_nome: null, produto_grupo: null, quantidade: null, preco_unitario: null, cliente_tipo: null,
               secretaria_id: CU.id, secretaria_nome: CU.nome, timestamp: FV().serverTimestamp(), marcado_erro: false, motivo_erro: null });
           })
-          .then(function () { return loadCaches(); })
-          .then(function () { ocupado = false; form = {}; modo = 'lista'; aviso = 'Profissional salvo!'; avisoErro = false; toast('Profissional salvo!', 'ok'); return recarregar(); })
-          .then(function () { carregaLanc(prDe(atual) || p); })
-          .catch(function (e) { ocupado = false; aviso = 'Não deu certo: ' + (e.message || e); avisoErro = true; if (P.aberto) pinta(); });
+          .then(function () {
+            ocupado = false; form = {}; modo = 'lista'; aviso = 'Profissional salvo!'; avisoErro = false; toast('Profissional salvo!', 'ok');
+            atualizaDepois();
+          }, function (e) {
+            ocupado = false; avisoErro = true;
+            if (!gravou) { aviso = 'Não deu certo: ' + (e.message || e); if (P.aberto) pinta(); return; }
+            form = {}; modo = 'lista'; aviso = 'Profissional salvo, mas o registro no histórico falhou (' + (e.message || e) + ').';
+            atualizaDepois();
+          });
       });
       lin.appendChild(sv);
       box.appendChild(lin);
@@ -691,18 +753,21 @@ var LJ = (function () {
       var b = entrada('text', st.bonif, '', 'decimal'); b.addEventListener('input', function () { st.bonif = b.value; });
       box.appendChild(campo('Bonificação mensal (R$)', b));
       if (st.erro) box.appendChild(el('span', 'mal-erro-txt', 'Informe o nome.'));
+      if (st.erroNum) box.appendChild(el('span', 'mal-erro-txt', 'Confira a bonificação: use vírgula para os centavos (ex.: 100 ou 100,00).'));
       P.corpo.appendChild(box);
       setTimeout(function () { if (document.body.contains(n) && document.activeElement !== n && !st.focou) { st.focou = true; n.focus(); } }, 0);
       var sv = bt('btn btn-p', 'Salvar', function () {
         if (st.ocupado) return;
         var nm = String(st.nome || '').trim();
-        if (!nm) { st.erro = true; pinta(); return; }
+        st.erro = !nm; st.erroNum = invalido(st.bonif);
+        if (st.erro || st.erroNum) { pinta(); return; }
         st.ocupado = true; sv.disabled = true; sv.textContent = 'Salvando…';
         /* = salvarProf() novo */
         db.collection('profissionais').add({ nome: nm, bonificacao_mensal: num(st.bonif), saldo_devedor: 0, ativo: true, criado_em: FV().serverTimestamp() })
-          .then(function () { return loadCaches(); })
-          .then(function () { toast('Profissional salvo!', 'ok'); P.fechar(); nt.filtro = 'todos'; return notinhas(); })
-          .catch(function (e) { st.ocupado = false; toast('Erro: ' + (e.message || e), 'ko'); pinta(); });
+          .then(function () {
+            toast('Profissional salvo!', 'ok'); P.fechar(); nt.filtro = 'todos';
+            semQuebrar(loadCaches().then(function () { return notinhas(); }));
+          }, function (e) { st.ocupado = false; toast('Erro: ' + (e.message || e), 'ko'); pinta(); });
       });
       rodapeBotoes(P, [bt('btn btn-s', 'Cancelar', function () { P.fechar(); }), sv]);
     }
@@ -745,9 +810,10 @@ var LJ = (function () {
             secretaria_id: CU.id, secretaria_nome: CU.nome, timestamp: FV().serverTimestamp(), marcado_erro: false, motivo_erro: null });
           batch.update(db.collection('profissionais').doc(p.id), { saldo_devedor: FV().increment(-val) });
         });
-        batch.commit().then(function () { return loadCaches(); })
-          .then(function () { toast('Bonificações aplicadas!', 'ok'); P.fechar(); if (naTela('notinhas')) { nt.filtro = 'todos'; notinhas(); } })
-          .catch(function (e) { ocupado = false; toast('Erro: ' + (e.message || e), 'ko'); pinta(); });
+        batch.commit().then(function () {
+          toast('Bonificações aplicadas!', 'ok'); P.fechar();
+          semQuebrar(loadCaches().then(function () { if (naTela('notinhas')) { nt.filtro = 'todos'; return notinhas(); } }));
+        }, function (e) { ocupado = false; toast('Erro: ' + (e.message || e), 'ko'); pinta(); });
       });
       dir.appendChild(ap);
       P.rodape.appendChild(dir);
@@ -861,7 +927,7 @@ var LJ = (function () {
       box.appendChild(campo('Valor (R$)', v));
       var mo = entrada('text', st.motivo, 'Troco, fornecedor…'); mo.addEventListener('input', function () { st.motivo = mo.value; });
       box.appendChild(campo('Motivo', mo));
-      if (st.erro) box.appendChild(el('span', 'mal-erro-txt', 'Informe um valor.'));
+      if (st.erro) box.appendChild(el('span', 'mal-erro-txt', 'Informe um valor válido (ex.: 50 ou 50,00).'));
       P.corpo.appendChild(box);
       setTimeout(function () { if (!st.focou && document.body.contains(v)) { st.focou = true; v.focus(); } }, 0);
       var ok = bt('btn btn-p', tipo === 'sangria' ? 'Registrar sangria' : 'Registrar suprimento', function () {
@@ -873,8 +939,8 @@ var LJ = (function () {
         db.collection('movimentacoes').add({ tipo: tipo, descricao: mot || tipo, valor_total: val, valor_liquido: val, taxa_valor: 0, forma_pagamento: 'dinheiro', profissional_id: null, profissional_nome: null,
           produto_id: null, produto_nome: null, produto_grupo: null, quantidade: null, preco_unitario: null, cliente_tipo: null,
           secretaria_id: CU.id, secretaria_nome: CU.nome, timestamp: FV().serverTimestamp(), marcado_erro: false, motivo_erro: null })
-          .then(function () { toast((tipo === 'sangria' ? 'Sangria' : 'Suprimento') + ' registrada!', 'ok'); P.fechar(); cx.filtro = 'todos'; return caixa(); })
-          .catch(function (e) { st.ocupado = false; toast('Erro: ' + (e.message || e), 'ko'); pinta(); });
+          .then(function () { toast((tipo === 'sangria' ? 'Sangria' : 'Suprimento') + ' registrada!', 'ok'); P.fechar(); cx.filtro = 'todos'; semQuebrar(caixa()); },
+                function (e) { st.ocupado = false; toast('Erro: ' + (e.message || e), 'ko'); pinta(); });
       });
       rodapeBotoes(P, [bt('btn btn-s', 'Cancelar', function () { P.fechar(); }), ok]);
     }
@@ -1047,19 +1113,22 @@ var LJ = (function () {
         cn.appendChild(iu);
         var lb = el('div', 'mal-conf-bt');
         lb.appendChild(bt('btn btn-s', 'Cancelar', function () { f.criando = false; desenhaEstoque(); }));
-        var cr = bt('btn btn-p', 'Criar e selecionar', function () {
+        var cr = bt('btn btn-p', es.criandoProd ? 'Salvando…' : 'Criar e selecionar', function () {
+          if (es.criandoProd) return;
           var nm = String(f.q || '').trim();
           if (!nm) { es.msg = { t: 'Digite o nome do produto.', e: true }; desenhaEstoque(); return; }
-          cr.disabled = true; cr.textContent = 'Salvando…';
+          es.criandoProd = true; cr.disabled = true; cr.textContent = 'Salvando…';
           var gr = f.grupoNovo || 'conveniencia', un = String(f.unidadeNovo || '').trim() || 'un';
           /* = criarProdutoInline() */
           db.collection('produtos').add({ nome: nm, grupo: gr, unidade: un, preco_custo: 0, preco_venda: 0, estoque_atual: 0, ativo: true, criado_em: FV().serverTimestamp() }).then(function (ref) {
+            es.criandoProd = false;
             var p = { id: ref.id, nome: nm, grupo: gr, unidade: un, preco_custo: 0, preco_venda: 0, estoque_atual: 0, ativo: true };
             PC.push(p); es.prods.push(p);
             f.pid = p.id; f.q = ''; f.criando = false; es.msg = { t: 'Produto criado!', e: false };
             desenhaEstoque();
-          }).catch(function (e) { toast('Erro: ' + (e.message || e), 'ko'); desenhaEstoque(); });
+          }, function (e) { es.criandoProd = false; toast('Erro: ' + (e.message || e), 'ko'); desenhaEstoque(); });
         });
+        cr.disabled = !!es.criandoProd;   /* a tela pode se redesenhar enquanto grava: o botão continua travado */
         lb.appendChild(cr);
         cn.appendChild(lb);
         pc.appendChild(cn);
@@ -1075,8 +1144,8 @@ var LJ = (function () {
     var iun = entrada('text', f.custoUn || '', 'Ex: 2,70', 'decimal'); iun.dataset.campo = 'cun';
     var itot = entrada('text', f.custoTot || '', '0,00', 'decimal'); itot.dataset.campo = 'ctot';
     /* custo por unidade ↔ total, como calcCustoTotal() / calcCustoUn() (mudar a quantidade não recalcula) */
-    iun.addEventListener('input', function () { f.custoUn = iun.value; var un = num(iun.value), qn = parseInt(f.qtd, 10) || 1; f.custoTot = un > 0 ? br(un * qn) : ''; itot.value = f.custoTot; });
-    itot.addEventListener('input', function () { f.custoTot = itot.value; var tot = num(itot.value), qn = parseInt(f.qtd, 10) || 1; f.custoUn = tot > 0 && qn > 0 ? br(tot / qn) : ''; iun.value = f.custoUn; });
+    iun.addEventListener('input', function () { f.custoUn = iun.value; var un = num(iun.value), qn = parseInt(f.qtd, 10) || 1; f.custoTot = un > 0 ? fx2(un * qn) : ''; itot.value = f.custoTot; });
+    itot.addEventListener('input', function () { f.custoTot = itot.value; var tot = num(itot.value), qn = parseInt(f.qtd, 10) || 1; f.custoUn = tot > 0 && qn > 0 ? fx2(tot / qn) : ''; iun.value = f.custoUn; });
     var ipv = entrada('text', f.preco || '', selP && selP.preco_venda ? 'atual ' + br(selP.preco_venda) : '0,00', 'decimal'); ipv.dataset.campo = 'pv';
     ipv.addEventListener('input', function () { f.preco = ipv.value; });
     g.appendChild(campo('Quantidade', iq));
@@ -1086,25 +1155,38 @@ var LJ = (function () {
     box.appendChild(g);
     var iob = entrada('text', f.obs || '', 'NF, fornecedor, lote…'); iob.dataset.campo = 'obs'; iob.addEventListener('input', function () { f.obs = iob.value; });
     box.appendChild(campo('Observação <small>· opcional</small>', iob));
-    var rg = bt('btn btn-p btn-g', 'Registrar entrada', function () {
+    var rg = bt('btn btn-p btn-g', es.salvando ? 'Salvando…' : 'Registrar entrada', function () {
+      if (es.salvando) return;
       var p = f.pid ? PC.find(function (x) { return x.id === f.pid; }) : null;
       if (!p) { es.msg = { t: 'Selecione um produto.', e: true }; desenhaEstoque(); return; }
-      rg.disabled = true; rg.textContent = 'Salvando…';
+      if (invalido(f.custoUn) || invalido(f.custoTot) || invalido(f.preco)) { es.msg = { t: 'Confira os valores: use vírgula para os centavos (ex.: 1500,00).', e: true }; desenhaEstoque(); return; }
       /* = confirmarEstoque() */
       var qtd = parseInt(f.qtd, 10) || 1, cstUn = num(f.custoUn), cstTot = num(f.custoTot), novoPrecoVenda = num(f.preco), obs = String(f.obs || '').trim();
+      if (qtd < 1) { es.msg = { t: 'A quantidade precisa ser 1 ou mais.', e: true }; desenhaEstoque(); return; }
+      es.salvando = true; rg.disabled = true; rg.textContent = 'Salvando…';
+      var gravou = false;
       db.collection('movimentacoes').add({ tipo: 'entrada_estoque', produto_id: p.id, produto_nome: p.nome, produto_grupo: p.grupo, quantidade: qtd, preco_unitario: cstUn, custo_unitario: cstUn,
         valor_total: cstTot, valor_liquido: cstTot, taxa_valor: 0, descricao: obs || 'Entrada de estoque', cliente_tipo: null, forma_pagamento: null, profissional_id: null, profissional_nome: null,
         secretaria_id: CU.id, secretaria_nome: CU.nome, timestamp: FV().serverTimestamp(), marcado_erro: false, motivo_erro: null })
         .then(function () {
+          gravou = true;
           var upd = { estoque_atual: FV().increment(qtd) };
           if (cstUn > 0) upd.preco_custo = cstUn;
           if (novoPrecoVenda > 0) upd.preco_venda = novoPrecoVenda;
           return db.collection('produtos').doc(p.id).update(upd);
         })
-        .then(function () { return loadCaches(); })
-        .then(function () { es.form = { qtd: '1' }; es.msg = { t: 'Entrada: ' + qtd + '× ' + p.nome, e: false }; toast('Entrada: ' + qtd + 'x ' + p.nome, 'ok'); es.aba = 'entradas'; return estoque(); })
-        .catch(function (e) { es.msg = { t: 'Não deu certo: ' + (e.message || e), e: true }; desenhaEstoque(); });
+        .then(function () {
+          es.salvando = false; es.form = { qtd: '1' }; es.msg = { t: 'Entrada: ' + qtd + '× ' + p.nome, e: false }; toast('Entrada: ' + qtd + 'x ' + p.nome, 'ok'); es.aba = 'entradas';
+          semQuebrar(loadCaches().then(function () { return estoque(); }));
+        }, function (e) {
+          es.salvando = false;
+          if (!gravou) { es.msg = { t: 'Não deu certo: ' + (e.message || e), e: true }; desenhaEstoque(); return; }
+          es.form = { qtd: '1' }; es.aba = 'entradas';
+          es.msg = { t: 'A entrada foi gravada, mas o estoque do produto não atualizou (' + (e.message || e) + '). Não lance de novo: avise o administrador.', e: true };
+          semQuebrar(loadCaches().then(function () { return estoque(); }));
+        });
     });
+    rg.disabled = !!es.salvando;   /* a tela pode se redesenhar enquanto grava: o botão continua travado */
     box.appendChild(rg);
     box.appendChild(el('span', 'lj-aviso' + (es.msg && es.msg.e ? ' erro' : ''), es.msg ? esc(es.msg.t) : ''));
     box.appendChild(el('span', 'lj-nota', 'Custo ou preço em branco não mudam o que já está cadastrado. A quantidade entra no estoque na hora.'));
@@ -1171,7 +1253,8 @@ var LJ = (function () {
   var CATS = [
     ['vendas', 'Vendas pagas', '#248A3D', function (m) { return m.tipo === 'venda_paciente'; }, 'vendas'],
     ['notinha', 'Compras na notinha', '#2C2D6E', function (m) { return m.tipo === 'venda_profissional'; }, 'notinhas'],
-    ['pagamentos', 'Pagamentos de notinha', '#248A3D', function (m) { return m.tipo === 'pagamento_notinha' || m.tipo === 'bonificacao'; }, 'notinhas'],
+    ['pagamentos', 'Pagamentos de notinha', '#248A3D', function (m) { return m.tipo === 'pagamento_notinha'; }, 'notinhas'],
+    ['bonif', 'Bonificações', '#C93400', function (m) { return m.tipo === 'bonificacao'; }, 'notinhas'],
     ['estoque', 'Entradas de estoque', '#636366', function (m) { return m.tipo === 'entrada_estoque'; }, 'estoque'],
     ['caixa', 'Sangrias e suprimentos', '#D70015', function (m) { return m.tipo === 'sangria' || m.tipo === 'suprimento'; }, 'caixa']
   ];
@@ -1271,8 +1354,18 @@ var LJ = (function () {
       if (nv.janela === 'aberta') nvPinta();
     }).catch(function () { nv.top = []; });
   }
+  /* toda venda nova começa do zero: Paciente, sem profissional, dinheiro (como loadVendaForm()) */
+  function nvPadrao() { nv.cart = []; nv.q = ''; nv.cliente = 'paciente'; nv.modo = 'notinha'; nv.pag = 'dinheiro'; nv.prof = ''; nv.erro = ''; }
   function abrirVenda() {
+    var nova = nv.janela === 'fechada';
     nv.janela = 'aberta';
+    if (nova) {
+      nvPadrao();
+      /* como loadVendaForm(): recarrega produtos, preços e profissionais antes de vender */
+      nv.carregando = true; nv.avisoCarga = '';
+      loadCaches().then(function () { nv.avisoCarga = ''; }, function () { nv.avisoCarga = 'Não consegui atualizar produtos e preços agora. Confira os valores antes de confirmar.'; })
+        .then(function () { nv.carregando = false; if (nv.janela !== 'fechada') nvPinta(); });
+    }
     nvMaisVendidos();
     nvPinta();
     setTimeout(function () { var i = nvEl && nvEl.querySelector('.nv-busca input'); if (i) i.focus(); }, 0);
@@ -1308,14 +1401,15 @@ var LJ = (function () {
     var bu = el('label', 'busca nv-busca', svg(IC.busca, 16, 2) + '<input type="search" placeholder="Buscar produto e apertar Enter" aria-label="Buscar produto" autocomplete="off">');
     var bi = bu.querySelector('input'); bi.value = nv.q;
     var termo = sem(nv.q).trim();
-    var achados = termo ? PC.filter(function (p) { return sem(p.nome).indexOf(termo) >= 0; }).slice(0, 6) : [];
+    var achados = termo && !nv.carregando ? PC.filter(function (p) { return sem(p.nome).indexOf(termo) >= 0; }).slice(0, 6) : [];
     bi.addEventListener('input', function () { nv.q = bi.value; nvPinta(); var n2 = nvEl.querySelector('.nv-busca input'); if (n2) { n2.focus(); try { n2.setSelectionRange(n2.value.length, n2.value.length); } catch (e) {} } });
     bi.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && achados.length) { e.preventDefault(); nv.q = ''; nvSet(achados[0].id, nvQtd(achados[0].id) + 1); var n3 = nvEl.querySelector('.nv-busca input'); if (n3) n3.focus(); }
       if (e.key === 'Escape') { nv.q = ''; nvPinta(); }
     });
     corpo.appendChild(bu);
-    if (!termo) {
+    if (nv.carregando) corpo.appendChild(el('div', 'nv-vazio nv-linha-topo', 'Atualizando produtos e preços…'));
+    else if (!termo) {
       var tops = (nv.top || []).map(nvProd).filter(Boolean);
       if (tops.length < 6) PC.forEach(function (p) { if (tops.length < 6 && tops.indexOf(p) < 0) tops.push(p); });
       tops = tops.slice(0, 6);
@@ -1386,19 +1480,20 @@ var LJ = (function () {
       if (tx > 0) pg.appendChild(el('span', 'nv-taxa', esc('Taxa ' + (nv.pag === 'debito' ? 'débito ' + pct(CFG.taxa_debito) : 'crédito ' + pct(CFG.taxa_credito)) + ' · líquido ' + fmt(tot - tx))));
       corpo.appendChild(pg);
     } else corpo.appendChild(el('span', 'nv-taxa', 'Será lançado na notinha do profissional.'));
+    if (nv.avisoCarga) corpo.appendChild(el('span', 'mal-erro-txt', esc(nv.avisoCarga)));
     if (nv.erro) corpo.appendChild(el('span', 'mal-erro-txt', esc(nv.erro)));
     jan.appendChild(corpo);
     var pe = el('div', 'nv-pe', '<span class="t"><small>Total</small><b>' + esc(fmt(tot)) + '</b></span>');
     var ok = bt('btn btn-p nv-ok', naNotinha ? 'Lançar na notinha' : 'Confirmar venda', function () { nvConfirmar(ok); });
-    ok.disabled = !nv.cart.length || nv.ocupado;
+    ok.disabled = !nv.cart.length || nv.ocupado || nv.carregando;
     if (nv.ocupado) ok.textContent = 'Salvando…';
     pe.appendChild(ok);
     jan.appendChild(pe);
     nvEl.appendChild(jan);
   }
-  function nvFechar() { nv.janela = 'fechada'; nv.cart = []; nv.q = ''; nv.erro = ''; nvPinta(); }
+  function nvFechar() { nv.janela = 'fechada'; nvPadrao(); nvPinta(); }
   function nvConfirmar() {
-    if (nv.ocupado) return;
+    if (nv.ocupado || nv.carregando) return;
     /* = confirmarVenda() */
     var itens = nv.cart.map(function (it) { var p = nvProd(it.pid); return p ? { pid: p.id, pnm: p.nome, grupo: p.grupo, preco: p.preco_venda, qtd: it.qtd } : null; }).filter(Boolean);
     if (!itens.length) { nv.erro = 'Adicione pelo menos um produto.'; nvPinta(); return; }
@@ -1444,15 +1539,15 @@ var LJ = (function () {
     batch.commit().then(function () {
       nv.ocupado = false;
       toast('Venda registrada: ' + fmt(tot) + ', ' + quem + ', ' + como + '.', 'ok');
-      nv.janela = 'fechada'; nv.cart = []; nv.q = ''; nv.cliente = 'paciente'; nv.modo = 'notinha'; nv.pag = 'dinheiro'; nv.prof = ''; nv.erro = '';
+      nv.janela = 'fechada'; nvPadrao();
       nv.topEm = 0;
       nvPinta();
-      return loadCaches();
-    }).then(function () {
-      if (naTela('notinhas')) notinhas(); else if (naTela('caixa')) caixa(); else if (naTela('historico')) historico(); else if (naTela('estoque')) estoque();
-    }).catch(function (e) { nv.ocupado = false; nv.erro = 'Não deu certo: ' + (e.message || e); nvPinta(); });
+      semQuebrar(loadCaches().then(function () {
+        if (naTela('notinhas')) return notinhas(); else if (naTela('caixa')) return caixa(); else if (naTela('historico')) return historico(); else if (naTela('estoque')) return estoque();
+      }));
+    }, function (e) { nv.ocupado = false; nv.erro = 'Não deu certo: ' + (e.message || e); nvPinta(); });
   }
-  function sair() { nv.janela = 'fechada'; nv.cart = []; nv.q = ''; nv.erro = ''; nv.ocupado = false; if (nvEl) { nvEl.innerHTML = ''; nvEl.className = 'nv nv-fechada'; } var f = document.getElementById('fab'); if (f) f.classList.remove('nv-escondido'); nt.carregado = false; cx.carregado = false; es.carregado = false; hs.carregado = false; }
+  function sair() { nv.janela = 'fechada'; nvPadrao(); nv.ocupado = false; nv.carregando = false; nv.avisoCarga = ''; if (nvEl) { nvEl.innerHTML = ''; nvEl.className = 'nv nv-fechada'; } var f = document.getElementById('fab'); if (f) f.classList.remove('nv-escondido'); nt.carregado = false; cx.carregado = false; es.carregado = false; hs.carregado = false; }
 
   return { notinhas: notinhas, caixa: caixa, estoque: estoque, historico: historico, relatorio: relatorio, bonificacao: bonificacao, abrirVenda: abrirVenda, sair: sair,
            _textoExtrato: textoExtrato };
