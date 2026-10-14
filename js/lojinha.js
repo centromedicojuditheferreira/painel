@@ -58,7 +58,8 @@ async function loadPosicao(){
   prods.forEach(p=>{
     const est=p.estoque_atual||0;const tr=document.createElement('tr');
     const estCor=est<=0?'color:var(--red)':est<=5?'color:var(--amb)':'color:var(--grn)';
-    tr.innerHTML='<td style="font-weight:500">'+balEsc(p.nome)+'</td><td>'+(p.grupo==='conveniencia'?'Conveniência':p.grupo==='livraria'?'Livraria':p.grupo)+'</td><td style="font-family:var(--mo);font-weight:700;'+estCor+'">'+est+' '+( p.unidade||'un')+'</td><td style="font-family:var(--mo)">'+fmt(p.preco_venda)+'</td><td style="font-family:var(--mo);color:var(--muted)">'+fmt(p.preco_custo)+'</td><td>'+(p.ativo?'<span class="bg bg-g">Ativo</span>':'<span class="bg bg-x">Inativo</span>')+'</td><td><button class="btn btn-s btn-sm" onclick=\'editProd('+JSON.stringify(p)+')\'>Editar</button></td>';
+    tr.innerHTML='<td style="font-weight:500">'+balEsc(p.nome)+'</td><td>'+(p.grupo==='conveniencia'?'Conveniência':p.grupo==='livraria'?'Livraria':balEsc(p.grupo))+'</td><td style="font-family:var(--mo);font-weight:700;'+estCor+'">'+est+' '+balEsc(p.unidade||'un')+'</td><td style="font-family:var(--mo)">'+fmt(p.preco_venda)+'</td><td style="font-family:var(--mo);color:var(--muted)">'+fmt(p.preco_custo)+'</td><td>'+(p.ativo?'<span class="bg bg-g">Ativo</span>':'<span class="bg bg-x">Inativo</span>')+'</td><td></td>';
+    const be=document.createElement('button');be.className='btn btn-s btn-sm';be.textContent='Editar';be.onclick=()=>editProd(p);tr.lastChild.appendChild(be);   /* sem JSON no onclick: nome com apóstrofo quebrava o botão */
     tb.appendChild(tr);
   });
 }

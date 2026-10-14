@@ -21,9 +21,13 @@ var LJ = (function () {
      "1.500" sem vírgula é ambíguo (1,5 ou mil e quinhentos?) e dá NaN, para a pessoa digitar de novo; letras, "Infinity" e "1e9" também. */
   function numOuNaN(txt) {
     var s = String(txt == null ? '' : txt).replace(/\s/g, '').replace(/R\$/gi, '');
-    if (!/^-?[\d.,]+$/.test(s)) return NaN;
-    if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');
-    else if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) return NaN;
+    if (s.indexOf(',') >= 0) {
+      /* com vírgula: só o jeito brasileiro (pontos de milhar em grupos de 3 antes da vírgula) */
+      if (!/^-?(\d{1,3}(\.\d{3})+|\d*),\d*$/.test(s)) return NaN;
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      if (!/^-?\d+(\.\d+)?$/.test(s) || /^-?\d{1,3}(\.\d{3})+$/.test(s)) return NaN;
+    }
     var v = Number(s);
     return isFinite(v) ? v : NaN;
   }
@@ -34,11 +38,19 @@ var LJ = (function () {
   function fx2(v) { return v.toFixed(2).replace('.', ','); }
   /* depois que a gravação deu certo: atualiza a tela; se a atualização falhar, só avisa.
      Nunca devolve o formulário preenchido, para ninguém lançar a mesma coisa duas vezes. */
-  function semQuebrar(p) {
+  function semQuebrar(p, msg) {
     return Promise.resolve(p).catch(function (e) {
       if (window.console) console.error(e);
-      toast('Gravado. Só não consegui atualizar a tela: recarregue a página (F5) antes de continuar.', 'ko');
+      toast(msg || 'Gravado. Só não consegui atualizar a tela: recarregue a página (F5) antes de continuar.', 'ko');
     });
+  }
+  /* gravação pela metade (raro): aviso que fica na tela até a pessoa fechar */
+  function alertaFixo(texto) {
+    if (!window.moldura) { toast(texto, 'ko'); return; }
+    var P = moldura.pop({ largura: '480px', titulo: 'Atenção' });
+    P.corpo.appendChild(el('div', 'pp-cab', '<h2>Avise o administrador</h2>'));
+    P.corpo.appendChild(el('p', 'pp-txt', esc(texto)));
+    rodapeBotoes(P, [bt('btn btn-p', 'Entendi', function () { P.fechar(); })]);
   }
   function iniciais(n) { var p = String(n || '').trim().split(/\s+/).filter(Boolean); if (!p.length) return '?'; return (p[0][0] + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase(); }
   function dataDe(ts) { if (!ts) return null; return ts.toDate ? ts.toDate() : new Date(ts); }
@@ -291,9 +303,12 @@ var LJ = (function () {
         }, function (e) {
           ctx.ocupado = false;
           if (e.marcou || e.jaMarcado) { m.marcado_erro = true; if (!m.motivo_erro) m.motivo_erro = e.jaMarcado ? '(já estava marcado)' : mot; ctx.modo = null; ctx.motivo = ''; }
-          toast(e.jaMarcado ? e.message : 'Erro: ' + (e.message || e), 'ko');
-          if (e.marcou || e.jaMarcado) semQuebrar(loadCaches().then(function () { return ctx.depois(); }));
-          else ctx.repinta();
+          if (e.marcou) {
+            semQuebrar(loadCaches().then(function () { return ctx.depois(); })).then(function () { alertaFixo(e.message); });
+          } else if (e.jaMarcado) {
+            toast(e.message, 'ko');
+            semQuebrar(loadCaches().then(function () { return ctx.depois(); }), 'Não consegui atualizar a tela: recarregue a página (F5).');
+          } else { toast('Erro: ' + (e.message || e), 'ko'); ctx.repinta(); }
         });
       });
       l.appendChild(s); c.appendChild(l);
@@ -604,9 +619,11 @@ var LJ = (function () {
         if (pag === 'credito') { tx2 = val * (CFG.taxa_credito || 0) / 100; liq = val - tx2; }
         /* = confirmarPgto() / confirmarBaixaNotinha() */
         var gravou = false;
-        db.collection('movimentacoes').add({ tipo: 'pagamento_notinha', profissional_id: p.id, profissional_nome: p.nome, descricao: 'Pagamento de notinha' + (obs ? ' — ' + obs : ''),
-          valor_total: val, valor_liquido: liq, taxa_valor: tx2, forma_pagamento: pag, quantidade: null, produto_id: null, produto_nome: null, produto_grupo: null, preco_unitario: null,
-          cliente_tipo: 'profissional', secretaria_id: CU.id, secretaria_nome: CU.nome, timestamp: FV().serverTimestamp(), marcado_erro: false, motivo_erro: null })
+        Promise.resolve().then(function () {
+          return db.collection('movimentacoes').add({ tipo: 'pagamento_notinha', profissional_id: p.id, profissional_nome: p.nome, descricao: 'Pagamento de notinha' + (obs ? ' — ' + obs : ''),
+            valor_total: val, valor_liquido: liq, taxa_valor: tx2, forma_pagamento: pag, quantidade: null, produto_id: null, produto_nome: null, produto_grupo: null, preco_unitario: null,
+            cliente_tipo: 'profissional', secretaria_id: CU.id, secretaria_nome: CU.nome, timestamp: FV().serverTimestamp(), marcado_erro: false, motivo_erro: null });
+        })
           .then(function () { gravou = true; return db.collection('profissionais').doc(p.id).update({ saldo_devedor: FV().increment(-val) }); })
           .then(function () {
             ocupado = false; form = {}; modo = 'lista'; aviso = 'Pagamento de ' + fmt(val) + ' registrado!'; avisoErro = false;
@@ -617,7 +634,8 @@ var LJ = (function () {
             if (!gravou) { aviso = 'Não deu certo: ' + (e.message || e); if (P.aberto) pinta(); return; }
             form = {}; modo = 'lista';
             aviso = 'O pagamento foi gravado, mas o saldo da notinha não baixou (' + (e.message || e) + '). Não lance de novo: avise o administrador.';
-            atualizaDepois();
+            var txt = aviso;
+            atualizaDepois().then(function () { alertaFixo(txt); });
           });
       });
       box.appendChild(ok);
@@ -663,7 +681,7 @@ var LJ = (function () {
         /* = toggleProf() */
         var pc = PRC.find(function (x) { return x.id === p.id; }) || { nome: 'Profissional' };
         var ativo = p.ativo !== false, gravou = false;
-        db.collection('profissionais').doc(p.id).update({ ativo: !ativo })
+        Promise.resolve().then(function () { return db.collection('profissionais').doc(p.id).update({ ativo: !ativo }); })
           .then(function () {
             gravou = true;
             return db.collection('movimentacoes').add({ tipo: 'edicao_profissional', descricao: (ativo ? 'Profissional desativado' : 'Profissional reativado') + ': ' + pc.nome, profissional_id: p.id, profissional_nome: pc.nome,
@@ -685,7 +703,7 @@ var LJ = (function () {
         var bOc = bt('btn btn-s', oc ? 'Exibir a notinha' : 'Ocultar a notinha', function () {
           if (ocupado) return; ocupado = true; bOc.disabled = true;
           /* = toggleOculto() */
-          db.collection('profissionais').doc(p.id).update({ oculto: !oc })
+          Promise.resolve().then(function () { return db.collection('profissionais').doc(p.id).update({ oculto: !oc }); })
             .then(function () {
               ocupado = false; toast(oc ? 'Notinha visível novamente.' : 'Notinha ocultada.', 'ok'); P.fechar();
               semQuebrar(loadCaches().then(function () { return notinhas(); }));
@@ -714,7 +732,7 @@ var LJ = (function () {
         if (!isNaN(novoSaldo) && novoSaldo !== antes) { upd.saldo_devedor = novoSaldo; logs.push('Saldo corrigido manualmente para ' + fmt(novoSaldo)); }
         if (before && before.nome !== nm) logs.push('Nome alterado de "' + before.nome + '" para "' + nm + '"');
         var gravou = false;
-        db.collection('profissionais').doc(p.id).update(upd)
+        Promise.resolve().then(function () { return db.collection('profissionais').doc(p.id).update(upd); })
           .then(function () {
             gravou = true;
             if (!logs.length) return;
@@ -763,7 +781,7 @@ var LJ = (function () {
         if (st.erro || st.erroNum) { pinta(); return; }
         st.ocupado = true; sv.disabled = true; sv.textContent = 'Salvando…';
         /* = salvarProf() novo */
-        db.collection('profissionais').add({ nome: nm, bonificacao_mensal: num(st.bonif), saldo_devedor: 0, ativo: true, criado_em: FV().serverTimestamp() })
+        Promise.resolve().then(function () { return db.collection('profissionais').add({ nome: nm, bonificacao_mensal: num(st.bonif), saldo_devedor: 0, ativo: true, criado_em: FV().serverTimestamp() }); })
           .then(function () {
             toast('Profissional salvo!', 'ok'); P.fechar(); nt.filtro = 'todos';
             semQuebrar(loadCaches().then(function () { return notinhas(); }));
@@ -802,15 +820,17 @@ var LJ = (function () {
         if (!sel.length) { erro = true; pinta(); return; }
         ocupado = true; ap.disabled = true; ap.textContent = 'Salvando…';
         /* = confirmarBonif() */
-        var batch = db.batch();
-        sel.forEach(function (p) {
-          var ref = db.collection('movimentacoes').doc();
-          batch.set(ref, { tipo: 'bonificacao', profissional_id: p.id, profissional_nome: p.nome, descricao: 'Bonificacao mensal — R$ ' + val.toFixed(2), valor_total: val, valor_liquido: val, taxa_valor: 0,
-            forma_pagamento: null, quantidade: null, produto_id: null, produto_nome: null, produto_grupo: null, preco_unitario: null, cliente_tipo: 'profissional',
-            secretaria_id: CU.id, secretaria_nome: CU.nome, timestamp: FV().serverTimestamp(), marcado_erro: false, motivo_erro: null });
-          batch.update(db.collection('profissionais').doc(p.id), { saldo_devedor: FV().increment(-val) });
-        });
-        batch.commit().then(function () {
+        Promise.resolve().then(function () {
+          var batch = db.batch();
+          sel.forEach(function (p) {
+            var ref = db.collection('movimentacoes').doc();
+            batch.set(ref, { tipo: 'bonificacao', profissional_id: p.id, profissional_nome: p.nome, descricao: 'Bonificacao mensal — R$ ' + val.toFixed(2), valor_total: val, valor_liquido: val, taxa_valor: 0,
+              forma_pagamento: null, quantidade: null, produto_id: null, produto_nome: null, produto_grupo: null, preco_unitario: null, cliente_tipo: 'profissional',
+              secretaria_id: CU.id, secretaria_nome: CU.nome, timestamp: FV().serverTimestamp(), marcado_erro: false, motivo_erro: null });
+            batch.update(db.collection('profissionais').doc(p.id), { saldo_devedor: FV().increment(-val) });
+          });
+          return batch.commit();
+        }).then(function () {
           toast('Bonificações aplicadas!', 'ok'); P.fechar();
           semQuebrar(loadCaches().then(function () { if (naTela('notinhas')) { nt.filtro = 'todos'; return notinhas(); } }));
         }, function (e) { ocupado = false; toast('Erro: ' + (e.message || e), 'ko'); pinta(); });
@@ -852,7 +872,7 @@ var LJ = (function () {
   function desenhaCaixa() {
     var r = raiz('caixa'); if (!r) return;
     var admin = isAdmin(), per = cx.perAtual || periodo(cx);
-    var todos = cx.movs.filter(ehDinheiro);
+    var todos = cx.movs.filter(semErro).filter(ehDinheiro);
     var cont = { todos: todos.length, dinheiro: 0, pix: 0, cartao: 0, caixa: 0 };
     todos.forEach(function (m) { cont[grupoCx(m)]++; });
     var vis = cx.filtro === 'todos' ? todos : todos.filter(function (m) { return grupoCx(m) === cx.filtro; });
@@ -936,9 +956,11 @@ var LJ = (function () {
         if (val <= 0) { st.erro = true; pinta(); return; }
         st.ocupado = true; ok.disabled = true; ok.textContent = 'Salvando…';
         /* = confirmarCxMov() */
-        db.collection('movimentacoes').add({ tipo: tipo, descricao: mot || tipo, valor_total: val, valor_liquido: val, taxa_valor: 0, forma_pagamento: 'dinheiro', profissional_id: null, profissional_nome: null,
-          produto_id: null, produto_nome: null, produto_grupo: null, quantidade: null, preco_unitario: null, cliente_tipo: null,
-          secretaria_id: CU.id, secretaria_nome: CU.nome, timestamp: FV().serverTimestamp(), marcado_erro: false, motivo_erro: null })
+        Promise.resolve().then(function () {
+          return db.collection('movimentacoes').add({ tipo: tipo, descricao: mot || tipo, valor_total: val, valor_liquido: val, taxa_valor: 0, forma_pagamento: 'dinheiro', profissional_id: null, profissional_nome: null,
+            produto_id: null, produto_nome: null, produto_grupo: null, quantidade: null, preco_unitario: null, cliente_tipo: null,
+            secretaria_id: CU.id, secretaria_nome: CU.nome, timestamp: FV().serverTimestamp(), marcado_erro: false, motivo_erro: null });
+        })
           .then(function () { toast((tipo === 'sangria' ? 'Sangria' : 'Suprimento') + ' registrada!', 'ok'); P.fechar(); cx.filtro = 'todos'; semQuebrar(caixa()); },
                 function (e) { st.ocupado = false; toast('Erro: ' + (e.message || e), 'ko'); pinta(); });
       });
@@ -1120,7 +1142,7 @@ var LJ = (function () {
           es.criandoProd = true; cr.disabled = true; cr.textContent = 'Salvando…';
           var gr = f.grupoNovo || 'conveniencia', un = String(f.unidadeNovo || '').trim() || 'un';
           /* = criarProdutoInline() */
-          db.collection('produtos').add({ nome: nm, grupo: gr, unidade: un, preco_custo: 0, preco_venda: 0, estoque_atual: 0, ativo: true, criado_em: FV().serverTimestamp() }).then(function (ref) {
+          Promise.resolve().then(function () { return db.collection('produtos').add({ nome: nm, grupo: gr, unidade: un, preco_custo: 0, preco_venda: 0, estoque_atual: 0, ativo: true, criado_em: FV().serverTimestamp() }); }).then(function (ref) {
             es.criandoProd = false;
             var p = { id: ref.id, nome: nm, grupo: gr, unidade: un, preco_custo: 0, preco_venda: 0, estoque_atual: 0, ativo: true };
             PC.push(p); es.prods.push(p);
@@ -1165,9 +1187,11 @@ var LJ = (function () {
       if (qtd < 1) { es.msg = { t: 'A quantidade precisa ser 1 ou mais.', e: true }; desenhaEstoque(); return; }
       es.salvando = true; rg.disabled = true; rg.textContent = 'Salvando…';
       var gravou = false;
-      db.collection('movimentacoes').add({ tipo: 'entrada_estoque', produto_id: p.id, produto_nome: p.nome, produto_grupo: p.grupo, quantidade: qtd, preco_unitario: cstUn, custo_unitario: cstUn,
-        valor_total: cstTot, valor_liquido: cstTot, taxa_valor: 0, descricao: obs || 'Entrada de estoque', cliente_tipo: null, forma_pagamento: null, profissional_id: null, profissional_nome: null,
-        secretaria_id: CU.id, secretaria_nome: CU.nome, timestamp: FV().serverTimestamp(), marcado_erro: false, motivo_erro: null })
+      Promise.resolve().then(function () {
+        return db.collection('movimentacoes').add({ tipo: 'entrada_estoque', produto_id: p.id, produto_nome: p.nome, produto_grupo: p.grupo, quantidade: qtd, preco_unitario: cstUn, custo_unitario: cstUn,
+          valor_total: cstTot, valor_liquido: cstTot, taxa_valor: 0, descricao: obs || 'Entrada de estoque', cliente_tipo: null, forma_pagamento: null, profissional_id: null, profissional_nome: null,
+          secretaria_id: CU.id, secretaria_nome: CU.nome, timestamp: FV().serverTimestamp(), marcado_erro: false, motivo_erro: null });
+      })
         .then(function () {
           gravou = true;
           var upd = { estoque_atual: FV().increment(qtd) };
@@ -1177,13 +1201,16 @@ var LJ = (function () {
         })
         .then(function () {
           es.salvando = false; es.form = { qtd: '1' }; es.msg = { t: 'Entrada: ' + qtd + '× ' + p.nome, e: false }; toast('Entrada: ' + qtd + 'x ' + p.nome, 'ok'); es.aba = 'entradas';
+          desenhaEstoque();
           semQuebrar(loadCaches().then(function () { return estoque(); }));
         }, function (e) {
           es.salvando = false;
           if (!gravou) { es.msg = { t: 'Não deu certo: ' + (e.message || e), e: true }; desenhaEstoque(); return; }
           es.form = { qtd: '1' }; es.aba = 'entradas';
           es.msg = { t: 'A entrada foi gravada, mas o estoque do produto não atualizou (' + (e.message || e) + '). Não lance de novo: avise o administrador.', e: true };
-          semQuebrar(loadCaches().then(function () { return estoque(); }));
+          desenhaEstoque();
+          var txt = es.msg.t;
+          semQuebrar(loadCaches().then(function () { return estoque(); })).then(function () { alertaFixo(txt); });
         });
     });
     rg.disabled = !!es.salvando;   /* a tela pode se redesenhar enquanto grava: o botão continua travado */
@@ -1491,7 +1518,7 @@ var LJ = (function () {
     jan.appendChild(pe);
     nvEl.appendChild(jan);
   }
-  function nvFechar() { nv.janela = 'fechada'; nvPadrao(); nvPinta(); }
+  function nvFechar() { if (nv.ocupado) return; nv.janela = 'fechada'; nvPadrao(); nvPinta(); }
   function nvConfirmar() {
     if (nv.ocupado || nv.carregando) return;
     /* = confirmarVenda() */
@@ -1499,7 +1526,9 @@ var LJ = (function () {
     if (!itens.length) { nv.erro = 'Adicione pelo menos um produto.'; nvPinta(); return; }
     var tipo = nv.cliente === 'prof' ? 'profissional' : 'paciente';
     var tot = itens.reduce(function (s, x) { return s + x.preco * x.qtd; }, 0);
-    var batch = db.batch(), quem = 'paciente', como;
+    var batch, quem = 'paciente', como;
+    try {   /* um campo inválido faz o Firestore reclamar na hora: vira aviso, nunca botão travado */
+    batch = db.batch();
     if (tipo === 'paciente') {
       var pag = nv.pag, tx = 0, liq = tot;
       if (pag === 'debito') { tx = tot * (CFG.taxa_debito || 0) / 100; liq = tot - tx; }
@@ -1535,6 +1564,7 @@ var LJ = (function () {
       if (pgpVal === 'notinha') batch.update(db.collection('profissionais').doc(profId), { saldo_devedor: FV().increment(tot) });
       quem = prof.nome; como = pgpVal === 'notinha' ? 'na notinha' : formaRot(nv.pag);
     }
+    } catch (e) { nv.erro = 'Não deu certo: ' + (e.message || e); toast('A venda NÃO foi gravada: ' + (e.message || e), 'ko'); nvPinta(); return; }
     nv.ocupado = true; nvPinta();
     batch.commit().then(function () {
       nv.ocupado = false;
@@ -1545,7 +1575,7 @@ var LJ = (function () {
       semQuebrar(loadCaches().then(function () {
         if (naTela('notinhas')) return notinhas(); else if (naTela('caixa')) return caixa(); else if (naTela('historico')) return historico(); else if (naTela('estoque')) return estoque();
       }));
-    }, function (e) { nv.ocupado = false; nv.erro = 'Não deu certo: ' + (e.message || e); nvPinta(); });
+    }, function (e) { nv.ocupado = false; nv.erro = 'Não deu certo: ' + (e.message || e); toast('A venda NÃO foi gravada: ' + (e.message || e), 'ko'); nvPinta(); });
   }
   function sair() { nv.janela = 'fechada'; nvPadrao(); nv.ocupado = false; nv.carregando = false; nv.avisoCarga = ''; if (nvEl) { nvEl.innerHTML = ''; nvEl.className = 'nv nv-fechada'; } var f = document.getElementById('fab'); if (f) f.classList.remove('nv-escondido'); nt.carregado = false; cx.carregado = false; es.carregado = false; hs.carregado = false; }
 
