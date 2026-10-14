@@ -533,3 +533,163 @@ textarea.pp-nota:focus{border-color:var(--cinza)}
 .pub-l .mt{grid-column:1 / -1;font-size:13px;color:var(--cinza);font-variant-numeric:tabular-nums}
 .pub-vazio{padding:20px 16px;color:var(--cinza);font-size:15px}
 .mo .mbody p+p{margin-top:8px}
+
+/* ═══ Lojinha (design novo: js/loja_nova.js) ═══ */
+.sec.lj-novo>:not(.lj-raiz){display:none!important}
+.busca.busca-p{width:200px;height:30px;padding:0 10px}
+.busca.busca-p input{font-size:13px}
+.lj-linha{align-items:center}
+.lj-saldo{flex:none;font-size:17px;font-weight:600;font-variant-numeric:tabular-nums}
+.lj-linha>svg{flex:none;color:var(--cinza3)}
+.lj-grande{padding:16px;display:flex;flex-direction:column;gap:6px}
+.lj-grande.com-linha{border-bottom:1px solid var(--linha)}
+.lj-grande-rot{font-size:13px;font-weight:600;color:var(--cinza)}
+.lj-grande-n{font-size:32px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.lj-grande-l1{font-size:15px}
+.lj-grande-l2{font-size:13px;color:var(--cinza);font-variant-numeric:tabular-nums}
+.lj-alinha{align-self:flex-start}
+.lj-alinha-dir{align-self:flex-end}
+.nota-lado .btn{height:38px;padding:0 16px;font-size:15px}
+.lj-not-cab{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.lj-not-cab .pp-cab{min-width:0}
+.lj-not-saldo{flex:none;display:flex;flex-direction:column;align-items:flex-end}
+.lj-not-saldo span{font-size:13px;color:var(--cinza)}
+.lj-not-saldo b{font-size:28px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.lj-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));box-shadow:inset 0 0 0 1px var(--linha)}
+.lj-kpis>div{padding:10px 12px;border-right:1px solid var(--linha);display:flex;flex-direction:column;gap:2px;min-width:0}
+.lj-kpis>div:last-child{border-right:0}
+.lj-kpis span{font-size:12px;color:var(--cinza)}
+.lj-kpis b{font-size:17px;font-weight:600;font-variant-numeric:tabular-nums}
+.seg.seg-cheio{display:flex;width:100%}
+.seg.seg-cheio>button{flex:1;justify-content:center;height:32px;padding:0 6px}
+.lj-lanc{display:flex;flex-direction:column;box-shadow:inset 0 0 0 1px var(--linha)}
+.lj-lanc-l{display:flex;align-items:center;gap:12px;padding:9px 14px;border:0;border-bottom:1px solid var(--linha);background:var(--branco);text-align:left;cursor:pointer;color:var(--tinta);font:inherit}
+.lj-lanc-l:last-child{border-bottom:0}
+.lj-lanc-l:hover{background:var(--sobre)}
+.lj-lanc-l .w{flex:none;width:82px;font-size:13px;color:var(--cinza);font-variant-numeric:tabular-nums}
+.lj-lanc-l .q{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.lj-lanc-l .q b{font-size:15px;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lj-lanc-l .q small{font-size:12px;color:var(--cinza)}
+.lj-lanc-l .v{flex:none;font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.lj-lanc-l.err{opacity:.45}
+.lj-lanc-l.err .q b,.lj-lanc-l.err .v,.lj-risco{text-decoration:line-through}
+.lj-form{display:flex;flex-direction:column;gap:12px}
+.lj-pad{padding:16px}
+.lj-campo{display:flex;flex-direction:column;gap:6px}
+.lj-campo>span{font-size:13px;font-weight:600;color:var(--cinza)}
+.lj-campo>span small{font-weight:400;font-size:13px}
+.lj-campo .fc,.lj-form>input.fc{height:40px}
+input.lj-grande-in{font-size:17px;font-weight:600;font-variant-numeric:tabular-nums}
+.lj-taxa{font-size:13px;color:var(--cinza);font-variant-numeric:tabular-nums}
+.lj-taxa[hidden]{display:none}
+.lj-aviso{min-height:18px;font-size:13px;font-weight:600;color:var(--verde)}
+.lj-aviso.erro{color:var(--vermelho)}
+.lj-corrige{display:flex;flex-direction:column;gap:6px;padding:12px;background:var(--fundo)}
+.lj-corrige b{font-size:13px;font-weight:600;color:var(--laranja)}
+.lj-corrige span{font-size:13px;color:var(--cinza);line-height:1.45}
+.lj-corrige .fc{height:38px}
+.lj-bts{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.lj-bts.lj-entre{justify-content:space-between}
+.lj-bts .btn{height:38px;padding:0 14px}
+.lj-linha-in{display:flex;gap:8px}
+.lj-linha-in .fc{flex:1;min-width:0;height:38px;font-size:13px;background:var(--fundo)}
+.lj-linha-in .btn{height:38px}
+.lj-extrato{display:flex;flex-direction:column;gap:10px}
+.lj-per-datas{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px}
+.lj-per-datas input{height:34px;padding:0 8px;border:1px solid var(--linha2);background:var(--branco);font:13px var(--fn);color:var(--tinta)}
+textarea.lj-mono{width:100%;resize:vertical;padding:12px;border:1px solid var(--linha2);font:12px/1.5 var(--mono);color:var(--tinta);background:var(--fundo);white-space:pre;overflow:auto}
+.lj-marca .cx{flex:none;width:18px;height:18px;border:1.5px solid var(--cinza3);display:flex;align-items:center;justify-content:center;color:#fff;background:var(--branco)}
+.lj-marca.on{background:var(--tint-suave)}
+.lj-marca.on .cx{border-color:var(--tint);background:var(--tint)}
+.lj-marca .q b{font-weight:400}
+.lj-marca .q b small{color:var(--cinza)}
+.lj-per{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.lj-per .seg>button{height:30px}
+.lj-per .lj-per-datas input{height:30px}
+.lj-per .lj-per-datas .btn{height:30px}
+.lj-campos{display:flex;flex-direction:column;box-shadow:inset 0 0 0 1px var(--linha)}
+.lj-cl{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:10px 14px;border-bottom:1px solid var(--linha)}
+.lj-cl:last-child{border-bottom:0}
+.lj-cl span{flex:none;font-size:13px;color:var(--cinza)}
+.lj-cl b{font-size:15px;font-weight:400;text-align:right;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.lj-cl b.f{font-weight:600}
+.btn.lj-btn-erro{align-self:flex-start;color:var(--vermelho);height:38px;padding:0 16px;font-size:15px}
+.mal-conf.lj-conf-erro{box-shadow:inset 0 0 0 1px var(--vermelho)}
+.lj-cx-l{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:9px 16px;border-bottom:1px solid var(--linha);font-size:15px}
+.lj-cx-l:last-child{border-bottom:0}
+.lj-cx-l b{font-weight:600;font-variant-numeric:tabular-nums}
+.lj-cx-bts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.lj-cx-bts .btn{width:100%}
+.lj-nota{font-size:13px;color:var(--cinza);line-height:1.45;padding:0 2px}
+.duas-col.carregando .lista-corpo,.duas-col.carregando .lado{opacity:.5;pointer-events:none}
+.lj-es-d{flex:none;width:52px;padding-top:2px;font-size:13px;font-weight:600;color:var(--cinza);font-variant-numeric:tabular-nums}
+.duas-col>.lj-nova{flex:2 1 340px;min-width:0}
+.lj-res{display:flex;flex-direction:column;box-shadow:inset 0 0 0 1px var(--linha);margin-top:6px}
+.lj-res-l{display:flex;align-items:center;gap:10px;padding:9px 12px;border:0;border-bottom:1px solid var(--linha);background:var(--branco);text-align:left;cursor:pointer;color:var(--tinta);font:inherit}
+.lj-res-l:hover{background:var(--sobre)}
+.lj-res-l .q{flex:1;min-width:0;display:flex;flex-direction:column}
+.lj-res-l .q b{font-size:15px;font-weight:500}
+.lj-res-l .q small{font-size:12px;color:var(--cinza)}
+.lj-res-l .v{font-size:13px;color:var(--cinza);font-variant-numeric:tabular-nums}
+.lj-res-vazio{padding:9px 12px;font-size:13px;color:var(--cinza);border-bottom:1px solid var(--linha)}
+.lj-res-novo{padding:9px 12px;border:0;background:var(--branco);text-align:left;cursor:pointer;font:600 13px var(--fn);color:var(--tint)}
+.lj-res-novo:hover{background:var(--sobre)}
+.lj-chip{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--tint-suave)}
+.lj-chip .q{flex:1;min-width:0;display:flex;flex-direction:column}
+.lj-chip .q b{font-size:15px;font-weight:600;color:var(--tint)}
+.lj-chip .q small{font-size:12px;color:var(--cinza);font-variant-numeric:tabular-nums}
+.btn.lj-trocar{background:var(--branco);color:var(--tint)}
+.lj-g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.lj-nova .btn-g{width:100%;height:44px}
+.lj-cat-v{flex:none;font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.cat .lj-cat-v{font-size:17px}
+.fab.nv-escondido{display:none}
+.nv{position:fixed;right:24px;bottom:0;z-index:150}
+.nv.nv-fechada{display:none}
+.nv-min{width:300px;max-width:calc(100vw - 32px);height:44px;display:flex;align-items:center;padding-right:4px;background:var(--tint);color:#fff;box-shadow:0 8px 28px rgba(0,0,0,.22)}
+.nv-min-tit{flex:1;min-width:0;height:44px;padding:0 16px;border:0;background:transparent;color:#fff;text-align:left;font:600 15px var(--fn);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nv-ic{flex:none;width:36px;height:36px;border:0;background:transparent;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.nv-ic:hover{background:rgba(255,255,255,.12)}
+.nv-jan{width:400px;max-width:calc(100vw - 32px);height:600px;max-height:calc(100vh - 16px);display:flex;flex-direction:column;background:var(--branco);box-shadow:0 10px 40px rgba(0,0,0,.24),0 0 0 1px rgba(0,0,0,.08)}
+.nv-cab{flex:none;height:44px;display:flex;align-items:center;padding:0 4px 0 16px;background:var(--tint);color:#fff}
+.nv-cab>span{flex:1;font-size:15px;font-weight:600}
+.nv-corpo{flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px}
+.busca.nv-busca{flex:none;width:100%;height:40px}
+.nv-bloco{display:flex;flex-direction:column;gap:8px}
+.nv-rot{font-size:13px;font-weight:600;color:var(--cinza)}
+.nv-rapidos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.nv-rap{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:48px;padding:6px 10px;border:1px solid var(--linha);background:var(--branco);cursor:pointer;text-align:left;color:var(--tinta);font:inherit}
+.nv-rap:hover{background:var(--sobre)}
+.nv-rap.on{border-color:var(--tint)}
+.nv-rap .q,.nv-res-l .q,.nv-item .q{display:flex;flex-direction:column;min-width:0}
+.nv-rap .q b{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nv-rap small,.nv-res-l small{font-size:12px;color:var(--cinza)}
+.nv small.baixo{color:var(--laranja);font-weight:600}
+.nv small.na{color:var(--tint);font-weight:600}
+.nv-rap .v{flex:none;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+.nv-res{display:flex;flex-direction:column;border-top:1px solid var(--linha)}
+.nv-res-l{display:flex;align-items:center;gap:10px;padding:10px 4px;border:0;border-bottom:1px solid var(--linha);background:var(--branco);text-align:left;cursor:pointer;color:var(--tinta);font:inherit}
+.nv-res-l:hover,.nv-res-l.on{background:rgba(118,118,128,.06)}
+.nv-res-l .q{flex:1}
+.nv-res-l .q b{font-size:15px;font-weight:400}
+.nv-res-l .v{flex:none;font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.nv-vazio{padding:12px 4px;font-size:15px;color:var(--cinza)}
+.nv-vazio.nv-linha-topo{border-top:1px solid var(--linha);padding-left:0}
+.nv-itens-cab{display:flex;align-items:baseline;justify-content:space-between}
+.nv-limpar{border:0;background:transparent;padding:0;font:600 13px var(--fn);color:var(--tint);cursor:pointer}
+.nv-item{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--linha)}
+.nv-item .q{flex:1}
+.nv-item .q b{font-size:15px;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nv-item .q small{font-size:13px;color:var(--cinza);font-variant-numeric:tabular-nums}
+.nv-qtd{flex:none;display:flex;align-items:center;background:var(--preenche)}
+.nv-qtd button{width:32px;height:32px;border:0;background:transparent;color:var(--tinta);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.nv-qtd .n{min-width:22px;text-align:center;font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.nv-item .v{flex:none;width:72px;text-align:right;font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.nv-taxa{font-size:13px;color:var(--cinza);font-variant-numeric:tabular-nums}
+.nv-pe{flex:none;display:flex;align-items:center;gap:12px;padding:12px 16px 16px;border-top:1px solid var(--linha)}
+.nv-pe .t{flex:1;min-width:0;display:flex;flex-direction:column}
+.nv-pe .t small{font-size:13px;color:var(--cinza)}
+.nv-pe .t b{font-size:22px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.btn.nv-ok{height:44px;padding:0 20px;font-size:15px}
+@media (max-width:560px){.nv{right:16px}.lj-g2{grid-template-columns:1fr}.lj-kpis{grid-template-columns:1fr}.lj-kpis>div{border-right:0;border-bottom:1px solid var(--linha)}.busca.busca-p{width:100%}}
+.lj-per-datas input.fc{width:auto;flex:none}

@@ -48,7 +48,8 @@ var moldura = (function () {
     conferencia:   { s: 'guias', t: 'prof',    secao: 'Profissionais', titulo: 'Conferência' },
     dono:          { s: 'guias', t: 'dono',    secao: 'Administração', titulo: 'Dono' },
     notinhas:      { s: 'notinhas',  secao: 'Lojinha', titulo: 'Notinhas',
-                     acoes: [['Profissionais', function () { irPara('profissionais'); }], ['Relatório', function () { abrirRel(); }], ['Bonificação do mês', function () { abrirBonif(); }]] },
+                     acoes: [['Profissionais', function () { irPara('profissionais'); }], ['Relatório', function () { if (window.LJ) LJ.relatorio(); else abrirRel(); }],
+                             ['Bonificação do mês', function () { if (window.LJ) LJ.bonificacao(); else abrirBonif(); }]] },
     caixa:         { s: 'caixa',     secao: 'Lojinha', titulo: 'Caixa' },
     estoque:       { s: 'estoque',   secao: 'Lojinha', titulo: 'Estoque', acoes: [['Balanço', function () { irPara('balanco'); }]] },
     balanco:       { s: 'balanco',   secao: 'Lojinha', titulo: 'Balanço', menu: 'estoque', acoes: [['Voltar ao estoque', function () { irPara('estoque'); }]] },
@@ -139,6 +140,7 @@ var moldura = (function () {
   /* ── navegação ── */
   function secaoAtual() { var s = document.querySelector('.sec.active'); return s ? s.id.replace('s-', '') : ''; }
   function irPara(d) {
+    if (d === 'venda' && window.LJ) { LJ.abrirVenda(); return; }     /* Nova venda é a janela no canto */
     var x = DEST[d]; if (!x) return;
     if (x.s === 'guias') {
       if (secaoAtual() === 'guias' && window.GV && GV.tela) GV.tela(x.t); else nav('guias', x.t);

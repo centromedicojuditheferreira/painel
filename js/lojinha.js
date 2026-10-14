@@ -244,17 +244,18 @@ function aplicarPermissoes(){
   ['cx-detalhes-fis','cx-detalhes-ban'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display=admin?'':'none';});
   const cxa=document.getElementById('cx-acoes');if(cxa)cxa.style.display=admin?'flex':'none';
 }
-function doLogout(){try{GV.stopTimers();}catch(e){}CU=null;PC=[];PRC=[];document.getElementById('app').style.display='none';document.getElementById('lo').style.display='flex';document.getElementById('lo-pin').value='';loadLoginUsers();}
+function doLogout(){try{GV.stopTimers();}catch(e){}try{LJ.sair();}catch(e){}CU=null;PC=[];PRC=[];document.getElementById('app').style.display='none';document.getElementById('lo').style.display='flex';document.getElementById('lo-pin').value='';loadLoginUsers();}
 function updateDate(){document.getElementById('tb-dt').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});}
 function setDatas(){const t=todayISO(),f=firstISO();['cx-ini','h-ini','ex-ini','rel-ini'].forEach(id=>{const e=document.getElementById(id);if(e)e.value=f;});['cx-fim','h-fim','ex-fim','rel-fim'].forEach(id=>{const e=document.getElementById(id);if(e)e.value=t;});}
 
 const TTLS={guias:'Guias da Agenda',dashboard:'Dashboard',venda:'Nova Venda',estoque:'Entrada de Estoque',balanco:'Balanço de Estoque',notinhas:'Notinhas',caixa:'Caixa',posicao:'Estoque Atual',profissionais:'Profissionais',historico:'Historico',exportar:'Exportar CSV',cfg:'Configuracoes'};
 function nav(s,sub){
+  if(s==='venda'&&window.LJ){LJ.abrirVenda();return;}   /* Nova venda agora é a janela no canto (js/loja_nova.js) */
   document.querySelectorAll('.sec').forEach(x=>x.classList.remove('active'));
   document.getElementById('s-'+s).classList.add('active');
   document.getElementById('tb-ttl').textContent=TTLS[s]||s;
   if(window.moldura)moldura.aoNavegar(s,sub);
-  const fn={guias:function(){GV.boot(sub);},dashboard:loadDashboard,venda:loadVendaForm,estoque:resetEstoque,balanco:loadBalanco,notinhas:loadNotinhas,caixa:loadCaixa,posicao:loadPosicao,profissionais:loadProfTable,historico:loadHistorico,cfg:loadCfg};
+  const fn={guias:function(){GV.boot(sub);},dashboard:loadDashboard,venda:loadVendaForm,estoque:window.LJ?LJ.estoque:resetEstoque,balanco:loadBalanco,notinhas:window.LJ?LJ.notinhas:loadNotinhas,caixa:window.LJ?LJ.caixa:loadCaixa,posicao:loadPosicao,profissionais:loadProfTable,historico:window.LJ?LJ.historico:loadHistorico,cfg:loadCfg};
   if(fn[s])fn[s]();
 }
 
