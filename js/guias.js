@@ -73,7 +73,7 @@ function carregar(){
       var regua = (dados[0] && dados[0].calculado_em)
         ? new Date(dados[0].calculado_em).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}) : null;
       var el = document.getElementById("gv-atualizado");
-      if(el) el.textContent = regua ? ("régua das " + regua + " · tela " + tela) : ("atualizado às " + tela);
+      if(el){ el.textContent = "atualizado às " + (regua || tela); el.title = regua ? ("régua calculada às " + regua + " · tela carregada às " + tela) : ""; }
       badgesTopo();
       if(estado.tela === "agenda") desenharAgenda();
     })
@@ -388,125 +388,172 @@ function badgesTopo(){
   function b(id, n){ var el = document.getElementById(id); if(!el) return; el.hidden = !n; el.textContent = n; }
   var corteN  = (estado.corte  || []).filter(corteAtivo).length;
   var falhasN = (estado.falhas || []).length;
-  b("gv-b-fila", prontos); b("gv-b-cad", cadN); b("gv-b-excl", exclN);
+  b("gv-b-agenda", pend); b("gv-b-fila", prontos); b("gv-b-cad", cadN); b("gv-b-excl", exclN);
   b("gv-b-corte", corteN); b("gv-b-falhas", falhasN);
   b("gv-sbb", pend + cadN + exclN + corteN + falhasN);
   desenharFaixa();
 }
 function desenharFaixa(){
   var f = document.getElementById("gv-faixa");
-  if(!f) return;
-  if(estado.tela !== "agenda"){ f.hidden = true; return; }
+  if(f) f.hidden = true;                       /* a faixa antiga saiu: os chips moram na barra da moldura */
+  if(!window.moldura) return;
+  var cadN  = (estado.cad  || []).filter(cadAberto).length;
+  var exclN = (estado.excl || []).filter(exclAberta).length;
+  var chips = [];
+  categorias().forEach(function(c){
+    chips.push({ chave:c.chave, rot:c.rot, n:c.n, dica:c.sub,
+      acao:function(){ irParaTela("agenda"); abrirCatAgenda(c.chave); } });
+  });
+  if(chips.length && (cadN || exclN)) chips.push({ sep:true });
+  if(cadN) chips.push({ chave:"cadastros", rot:"Cadastros", n:cadN, dica:"Abrir Cadastros", acao:function(){ irParaTela("cad"); } });
+  if(exclN) chips.push({ chave:"exclusoes", rot:"Exclusões", n:exclN, dica:"Abrir Exclusões", acao:function(){ irParaTela("excl"); } });
+  moldura.alertas(chips);
+}
+function irParaTela(t){
+  if(window.irPara && window.moldura) moldura.irTelaGuias(t); else trocaTela(t);
+}
+
+/* ═══ 📅 agenda ═══ */
+/* ═══ 📅 agenda — design novo: lista de consultas + painel "Resolver agora" ═══
+   Mesmos dados e mesma gravação de antes (salvarNota → pre_agenda_notas); só a tela mudou. */
+var ESP_ROT  = { psicologia:"Psicologia", aba:"ABA", nutricao:"Nutrição" };
+var TRAT_ROT = { pendente:"Pendente", guia_solicitada:"Guia solicitada", resolvido:"Resolvido", sem_solucao:"Sem solução", desmarcado:"Desmarcado" };
+var TOM = { r:"#D70015", o:"#C93400", c:"#636366", v:"#248A3D" };
+/* textos da tela (voz do modelo novo); as regras continuam no SIT lá de cima */
+var SIT_TXT = {
+  sem_guia:               { rot:"Sem guia", tom:"r", sub:"Solicitar a guia agora ou desmarcar", acao:"Regra da casa: consulta não pode estar na agenda sem guia. Solicitar a guia agora ou desmarcar." },
+  guia_vencida:           { rot:"Guia vencida", tom:"r", sub:"Atualizar a validade com a Unimed ou desmarcar", acao:"Guia vencida sai da agenda. Falar com a Unimed para atualizar a validade (ou pedir guia nova) agora, ou desmarcar." },
+  saldo_esgotado:         { rot:"Saldo esgotado", tom:"r", sub:"Solicitar a renovação agora ou desmarcar", acao:"Sem sessão sobrando é o mesmo que sem guia. Solicitar a renovação agora ou desmarcar." },
+  sem_carteirinha:        { rot:"Sem carteirinha", tom:"r", sub:"Completar o cadastro do paciente hoje", acao:"Completar o cadastro do paciente hoje: sem carteirinha não dá para casar a guia." },
+  guia_de_outra_terapia:  { rot:"Guia de outra terapia", tom:"r", sub:"Conferir procedimento ou guia e corrigir", acao:"A guia viva do paciente é de outra terapia. Conferir se o erro é o procedimento marcado ou a guia pedida e corrigir agora, ou desmarcar." },
+  procedimento_errado:    { rot:"Procedimento errado", tom:"r", sub:"Corrigir o procedimento no Feegow", acao:"O procedimento do agendamento não é nenhum dos 4 códigos Unimed. Corrigir no Feegow: assim não fatura e o painel fica cego." },
+  aba_intercambio:        { rot:"ABA no Intercâmbio", tom:"r", sub:"Corrigir convênio ou procedimento", acao:"ABA não é coberto no Intercâmbio. Corrigir o convênio ou o procedimento antes da sessão." },
+  psico_com_guia_aba:     { rot:"Psicologia com guia de ABA", tom:"r", sub:"Corrigir o procedimento no Feegow", acao:"O paciente tem guia de ABA viva: não deveria haver sessão de psicologia. Corrigir o procedimento do agendamento no Feegow agora." },
+  ultima_sessao:          { rot:"Última sessão", tom:"o", sub:"Última do saldo: pedir guia nova já", acao:"É a última sessão do saldo. Solicitar guia nova já, para a agenda seguinte não furar." },
+  duplicidade_dia:        { rot:"Duas no mesmo dia", tom:"o", sub:"Remarcar ou excluir uma delas", acao:"Só uma consulta da mesma terapia fatura por dia. Remarcar ou excluir uma delas." },
+  sem_saldo_na_fila:      { rot:"Fila passa do saldo", tom:"o", sub:"Pedir guia nova antes desta data", acao:"Solicitar guia nova antes desta data: a fila do paciente consome o saldo antes de chegar aqui." },
+  guia_ainda_nao_vale:    { rot:"Guia só vale depois", tom:"o", sub:"Conferir a data com a Unimed", acao:"Conferir a data de autorização com a Unimed." },
+  sessao_em_feriado:      { rot:"Cai no feriado", tom:"c", sub:"Remarcar", acao:"Remarcar: o sistema não fatura sessão em feriado." },
+  ultima_viavel_validade: { rot:"Última viável (validade)", tom:"o", sub:"Corte hoje: renovar a validade já", acao:"A guia ainda tem saldo, mas a validade termina antes da próxima consulta: esta é a última que a cobertura alcança. Solicitar a renovação já." },
+  coberto:                { rot:"Coberta", tom:"v", sub:"", acao:"" }
+};
+var ABA_TXT = { rot:"ABA", tom:"r", sub:"Sem guia de ABA, ABA no Intercâmbio ou psicologia sobre guia de ABA",
+  acao:"Tudo que é de ABA: sessão de ABA sem guia de ABA, ABA no convênio Intercâmbio e psicologia acontecendo por cima de guia de ABA. Corrigir o procedimento ou o convênio no Feegow, ou pedir a guia certa." };
+var IC = {
+  esq:"M14.5 6l-6 6 6 6", dir:"M9.5 6l6 6-6 6", x:"M6 6l12 12M18 6 6 18", ok:"M5.5 12.5l4.2 4.2 8.8-9.4",
+  fora:"M14 5h5v5M19 5l-8 8M17 14v5H5V7h5"
+};
+function ico(d, tam, traco, cor){
+  return '<svg width="'+(tam||16)+'" height="'+(tam||16)+'" viewBox="0 0 24 24" fill="none" stroke="'+(cor||"currentColor")+'" stroke-width="'+(traco||2)+
+         '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+d+'"></path></svg>';
+}
+function novo(tag, cls, html){ var e = document.createElement(tag); if(cls) e.className = cls; if(html != null) e.innerHTML = html; return e; }
+function botao(cls, html, fn){ var b = novo("button", cls, html); b.type = "button"; if(fn) b.addEventListener("click", fn); return b; }
+function semAcento(s){ return String(s||"").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase(); }
+function sitTxt(s){ return SIT_TXT[s] || { rot:s, tom:"c", sub:"", acao:"" }; }
+function rotTipo(k){ return k === "__aba__" ? "ABA" : sitTxt(k).rot; }
+function ses(n){ return n + (n === 1 ? " sessão" : " sessões"); }
+function capital(t){ t = String(t||""); return t.charAt(0).toUpperCase() + t.slice(1); }
+
+function contagens(){
+  var c = { pendencias:0, avisos:0, tratadas:0, cobertas:0 };
+  estado.linhas.forEach(function(l){
+    if(ehPendencia(l)) c.pendencias++;
+    else if(ehAviso(l)) c.avisos++;
+    else if(l.situacao === "coberto") c.cobertas++;
+    else c.tratadas++;
+  });
+  return c;
+}
+/* categorias do "Resolver agora" (mesma conta da faixa antiga) */
+function categorias(){
   var cont = {};
   estado.linhas.forEach(function(l){ if(ehPendencia(l)) cont[l.situacao] = (cont[l.situacao]||0)+1; });
   var abaN = estado.linhas.filter(ehProblemaAba).length;
-  /* as situações de ABA saem dos chips soltos: entram todas no chip 🧩 ABA */
   delete cont["aba_intercambio"];
   delete cont["psico_com_guia_aba"];
   var tipos = SIT_ORDEM.filter(function(s){ return cont[s]; });
   Object.keys(cont).forEach(function(s){ if(tipos.indexOf(s) < 0) tipos.push(s); });
-  var cadN  = (estado.cad  || []).filter(cadAberto).length;
-  var exclN = (estado.excl || []).filter(exclAberta).length;
-  if(!tipos.length && !abaN && !cadN && !exclN){ f.hidden = true; return; }
-  f.hidden = false; f.innerHTML = '<span class="ftit">🚨 Resolver agora:</span>';
-  if(abaN){
-    var ca = document.createElement("button");
-    ca.className = "fchip" + (estado.filtroTipo === "__aba__" ? " on" : "");
-    ca.innerHTML = "🧩 ABA <b>" + abaN + "</b>";
-    ca.title = "Tudo de ABA: sem guia de ABA, ABA no Intercâmbio e psicologia por cima de guia de ABA";
-    ca.onclick = function(){
-      estado.filtroTipo = (estado.filtroTipo === "__aba__" ? null : "__aba__");
-      desenharAgenda();
-    };
-    f.appendChild(ca);
-  }
-  tipos.forEach(function(s){
-    var c = document.createElement("button");
-    c.className = "fchip" + (estado.filtroTipo === s ? " on" : "");
-    c.innerHTML = escapa((SIT[s]||{rot:s}).rot) + " <b>" + cont[s] + "</b>";
-    c.title = "Mostrar só estas";
-    c.onclick = function(){
-      estado.filtroSit = "pendencias";
-      estado.filtroTipo = (estado.filtroTipo === s ? null : s);
-      desenharAgenda();
-    };
-    f.appendChild(c);
-  });
-  if(cadN){
-    var cc = document.createElement("button");
-    cc.className = "fchip"; cc.innerHTML = "🧾 Cadastros <b>" + cadN + "</b>";
-    cc.onclick = function(){ trocaTela("cad"); };
-    f.appendChild(cc);
-  }
-  if(exclN){
-    var ce = document.createElement("button");
-    ce.className = "fchip"; ce.innerHTML = "🗑️ Exclusões <b>" + exclN + "</b>";
-    ce.onclick = function(){ trocaTela("excl"); };
-    f.appendChild(ce);
-  }
+  var out = [];
+  if(abaN) out.push({ chave:"__aba__", rot:"ABA", sub:ABA_TXT.sub, n:abaN, cor:TOM.r });
+  tipos.forEach(function(s){ var m = sitTxt(s); out.push({ chave:s, rot:m.rot, sub:m.sub, n:cont[s], cor:TOM[m.tom] || TOM.r }); });
+  return out;
 }
-
-/* ═══ 📅 agenda ═══ */
-function desenharAgenda(){ desenharRegua(); desenharFaixa(); desenharFiltros(); desenharLista(); }
+function linhasDaCategoria(k){
+  return estado.linhas.filter(function(l){ return k === "__aba__" ? ehProblemaAba(l) : (ehPendencia(l) && l.situacao === k); });
+}
+function metaLinha(l){
+  return (ESP_ROT[l.especialidade] || l.especialidade || "—") + " · " + (l.profissional || "—") + " · " +
+         (l.convenio || ("convênio " + l.convenio_id)) + (l.status ? " · " + l.status : "");
+}
+function quandoCurto(l){ return (l.dias_ate === 0 ? "hoje" : String(l.dia_semana||"").slice(0,3) + " " + l.data_fmt) + " · " + l.horario; }
+function detalheTxt(l){
+  var g = l.numero_guia || "—", fim = l.guia_fim_fmt || "—";
+  switch(l.situacao){
+    case "coberto": return "Guia " + g + " · " + ses(l.saldo_guia) + " · vence " + fim + ".";
+    case "guia_vencida": return "A última guia, " + g + ", venceu em " + fim +
+      (typeof l.dias_para_vencer === "number" ? " (há " + Math.abs(l.dias_para_vencer) + (Math.abs(l.dias_para_vencer) === 1 ? " dia)." : " dias).") : ".");
+    case "saldo_esgotado": return "A guia " + g + " vale até " + fim + ", mas o saldo zerou.";
+    case "psico_com_guia_aba": return "Guia de ABA viva" + (l.outra_guia_numero ? " " + l.outra_guia_numero : "") +
+      (l.outra_guia_qt != null ? " · " + ses(l.outra_guia_qt) : "") + (l.outra_guia_fim ? " · vence " + fmtData(l.outra_guia_fim) : "") +
+      ". O agendamento está como psicologia" + (l.numero_guia ? " (guia de psicologia " + l.numero_guia + ")" : "") + ".";
+    case "guia_de_outra_terapia": return "A guia viva " + (l.outra_guia_numero || "—") + " é de " + (ESP_ROT[l.outra_guia_terapia] || l.outra_guia_terapia || "outra terapia") +
+      (l.outra_guia_qt != null ? " · " + ses(l.outra_guia_qt) : "") + (l.outra_guia_fim ? " · vence " + fmtData(l.outra_guia_fim) : "") + ".";
+    case "procedimento_errado": return "Procedimento no Feegow: " + (l.procedimento || "vazio") +
+      (l.quem_criou ? ", marcado por " + l.quem_criou : "") + (l.agendado_em ? " em " + fmtQuando(l.agendado_em) : "") + ".";
+    case "aba_intercambio": return "Convênio Intercâmbio" + (l.numero_guia ? " · guia " + l.numero_guia : "") + ": ABA não é coberto.";
+    case "ultima_sessao": return "Guia " + g + " · última sessão do saldo · vence " + fim + ".";
+    case "ultima_viavel_validade": return "Guia " + g + " · " + ses(l.saldo_guia) + " no saldo · vence " + fim + ".";
+    case "duplicidade_dia": return (l.dup_no_dia || 2) + " consultas de " + (ESP_ROT[l.especialidade] || l.especialidade || "mesma terapia").toLowerCase() + " neste dia: só uma fatura.";
+    case "sem_saldo_na_fila": return "É a " + l.posicao_efetiva + "ª consulta da fila, e o saldo na data é " + l.saldo_na_data + ".";
+    case "guia_ainda_nao_vale": return l.guia_inicio ? "Guia autorizada só a partir de " + fmtData(l.guia_inicio) + "." : "";
+    case "sessao_em_feriado": return "Este dia é feriado.";
+  }
+  return "";
+}
+function desenharAgenda(){
+  var main = document.getElementById("gv-conteudo");
+  if(!main) return;
+  var antes = main.querySelector(".lista-corpo");
+  var rolagem = (antes && !estado._agTopo) ? antes.scrollTop : 0;
+  estado._agTopo = false;
+  main.innerHTML = "";
+  var wrap = novo("div", "duas-col");
+  wrap.appendChild(agLista());
+  var lado = novo("div", "lado"); lado.appendChild(agPainel()); wrap.appendChild(lado);
+  main.appendChild(wrap);
+  ajustaAltura();
+  var corpo = main.querySelector(".lista-corpo");
+  if(corpo) corpo.scrollTop = rolagem;
+  desenharFaixa();
+  resumoAgenda();
+}
+function agMudou(){ estado.agLimite = 150; estado._agTopo = true; desenharAgenda(); }
+function ajustaAltura(){
+  var l = document.querySelector("#gv-conteudo .lista.alta");
+  if(!l) return;
+  var topo = l.getBoundingClientRect().top + window.scrollY;
+  l.style.height = Math.max(520, window.innerHeight - topo - 24) + "px";
+}
+window.addEventListener("resize", function(){ if(estado.tela === "agenda") ajustaAltura(); });
+function resumoAgenda(){
+  if(!window.moldura) return;
+  var d = diasUnicos();
+  var n = estado.linhas.length;
+  moldura.resumo("agenda", n ? (n + " consulta" + (n === 1 ? "" : "s") + (d.length ? " de " + d[0].data_fmt + " a " + d[d.length-1].data_fmt : "")) : "");
+}
 function diasUnicos(){
   var m = {};
   estado.linhas.forEach(function(l){
-    if(!m[l.data]) m[l.data] = { data:l.data, dia_semana:l.dia_semana, data_fmt:l.data_fmt, pend:0, feriado:false };
+    if(!m[l.data]) m[l.data] = { data:l.data, dia_semana:l.dia_semana, data_fmt:l.data_fmt, pend:0, feriado:false, hoje:l.dias_ate === 0 };
     if(ehPendencia(l)) m[l.data].pend++;
     if(l.em_feriado) m[l.data].feriado = true;
   });
   return Object.keys(m).sort().map(function(k){ return m[k]; });
 }
-function desenharRegua(){
-  var r = document.getElementById("gv-regua"); if(!r) return;
-  r.innerHTML = "";
-  var tudo = document.createElement("button");
-  tudo.className = "dia" + (estado.filtroDia===null ? " ativo" : "");
-  var totalPend = estado.linhas.filter(ehPendencia).length;
-  tudo.innerHTML = '<div class="dsem">todos</div><div class="dnum">'+diasUnicos().length+'d</div>' +
-                   '<div class="badge'+(totalPend?"":" zero")+'">'+totalPend+'</div>';
-  tudo.onclick = function(){ estado.filtroDia = null; desenharAgenda(); };
-  r.appendChild(tudo);
-  diasUnicos().forEach(function(d){
-    var b = document.createElement("button");
-    b.className = "dia" + (estado.filtroDia===d.data ? " ativo" : "") + (d.feriado ? " feriado" : "");
-    b.setAttribute("role","tab");
-    b.innerHTML = '<div class="dsem">'+escapa(d.dia_semana.slice(0,3))+'</div>' +
-                  '<div class="dnum">'+escapa(d.data_fmt)+'</div>' +
-                  '<div class="badge'+(d.pend?"":" zero")+'">'+d.pend+'</div>';
-    b.onclick = function(){ estado.filtroDia = (estado.filtroDia===d.data ? null : d.data); desenharAgenda(); };
-    r.appendChild(b);
-  });
-}
-function desenharFiltros(){
-  var alvo = { pendencias:0, avisos:0, tratadas:0, cobertas:0 };
-  estado.linhas.forEach(function(l){
-    if(ehPendencia(l)) alvo.pendencias++;
-    else if(ehAviso(l)) alvo.avisos++;
-    else if(l.situacao==="coberto") alvo.cobertas++;
-    else alvo.tratadas++;
-  });
-  var defs = [
-    ["pendencias","Pendências", "var(--critico)", alvo.pendencias],
-    ["avisos","Avisos", "var(--alerta)", alvo.avisos],
-    ["tratadas","Já tratadas", "var(--neutro)", alvo.tratadas],
-    ["cobertas","Cobertas", "var(--ok)", alvo.cobertas],
-    ["tudo","Tudo", "var(--tinta-2)", estado.linhas.length]
-  ];
-  var f = document.createElement("div"); f.className = "filtros";
-  defs.forEach(function(d){
-    var c = document.createElement("button");
-    c.className = "chip" + (estado.filtroSit===d[0] ? " on" : "");
-    c.innerHTML = '<span class="ponto" style="background:'+d[2]+'"></span>'+d[1]+' <b>'+d[3]+'</b>';
-    c.onclick = function(){ estado.filtroSit = d[0]; if(d[0]!=="pendencias") estado.filtroTipo = null; desenharAgenda(); };
-    f.appendChild(c);
-  });
-  var main = document.getElementById("gv-conteudo");
-  main.innerHTML = ""; main.appendChild(f);
-}
 function passaFiltro(l){
   if(estado.filtroDia && l.data !== estado.filtroDia) return false;
-  if(estado.busca && (l.paciente||"").toLowerCase().indexOf(estado.busca) < 0) return false;
+  if(estado.busca && semAcento(l.paciente).indexOf(semAcento(estado.busca)) < 0) return false;
   if(estado.filtroTipo === "__aba__") return ehProblemaAba(l);
   if(estado.filtroSit==="pendencias"){
     if(!ehPendencia(l)) return false;
@@ -518,119 +565,260 @@ function passaFiltro(l){
   if(estado.filtroSit==="cobertas") return l.situacao==="coberto";
   return true;
 }
-function detalheDe(l){
-  var m = [];
-  if(l.situacao==="coberto")
-    m.push('guia <span class="mono">'+escapa(l.numero_guia)+'</span> · '+l.saldo_guia+' sessão(ões) · vence '+escapa(l.guia_fim_fmt));
-  if(l.situacao==="guia_vencida")
-    m.push('última guia <span class="mono">'+escapa(l.numero_guia||"—")+'</span> venceu em '+escapa(l.guia_fim_fmt||"—")+
-           (typeof l.dias_para_vencer==="number" ? ' <b>(há '+Math.abs(l.dias_para_vencer)+' dia'+(Math.abs(l.dias_para_vencer)===1?'':'s')+')</b>' : ''));
-  if(l.situacao==="saldo_esgotado")
-    m.push('guia <span class="mono">'+escapa(l.numero_guia)+'</span> vale até '+escapa(l.guia_fim_fmt)+', mas zerou');
-  if(l.situacao==="psico_com_guia_aba")
-    m.push('guia de <b>ABA</b> viva <span class="mono">'+escapa(l.outra_guia_numero||"—")+'</span>'+
-           (l.outra_guia_qt!=null ? ' · '+l.outra_guia_qt+' sessão(ões)' : '')+
-           (l.outra_guia_fim ? ' · vence '+fmtData(l.outra_guia_fim) : '')+
-           ' — mas o agendamento está como <b>psicologia</b>'+
-           (l.numero_guia ? ' (guia de psico <span class="mono">'+escapa(l.numero_guia)+'</span>)' : ''));
-  if(l.situacao==="guia_de_outra_terapia")
-    m.push('a guia viva <span class="mono">'+escapa(l.outra_guia_numero||"—")+'</span> é de <b>'+escapa(l.outra_guia_terapia||"?")+'</b>'+
-           (l.outra_guia_qt!=null ? ' · '+l.outra_guia_qt+' sessão(ões)' : '')+
-           (l.outra_guia_fim ? ' · vence '+fmtData(l.outra_guia_fim) : ''));
-  if(l.situacao==="procedimento_errado")
-    m.push('procedimento no Feegow: <b>'+escapa(l.procedimento||"— (vazio)")+'</b>'+
-           (l.quem_criou ? ' · marcado por <b>'+escapa(l.quem_criou)+'</b>' : '')+
-           (l.agendado_em ? ' em '+fmtQuando(l.agendado_em) : ''));
-  if(l.situacao==="aba_intercambio")
-    m.push('convênio Intercâmbio (8)'+(l.numero_guia ? ' · guia <span class="mono">'+escapa(l.numero_guia)+'</span>' : '')+' — ABA não é coberto');
-  if(l.situacao==="ultima_sessao")
-    m.push('guia <span class="mono">'+escapa(l.numero_guia)+'</span> · <b>ÚLTIMA sessão do saldo</b> · vence '+escapa(l.guia_fim_fmt||"—"));
-  if(l.ultima_viavel && l.proximo_agendamento_id)
-    m.push('✂️ <b>ÚLTIMA CONSULTA VIÁVEL</b> — sem guia nova, corte às <b>21h</b> (sáb 11h) do dia '+escapa(l.data_fmt)+
-           ' · '+(l.futuros_apos||0)+' futuro(s) na fila · '+
-           '<a class="mono" target="_blank" rel="noopener" href="https://app.feegow.com/main/?P=Agenda-1&Pers=1&AgendamentoID='+l.proximo_agendamento_id+
-           '">abrir o PRÓXIMO no Feegow</a> e apagar <b>este e os próximos</b>');
-  if(l.situacao==="duplicidade_dia" && l.dup_no_dia)
-    m.push('<b>'+l.dup_no_dia+' consultas</b> de '+escapa(l.especialidade)+' neste dia — só uma fatura');
-  if(l.situacao==="sem_saldo_na_fila")
-    m.push('é a '+l.posicao_efetiva+'ª consulta dele(a) e o saldo na data é '+l.saldo_na_data);
-  if(l.situacao==="guia_ainda_nao_vale" && l.guia_inicio)
-    m.push('guia autorizada só a partir de '+fmtData(l.guia_inicio));
-  var meta = SIT[l.situacao] || {};
-  if(meta.acao && l.situacao!=="coberto") m.push("→ "+meta.acao);
-  return m.join("<br>");
-}
-function desenharLista(){
-  var main = document.getElementById("gv-conteudo");
-  var linhas = estado.linhas.filter(passaFiltro);
-  if(!linhas.length){
-    var v = document.createElement("div"); v.className = "vazio";
-    v.innerHTML = estado.filtroSit==="pendencias"
-      ? "<b>Nenhuma pendência vermelha ✔</b>Tudo coberto ou já tratado. Os avisos amarelos ficam no filtro ao lado."
-      : "Nada aqui com esses filtros.";
-    main.appendChild(v); return;
-  }
-  var porDia = {};
-  linhas.forEach(function(l){ (porDia[l.data] = porDia[l.data] || []).push(l); });
-  Object.keys(porDia).sort().forEach(function(dia){
-    var g = document.createElement("section"); g.className = "grupo";
-    var ex = porDia[dia][0];
-    g.innerHTML = '<h2>'+escapa(ex.dia_semana)+' · '+escapa(ex.data_fmt)+
-                  ' <span class="cont">'+porDia[dia].length+' consulta(s)</span></h2>';
-    porDia[dia].forEach(function(l){ g.appendChild(cardDe(l)); });
-    main.appendChild(g);
+function agLista(){
+  var cont = contagens();
+  var sec = novo("section", "lista alta"); sec.setAttribute("aria-label", "Consultas");
+  var topo = novo("div", "lista-topo"), esq = novo("div", "lista-topo-esq");
+  var seg = novo("div", "seg"); seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "Mostrar");
+  [["pendencias","Pendências",TOM.r,cont.pendencias],["avisos","Avisos",TOM.o,cont.avisos],["tratadas","Já tratadas","#AEAEB2",cont.tratadas],
+   ["cobertas","Cobertas",TOM.v,cont.cobertas],["tudo","Tudo","#D2D2D7",estado.linhas.length]].forEach(function(f){
+    var on = estado.filtroSit === f[0];
+    var b = botao(on ? "on" : "", '<span class="q" style="background:'+f[2]+'"></span>' + f[1] + ' <span class="n">' + f[3] + '</span>', function(){
+      estado.filtroSit = f[0]; if(f[0] !== "pendencias") estado.filtroTipo = null; agMudou();
+    });
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+    seg.appendChild(b);
   });
-}
-function cardDe(l){
-  var meta = SIT[l.situacao] || {rot:l.situacao, cls:"sinfo", g:"ginfo", acao:""};
-  var card = document.createElement("article");
-  card.className = "card "+meta.g+(tratada(l)?" tratada":"");
-  var cel = primeiroCelular(l.celulares_raw, l.telefones_raw);
-  card.innerHTML =
-    '<div class="hora">'+escapa(l.horario)+'</div>'+
-    '<div class="quem">'+
-      '<div class="paciente">'+escapa(l.paciente)+'</div>'+
-      '<div class="meta"><span class="esp">'+escapa(l.especialidade)+'</span> · '+escapa(l.profissional||"—")+
-      ' · '+escapa(l.convenio||("convênio "+l.convenio_id))+' · <span title="status do agendamento">'+escapa(l.status)+'</span></div>'+
-    '</div>'+
-    '<div class="sit '+meta.cls+'"><span class="rotulo">'+escapa(meta.rot)+'</span>'+
-      '<div class="detalhe">'+detalheDe(l)+'</div></div>';
-  var acoes = document.createElement("div"); acoes.className = "acoes";
-  if(cel){
-    acoes.appendChild(botaoFone(cel));
-  } else {
-    var sf = document.createElement("span"); sf.className="fone"; sf.textContent = "📵 sem celular";
-    acoes.appendChild(sf);
+  esq.appendChild(seg);
+  if(estado.filtroTipo){
+    var so = botao("so-tipo", "Só " + escapa(rotTipo(estado.filtroTipo)) + " " + ico(IC.x, 12, 2.6), function(){ estado.filtroTipo = null; agMudou(); });
+    so.title = "Tirar este filtro";
+    esq.appendChild(so);
   }
-  var sel = document.createElement("select");
-  sel.setAttribute("aria-label","Tratamento");
-  TRATAMENTOS.forEach(function(t){
-    var o = document.createElement("option"); o.value = t[0]; o.textContent = t[1];
-    if((l.tratamento||"pendente")===t[0]) o.selected = true;
-    sel.appendChild(o);
+  topo.appendChild(esq);
+  var vis = estado.linhas.filter(passaFiltro);
+  var lim = estado.agLimite || 150;
+  topo.appendChild(novo("span", "mostrando", vis.length ? "Mostrando " + Math.min(lim, vis.length) + " de " + vis.length : ""));
+  sec.appendChild(topo);
+  sec.appendChild(agDias(cont));
+  var corpo = novo("div", "lista-corpo");
+  if(!estado.linhas.length){
+    corpo.appendChild(novo("div", "lista-vazio", estado._carregouEm ? "Nenhuma consulta na agenda." : "Buscando a agenda no banco…"));
+  } else if(!vis.length){
+    corpo.appendChild(novo("div", "lista-vazio", estado.filtroSit === "pendencias" && !estado.filtroTipo && !estado.busca
+      ? "Nenhuma pendência vermelha. Tudo coberto ou já tratado: os avisos ficam no filtro ao lado."
+      : "Nada aqui com esses filtros."));
+  }
+  var infoDia = {}; diasUnicos().forEach(function(d){ infoDia[d.data] = d; });
+  var porDia = {}; vis.forEach(function(l){ porDia[l.data] = (porDia[l.data]||0)+1; });
+  var dia = null;
+  vis.slice(0, lim).forEach(function(l){
+    if(dia !== l.data){
+      dia = l.data;
+      var d = infoDia[l.data] || {};
+      corpo.appendChild(novo("div", "dia-cab", '<b>' + (d.hoje ? "Hoje · " : "") + escapa(capital(l.dia_semana)) + ", " + escapa(l.data_fmt) +
+        (d.feriado ? " · feriado" : "") + '</b><span>' + porDia[l.data] + '</span>'));
+    }
+    corpo.appendChild(agLinha(l));
   });
-  sel.className = "trat-"+(l.tratamento||"pendente");
-  var nota = document.createElement("input");
-  nota.className = "nota"; nota.placeholder = "Anotar (protocolo, com quem falou…)";
-  nota.value = l.nota || "";
-  var salvo = document.createElement("span"); salvo.className = "salvo"; salvo.textContent = "salvo ✔";
-  var autoraTag = document.createElement("span"); autoraTag.className = "autora-tag";
-  if(l.autora_nota) autoraTag.textContent = "por "+l.autora_nota;
-  function persistir(){
-    salvo.textContent = "salvando…"; salvo.classList.add("mostra");
-    salvarNota(l.agendamento_id, sel.value, nota.value.trim(), function(okp){
-      salvo.textContent = okp ? "salvo ✔" : "erro ao salvar ✖";
-      salvo.style.color = okp ? "var(--ok)" : "var(--critico)";
-      sel.className = "trat-"+sel.value;
-      if(okp){ setTimeout(function(){ salvo.classList.remove("mostra"); }, 1600); badgesTopo(); desenharAgenda(); }
+  if(vis.length > lim){
+    var m = novo("div", "lista-mais");
+    m.appendChild(botao("btn btn-s", "Mostrar mais " + Math.min(150, vis.length - lim), function(){ estado.agLimite = lim + 150; desenharAgenda(); }));
+    corpo.appendChild(m);
+  }
+  sec.appendChild(corpo);
+  return sec;
+}
+function agLinha(l){
+  var m = sitTxt(l.situacao), t = l.tratamento || "pendente";
+  var b = botao("linha" + (estado._agAberto === l.agendamento_id ? " aberta" : ""),
+    '<span class="h">' + escapa(l.horario) + '</span>' +
+    '<span class="q"><span class="nm">' + escapa(l.paciente) + '</span><span class="mt">' + escapa(metaLinha(l)) + '</span></span>' +
+    '<span class="dir"><span class="tag" style="color:' + (tratada(l) ? "#AEAEB2" : (TOM[m.tom] || TOM.c)) + '">' + escapa(m.rot) + '</span>' +
+    (t !== "pendente" ? '<span class="tr">' + escapa(TRAT_ROT[t] || t) + '</span>' : '') + '</span>',
+    function(){ abrirPacAgenda(l.agendamento_id, "lista"); });
+  b.setAttribute("aria-haspopup", "dialog");
+  b.setAttribute("data-ag", l.agendamento_id);
+  return b;
+}
+function agDias(cont){
+  var dias = diasUnicos(), N = dias.length, VIS = 6;
+  var maxOff = Math.max(0, N - VIS);
+  if(estado.filtroDia){                                   /* o dia escolhido fica sempre à vista */
+    var k = dias.findIndex(function(d){ return d.data === estado.filtroDia; });
+    var off0 = estado.agOff || 0;
+    if(k >= 0 && (k < off0 || k >= off0 + VIS)) estado.agOff = Math.min(maxOff, Math.max(0, k - VIS + 1));
+  }
+  var off = Math.min(estado.agOff || 0, maxOff);
+  var w = novo("div", "dias");
+  var a = botao("dias-seta", ico(IC.esq, 18, 2.2), function(){ estado.agOff = Math.max(0, off - VIS); desenharAgenda(); });
+  a.setAttribute("aria-label", "Dias anteriores"); a.disabled = off <= 0;
+  var grade = novo("div", "dias-grade");
+  function cel(sem, data, rod, cls, on, fn){
+    var b = botao("dia2" + (on ? " on" : ""), '<span class="s">' + sem + '</span><span class="d">' + data + '</span><span class="r ' + cls + '">' + rod + '</span>', fn);
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+    return b;
+  }
+  grade.appendChild(cel("Todos", N + " dias", String(cont.pendencias), cont.pendencias ? "p" : "", estado.filtroDia === null,
+    function(){ estado.filtroDia = null; agMudou(); }));
+  dias.slice(off, off + VIS).forEach(function(d){
+    grade.appendChild(cel(d.hoje ? "hoje" : escapa(String(d.dia_semana).slice(0,3)), escapa(d.data_fmt),
+      d.feriado && !d.pend ? "feriado" : String(d.pend), d.pend ? "p" : (d.feriado ? "f" : ""), estado.filtroDia === d.data,
+      function(){ estado.filtroDia = (estado.filtroDia === d.data ? null : d.data); agMudou(); }));
+  });
+  var p = botao("dias-seta dir", ico(IC.dir, 18, 2.2), function(){ estado.agOff = Math.min(maxOff, off + VIS); desenharAgenda(); });
+  p.setAttribute("aria-label", "Próximos dias"); p.disabled = off >= maxOff;
+  w.appendChild(a); w.appendChild(grade); w.appendChild(p);
+  return w;
+}
+function agPainel(){
+  var cont = contagens();
+  var sec = novo("section", "painel"); sec.setAttribute("aria-labelledby", "ra-titulo");
+  sec.appendChild(novo("div", "painel-cab", '<h2 id="ra-titulo">Resolver agora</h2><span>' + cont.pendencias + ' pendência' + (cont.pendencias === 1 ? '' : 's') + ' na agenda</span>'));
+  function cat(rot, sub, n, cor, fn){
+    var b = botao("cat", '<span class="q" style="background:' + cor + '"></span><span class="t"><b>' + escapa(rot) + '</b><small>' + escapa(sub) + '</small></span>' +
+      '<span class="n">' + n + '</span>' + ico(IC.dir, 16, 2), fn);
+    return b;
+  }
+  var cats = categorias();
+  cats.forEach(function(c){ var b = cat(c.rot, c.sub, c.n, c.cor, function(){ abrirCatAgenda(c.chave); }); b.setAttribute("aria-haspopup", "dialog"); sec.appendChild(b); });
+  var cadN  = (estado.cad  || []).filter(cadAberto).length;
+  var exclN = (estado.excl || []).filter(exclAberta).length;
+  if(cadN)  sec.appendChild(cat("Cadastros", "Fichas com problema de cadastro, na tela de Cadastros", cadN, TOM.r, function(){ irParaTela("cad"); }));
+  if(exclN) sec.appendChild(cat("Exclusões", "Séries apagadas inteiras no Feegow, na tela de Exclusões", exclN, TOM.r, function(){ irParaTela("excl"); }));
+  if(!cats.length && !cadN && !exclN) sec.appendChild(novo("div", "lista-vazio", estado._carregouEm ? "Nada para resolver agora." : "Buscando…"));
+  return sec;
+}
+/* janela de uma categoria: lista as consultas e leva para a lista filtrada */
+function abrirCatAgenda(k){
+  if(!window.moldura) return;
+  var P = moldura.pop({ largura:"620px" });
+  var m = k === "__aba__" ? ABA_TXT : sitTxt(k);
+  var rows = linhasDaCategoria(k);
+  P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-alerta">Resolver agora</span><h2>' + escapa(rotTipo(k)) + '</h2>' +
+    '<span class="pp-sub">' + rows.length + (rows.length === 1 ? ' consulta' : ' consultas') + '</span>'));
+  if(m.acao) P.corpo.appendChild(novo("div", "pp-caixa", '<span class="pp-rot">O que fazer</span><span class="pp-txt">' + escapa(m.acao) + '</span>'));
+  var lista = novo("div", "pp-lista");
+  rows.forEach(function(l){
+    var t = l.tratamento || "pendente";
+    lista.appendChild(botao("pp-linha", '<span class="w">' + escapa(quandoCurto(l)) + '</span><span class="q"><b>' + escapa(l.paciente) + '</b><small>' + escapa(metaLinha(l)) + '</small></span>' +
+      (t !== "pendente" ? '<span class="tr">' + escapa(TRAT_ROT[t] || t) + '</span>' : '') + ico(IC.dir, 14, 2),
+      function(){ abrirPacAgenda(l.agendamento_id, k); }));
+  });
+  if(!rows.length) lista.appendChild(novo("div", "lista-vazio", "Nenhuma consulta aqui agora."));
+  P.corpo.appendChild(lista);
+  P.rodape.hidden = false; P.rodape.classList.add("fim");
+  P.rodape.appendChild(botao("btn btn-s", "Fechar", function(){ P.fechar(); }));
+  P.rodape.appendChild(botao("btn btn-p", "Ver só estes na lista", function(){
+    P.fechar();
+    estado.filtroSit = "pendencias"; estado.filtroTipo = k; estado.filtroDia = null;
+    estado.agLimite = 150; estado._agTopo = true;
+    irParaTela("agenda");
+  }));
+}
+/* janela do paciente: o que houve, o que fazer, telefone, tratamento e anotação */
+function abrirPacAgenda(agid, ctx){
+  if(!window.moldura) return;
+  var atualId = agid, msg = null, msgId = null, notaTimer = null;
+  var P = moldura.pop({ largura:"620px", aoFechar:function(){ estado._agAberto = null; marcaAberta(); } });
+  function lista(){ return ctx === "lista" ? estado.linhas.filter(passaFiltro) : linhasDaCategoria(ctx); }
+  function marcaAberta(){
+    document.querySelectorAll("#gv-conteudo .linha.aberta").forEach(function(x){ x.classList.remove("aberta"); });
+    if(estado._agAberto){ var r = document.querySelector('#gv-conteudo .linha[data-ag="' + estado._agAberto + '"]'); if(r) r.classList.add("aberta"); }
+  }
+  function pinta(){
+    var l = estado.linhas.find(function(x){ return x.agendamento_id === atualId; });
+    if(!l){ P.fechar(); return; }
+    estado._agAberto = atualId; marcaAberta();
+    var m = sitTxt(l.situacao), t = l.tratamento || "pendente";
+    P.topo.innerHTML = "";
+    if(ctx !== "lista") P.topo.appendChild(botao("pop-volta", ico(IC.esq, 16, 2.2) + escapa(rotTipo(ctx)), function(){ abrirCatAgenda(ctx); }));
+    P.corpo.innerHTML = "";
+    P.corpo.appendChild(novo("div", "pp-cab",
+      '<span class="pp-quando">' + (l.dias_ate === 0 ? "Hoje, " : "") + escapa(l.dia_semana) + ", " + escapa(l.data_fmt) + " às " + escapa(l.horario) + '</span>' +
+      '<h2>' + escapa(l.paciente) + '</h2>' +
+      '<span class="pp-l1">' + escapa(ESP_ROT[l.especialidade] || l.especialidade || "—") + " com " + escapa(l.profissional || "—") + '</span>' +
+      '<span class="pp-l2">' + escapa(l.convenio || ("convênio " + l.convenio_id)) + (l.status ? " · " + escapa(l.status) : "") + '</span>'));
+    var cx = novo("div", "pp-caixa", '<span class="pp-tag" style="color:' + (tratada(l) ? TOM.c : (TOM[m.tom] || TOM.c)) + '">' + escapa(m.rot) + '</span>');
+    var det = detalheTxt(l);
+    if(det) cx.appendChild(novo("span", "pp-txt", escapa(det)));
+    if(l.ultima_viavel && l.proximo_agendamento_id){
+      var n = l.futuros_apos || 0;
+      cx.appendChild(novo("span", "pp-txt", "Última consulta viável: sem guia nova, o corte é às " + (l.dia_semana === "sábado" ? "11h" : "21h") +
+        " deste dia. Há " + n + (n === 1 ? " consulta futura" : " consultas futuras") + " na fila: abrir a próxima no Feegow e apagar esta e as seguintes."));
+      var a = novo("a", "btn-claro", "Abrir a próxima no Feegow " + ico(IC.fora, 14, 2));
+      a.href = "https://app.feegow.com/main/?P=Agenda-1&Pers=1&AgendamentoID=" + l.proximo_agendamento_id;
+      a.target = "_blank"; a.rel = "noopener";
+      cx.appendChild(a);
+    }
+    P.corpo.appendChild(cx);
+    if(m.acao) P.corpo.appendChild(novo("div", "pp-bloco", '<span class="pp-rot">O que fazer</span><span class="pp-txt">' + escapa(m.acao) + '</span>'));
+    var cel = primeiroCelular(l.celulares_raw, l.telefones_raw);
+    var fone = novo("div", "pp-fone");
+    if(cel){
+      var dig = foneDigitos(cel);
+      fone.innerHTML = '<span><small>Celular</small><b>' + escapa(foneBonito(cel)) + '</b></span>';
+      var bc = botao("btn btn-s btn-sm", "Copiar", function(){
+        (navigator.clipboard ? navigator.clipboard.writeText(dig) : Promise.reject())
+          .then(function(){ bc.textContent = "Copiado"; setTimeout(function(){ bc.textContent = "Copiar"; }, 1600); },
+                function(){ window.prompt("Copie o número:", dig); });
+      });
+      bc.title = "Copia só os dígitos, sem o 55: é assim que a busca da plataforma acha";
+      fone.appendChild(bc);
+    } else fone.innerHTML = '<span><small>Celular</small><b>Sem celular no cadastro</b></span>';
+    P.corpo.appendChild(fone);
+    var blocoT = novo("div", "pp-bloco", '<span class="pp-rot">O que você fez?</span>');
+    var ops = novo("div", "pp-opcoes"); ops.setAttribute("role", "group"); ops.setAttribute("aria-label", "O que você fez?");
+    TRATAMENTOS.forEach(function(tt){
+      var on = tt[0] === t;
+      var b = botao("pp-op" + (on ? " on" : ""), '<span class="cx">' + (on ? ico(IC.ok, 12, 3, "#FFFFFF") : "") + '</span>' + escapa(tt[1]), function(){
+        clearTimeout(notaTimer);
+        if(tt[0] === (l.tratamento || "pendente") && notaEl.value.trim() === (l.nota || "")) return;
+        salva(l, tt[0], notaEl.value.trim());
+      });
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+      ops.appendChild(b);
+    });
+    blocoT.appendChild(ops);
+    P.corpo.appendChild(blocoT);
+    var blocoN = novo("div", "pp-bloco", '<label class="pp-rot" for="nota-agenda">Anotação</label>');
+    var notaEl = novo("textarea", "pp-nota"); notaEl.id = "nota-agenda"; notaEl.rows = 2;
+    notaEl.placeholder = "Protocolo, com quem falou…"; notaEl.value = l.nota || "";
+    notaEl.addEventListener("change", function(){
+      var v = notaEl.value.trim();
+      if(v === (l.nota || "")) return;
+      clearTimeout(notaTimer);                          /* espera um instante: se o clique foi numa opção, ela grava tudo junto */
+      notaTimer = setTimeout(function(){ salva(l, l.tratamento || "pendente", v); }, 220);
+    });
+    blocoN.appendChild(notaEl);
+    P.corpo.appendChild(blocoN);
+    var sv = novo("div", "pp-salvo");
+    var txt, cor, est = msgId === atualId ? msg : null;
+    if(est === "salvando"){ txt = "Salvando…"; cor = "#AEAEB2"; }
+    else if(est === "ok"){ txt = "Salvo agora. Fica registrado quem marcou e quando."; cor = TOM.v; }
+    else if(est === "erro"){ txt = "Não consegui salvar. Confira a internet e tente de novo."; cor = TOM.r; }
+    else { txt = t !== "pendente" ? "Marcado antes como " + (TRAT_ROT[t] || t).toLowerCase() + (l.autora_nota ? ", por " + l.autora_nota : "") + "." : "Ainda pendente."; cor = "#AEAEB2"; }
+    sv.innerHTML = ico(IC.ok, 14, 2.2, cor) + '<span' + (est === "erro" ? ' style="color:' + TOM.r + '"' : '') + '>' + escapa(txt) + '</span>';
+    sv.setAttribute("aria-live", "polite");
+    P.corpo.appendChild(sv);
+    /* anterior / próxima dentro da lista de onde veio */
+    var L = lista(), ordem = {};
+    estado.linhas.forEach(function(x, i){ ordem[x.agendamento_id] = i; });
+    var eu = ordem[atualId], pos = -1, ant = null, prox = null;
+    L.forEach(function(x, j){
+      if(x.agendamento_id === atualId) pos = j;
+      if(ordem[x.agendamento_id] < eu) ant = x;
+      if(ordem[x.agendamento_id] > eu && !prox) prox = x;
+    });
+    P.rodape.hidden = false; P.rodape.innerHTML = "";
+    var bA = botao("btn btn-s", ico(IC.esq, 16, 2.2) + "Anterior", function(){ if(ant){ atualId = ant.agendamento_id; pinta(); } });
+    bA.disabled = !ant;
+    var bP = botao("btn btn-p", "Próxima" + ico(IC.dir, 16, 2.2), function(){ if(prox){ atualId = prox.agendamento_id; pinta(); } });
+    bP.disabled = !prox;
+    P.rodape.appendChild(bA);
+    P.rodape.appendChild(novo("span", "pop-pos", pos >= 0 ? (pos + 1) + " de " + L.length : "Saiu da lista · " + L.length + " restantes"));
+    P.rodape.appendChild(bP);
+  }
+  function salva(l, trat, nota){
+    var id = l.agendamento_id;
+    msgId = id; msg = "salvando"; if(P.aberto) pinta();
+    salvarNota(id, trat, nota, function(ok){
+      if(msgId === id) msg = ok ? "ok" : "erro";
+      if(ok){ badgesTopo(); if(estado.tela === "agenda") desenharAgenda(); }
+      if(P.aberto) pinta();
     });
   }
-  sel.addEventListener("change", persistir);
-  nota.addEventListener("keydown", function(ev){ if(ev.key==="Enter"){ nota.blur(); } });
-  nota.addEventListener("blur", function(){ if(nota.value.trim() !== (l.nota||"")) persistir(); });
-  acoes.appendChild(sel); acoes.appendChild(nota); acoes.appendChild(salvo); acoes.appendChild(autoraTag);
-  card.appendChild(acoes);
-  return card;
+  pinta();
 }
 
 /* ═══ 🔁 Renovações: tela ═══ */
@@ -1888,13 +2076,14 @@ function trocaTela(t){
   else if(t === "malotes"){ desenharMalotes(); loadMalotes(); }
   else if(t === "prof"){ PF.secretaria(); }
   else if(t === "dono"){ desenharAdmin(); }
+  if(window.moldura) moldura.aoTrocarTela(t);
 }
 function refreshDonoAba(){
   var el = document.getElementById("gv-aba-dono");
   if(el) el.style.display = ehDono() ? "" : "none";
 }
 function recarregarTudo(){ carregar(); carregarFila(); loadCad(); loadExcl(); loadCorte(); loadFalhas(); loadMalotes(); }
-function boot(){
+function boot(t){
   if(!GV._init){
     GV._init = true;
     var abas = document.querySelectorAll("#s-guias .gv-aba");
@@ -1904,13 +2093,14 @@ function boot(){
     var bu = document.getElementById("gv-busca");
     if(bu) bu.addEventListener("input", function(e){
       estado.busca = e.target.value.trim().toLowerCase();
+      estado.agLimite = 150; estado._agTopo = true;
       if(estado.tela === "agenda") desenharAgenda();
     });
     var rc = document.getElementById("gv-recarregar");
     if(rc) rc.addEventListener("click", recarregarTudo);
   }
   refreshDonoAba();
-  trocaTela("agenda");
+  trocaTela(t || "agenda");
   if(Date.now() - estado._carregouEm > 45*1000) recarregarTudo();
 }
 function startTimers(){
@@ -1925,5 +2115,7 @@ function stopTimers(){
   desligarPollFila();
 }
 
-return { boot: boot, startTimers: startTimers, stopTimers: stopTimers, recarregarTudo: recarregarTudo };
+return { boot: boot, startTimers: startTimers, stopTimers: stopTimers, recarregarTudo: recarregarTudo,
+         tela: function(t){ trocaTela(t); }, telaAtual: function(){ return estado.tela; },
+         filtroTipo: function(){ return estado.filtroTipo; }, ehDono: ehDono };
 })();

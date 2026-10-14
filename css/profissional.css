@@ -1,6 +1,6 @@
-.lo-modo{display:flex;gap:6px}
-.lo-modo-b{flex:1;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:10px 6px;font:600 12px var(--fn);color:var(--stxt);cursor:pointer}
-.lo-modo-b.on{background:var(--grnm);border-color:var(--grnm);color:#fff}
+.lo-modo{display:flex;gap:2px;padding:3px;background:var(--preenche)}
+.lo-modo-b{flex:1;height:32px;background:transparent;border:0;padding:0 6px;font:500 13px var(--fn);color:var(--tinta);cursor:pointer}
+.lo-modo-b.on{background:var(--branco);color:var(--tinta);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.12)}
 #prof-view{min-height:100vh;background:#fff;color:#111;font-size:17px;line-height:1.5}
 #prof-view .pf-top{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #e5e5e5}
 #prof-view .pf-top-in{max-width:720px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:12px}
@@ -96,18 +96,18 @@
 #s-guias .pf-sec-topo{display:flex;gap:6px 14px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--tinta-2);margin:8px 0 12px}
 #s-guias .pf-sec-topo b{color:var(--tinta)}
 #s-guias .pf-chips{display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px}
-#s-guias .pf-chips button{flex:0 0 auto;border:1.5px solid var(--linha);background:var(--cartao);border-radius:999px;padding:6px 12px;font:600 12.5px 'Public Sans';color:var(--tinta-2);cursor:pointer;white-space:nowrap}
+#s-guias .pf-chips button{flex:0 0 auto;border:1.5px solid var(--linha);background:var(--cartao);border-radius:999px;padding:6px 12px;font:600 12.5px var(--fn);color:var(--tinta-2);cursor:pointer;white-space:nowrap}
 #s-guias .pf-chips button.on{background:var(--tinta);border-color:var(--tinta);color:#fff}
 #s-guias .pf-fotobtn{background:none;border:0;cursor:pointer;font-size:17px;line-height:1;padding:0 4px}
 #s-guias .pf-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-#s-guias .pf-form input{font:600 15px 'IBM Plex Mono','JetBrains Mono',monospace;padding:9px 12px;border:1.5px solid var(--linha);border-radius:8px;min-width:200px}
+#s-guias .pf-form input{font:600 15px var(--fn);padding:9px 12px;border:1.5px solid var(--linha);border-radius:8px;min-width:200px}
 #s-guias .pf-adm-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin:10px 0 18px}
 #s-guias .pf-adm-card{background:var(--cartao);border:1px solid var(--linha);border-radius:12px;box-shadow:var(--sombra);padding:14px 16px}
-#s-guias .pf-adm-card h3{font:800 14px 'Archivo';margin:0 0 8px;letter-spacing:.2px}
-#s-guias .pf-adm-card label{display:block;font:600 11.5px 'Public Sans';color:var(--neutro);text-transform:uppercase;letter-spacing:.4px;margin:8px 0 3px}
-#s-guias .pf-adm-card input[type=text],#s-guias .pf-adm-card input[type=password],#s-guias .pf-adm-card input[type=time],#s-guias .pf-adm-card input[type=number]{width:100%;box-sizing:border-box;font:500 14px 'Public Sans';padding:8px 10px;border:1.5px solid var(--linha);border-radius:8px;background:#fff}
+#s-guias .pf-adm-card h3{font:700 14px var(--fn);margin:0 0 8px;letter-spacing:.2px}
+#s-guias .pf-adm-card label{display:block;font:600 11.5px var(--fn);color:var(--neutro);letter-spacing:.4px;margin:8px 0 3px}
+#s-guias .pf-adm-card input[type=text],#s-guias .pf-adm-card input[type=password],#s-guias .pf-adm-card input[type=time],#s-guias .pf-adm-card input[type=number]{width:100%;box-sizing:border-box;font:500 14px var(--fn);padding:8px 10px;border:1.5px solid var(--linha);border-radius:8px;background:#fff}
 #s-guias .pf-adm-card .linha2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 #s-guias .pf-adm-card .rodape{display:flex;gap:8px;align-items:center;margin-top:10px}
-#s-guias .pf-adm-msg{font:600 12.5px 'Public Sans';color:var(--ok)}
+#s-guias .pf-adm-msg{font:600 12.5px var(--fn);color:var(--ok)}
 #s-guias .pf-adm-msg.erro{color:var(--critico)}
-#s-guias .pf-adm-busca{font:500 13px 'Public Sans';padding:8px 12px;border:1.5px solid var(--linha);border-radius:8px;width:220px;background:#fff}
+#s-guias .pf-adm-busca{font:500 13px var(--fn);padding:8px 12px;border:1.5px solid var(--linha);border-radius:8px;width:220px;background:#fff}

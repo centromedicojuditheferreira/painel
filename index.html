@@ -3,13 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Conveniência · Centro Médico</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/loja.css?v=1">
-<link rel="stylesheet" href="css/guias.css?v=1">
-<link rel="stylesheet" href="css/profissional.css?v=1">
+<title>Painel · Lev Soul</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#F5F5F7">
+<link rel="icon" type="image/png" href="img/levsoul-marca.png">
+<link rel="stylesheet" href="css/painel.css?v=2">
+<link rel="stylesheet" href="css/loja.css?v=2">
+<link rel="stylesheet" href="css/guias.css?v=2">
+<link rel="stylesheet" href="css/profissional.css?v=2">
 </head>
 <body>
 <div class="toast" id="toast"></div>
@@ -55,8 +56,7 @@
 <!-- LOGIN -->
 <div id="lo">
   <div class="lb">
-    <h1>Centro Medico</h1>
-    <p class="sub">Conveniencia &amp; Livraria</p>
+    <div class="lb-marca"><img src="img/levsoul-logo.png" alt="Lev Soul" width="168" height="26"><div><h1>Centro Médico Judithe Ferreira</h1><p class="sub">Painel da clínica</p></div></div>
     <div class="lf"><label>Quem est&aacute; entrando</label><div class="lo-modo" role="tablist"><button type="button" class="lo-modo-b on" id="lo-modo-adm" onclick="loModo('adm')">Administra&ccedil;&atilde;o / Secretaria</button><button type="button" class="lo-modo-b" id="lo-modo-prof" onclick="loModo('prof')">Profissional</button></div></div>
     <div class="lf"><label id="lo-usr-lbl">Secretaria</label><select id="lo-usr"></select></div>
     <div class="lf"><label id="lo-pin-lbl">PIN</label><input type="password" id="lo-pin" placeholder="****" maxlength="8" inputmode="numeric"></div>
@@ -68,53 +68,26 @@
 
 <!-- APP -->
 <div id="app" style="display:none">
-<aside class="sb">
-  <div class="sb-hd"><div class="sb-logo">Conveniencia<span>Centro Medico Judithe Ferreira</span></div></div>
-  <div class="sb-usr"><div class="sb-av" id="sb-av">?</div><div class="sb-nm" id="sb-nm">-</div></div>
-  <nav class="sb-nav">
-    <div class="ns-lbl">Guias · Unimed</div>
-    <button class="ni" id="nav-guias" onclick="nav('guias')"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>Guias da Agenda<span class="gv-sbb" id="gv-sbb" hidden>0</span></button>
-    <div class="ns-lbl">Principal</div>
-    <button class="ni active" id="nav-dashboard" onclick="nav('dashboard')"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>Dashboard</button>
-    <button class="ni" onclick="nav('venda')"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>Nova Venda</button>
-    <button class="ni" onclick="nav('estoque')"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>Entrada Estoque</button>
-    <button class="ni" id="nav-balanco" onclick="nav('balanco')"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>Balanço de Estoque</button>
-    <button class="ni" onclick="nav('notinhas')"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>Notinhas</button>
-    <button class="ni" onclick="nav('caixa')"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>Caixa</button>
-    <div class="ns-lbl">Cadastros</div>
-    <button class="ni" id="nav-posicao" onclick="nav('posicao')"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>Estoque Atual</button>
-    <button class="ni" onclick="nav('profissionais')"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0"/></svg>Profissionais</button>
-    <div class="ns-lbl">Sistema</div>
-    <button class="ni" onclick="nav('historico')"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Historico</button>
-    <button class="ni" id="nav-exportar" onclick="nav('exportar')"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>Exportar CSV</button>
-    <button class="ni" id="nav-cfg" onclick="nav('cfg')"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>Configuracoes</button>
-  </nav>
-  <div class="sb-ft"><button class="ni" onclick="doLogout()"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>Sair</button></div>
-</aside>
-
+<nav class="menu" id="menu" aria-label="Menu principal"></nav>
 <div class="mn">
-<div class="tb"><span class="tb-ttl" id="tb-ttl">Dashboard</span><span class="tb-dt" id="tb-dt"></span></div>
+<header class="pg-topo">
+  <div class="pg-tit">
+    <div class="pg-secao" id="pg-secao">Faturamento</div>
+    <h1 id="pg-titulo">Agenda</h1>
+    <p class="pg-resumo"><span id="pg-resumo"></span><span class="pg-atual" id="gv-atualizado"></span></p>
+  </div>
+  <div class="pg-dir">
+    <label class="busca" id="pg-busca" hidden><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 11a6.5 6.5 0 1 0 13 0 6.5 6.5 0 1 0-13 0M16 16l4 4"/></svg><input id="gv-busca" type="search" placeholder="Buscar paciente" aria-label="Buscar paciente" autocomplete="off"></label>
+    <span id="pg-acoes" class="pg-acoes"></span>
+    <button type="button" class="btn-ic" id="gv-recarregar" title="Recarregar do banco" aria-label="Recarregar do banco" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4v4.5H15"/></svg></button>
+  </div>
+</header>
+<div class="ra" id="ra" role="region" aria-label="Resolver agora" hidden></div>
+<span id="tb-ttl" hidden></span><span id="tb-dt" hidden></span>
 <div class="ct">
 
 <!-- GUIAS DA AGENDA (Supabase · módulo GV) -->
 <div class="sec" id="s-guias">
-  <div class="gv-top">
-    <button class="gv-aba on" data-tela="agenda">📅 Agenda</button>
-    <button class="gv-aba" data-tela="fila">🔁 Renovações<span class="gv-b" id="gv-b-fila" hidden>0</span></button>
-    <button class="gv-aba" data-tela="cad">🧾 Cadastros<span class="gv-b" id="gv-b-cad" hidden>0</span></button>
-    <button class="gv-aba" data-tela="excl">🗑️ Exclusões<span class="gv-b" id="gv-b-excl" hidden>0</span></button>
-    <button class="gv-aba" data-tela="corte">✂️ Corte<span class="gv-b" id="gv-b-corte" hidden>0</span></button>
-    <button class="gv-aba" data-tela="falhas">📵 Falhas<span class="gv-b" id="gv-b-falhas" hidden>0</span></button>
-    <button class="gv-aba" data-tela="malotes">📦 Malotes<span class="gv-b" id="gv-b-malotes" hidden>0</span></button>
-    <button class="gv-aba" data-tela="prof">👩‍⚕️ Semana<span class="gv-b" id="gv-b-prof" hidden>0</span></button>
-    <button class="gv-aba" data-tela="dono" id="gv-aba-dono" style="display:none">👑 Dono</button>
-    <span class="gv-esp"></span>
-    <input class="gv-busca" id="gv-busca" type="search" placeholder="Buscar paciente…" aria-label="Buscar paciente">
-    <span class="gv-atualizado" id="gv-atualizado">—</span>
-    <button class="gv-btn" id="gv-recarregar" title="Recarregar do banco">↻ Atualizar</button>
-  </div>
-  <div class="gv-regua" id="gv-regua" role="tablist" aria-label="Dias"></div>
-  <div class="gv-faixa" id="gv-faixa" hidden></div>
   <div id="gv-conteudo"></div>
 </div>
 
@@ -331,8 +304,9 @@
 <!-- FIREBASE SDK -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-<script src="js/lojinha.js?v=1"></script>
-<script src="js/guias.js?v=1"></script>
-<script src="js/profissional.js?v=1"></script>
+<script src="js/lojinha.js?v=2"></script>
+<script src="js/guias.js?v=2"></script>
+<script src="js/profissional.js?v=2"></script>
+<script src="js/moldura.js?v=2"></script>
 </body>
 </html>

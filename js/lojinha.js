@@ -224,12 +224,14 @@ document.getElementById('lo-pin').addEventListener('keydown',e=>{if(e.key==='Ent
 function entrarApp(){
   document.getElementById('lo').style.display='none';document.getElementById('app').style.display='block';
   document.getElementById('sb-nm').textContent=CU.nome;document.getElementById('sb-av').textContent=CU.nome[0].toUpperCase();
+  const pp=document.getElementById('sb-papel');if(pp)pp.textContent=CU.admin===true?'Administração':'Secretária';
   aplicarPermissoes();
   setDatas();updateDate();setInterval(updateDate,60000);loadCaches();loadCfg();
   nav('guias');GV.startTimers();
 }
 function aplicarPermissoes(){
   const admin=isAdmin();
+  const ap=document.getElementById('app');if(ap)ap.classList.toggle('eh-admin',!!admin);
   ['nav-posicao','nav-exportar','nav-cfg','nav-dashboard'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display=admin?'':' none';});
   ['cx-detalhes-fis','cx-detalhes-ban'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display=admin?'':'none';});
   const cxa=document.getElementById('cx-acoes');if(cxa)cxa.style.display=admin?'flex':'none';
@@ -239,13 +241,12 @@ function updateDate(){document.getElementById('tb-dt').textContent=new Date().to
 function setDatas(){const t=todayISO(),f=firstISO();['cx-ini','h-ini','ex-ini','rel-ini'].forEach(id=>{const e=document.getElementById(id);if(e)e.value=f;});['cx-fim','h-fim','ex-fim','rel-fim'].forEach(id=>{const e=document.getElementById(id);if(e)e.value=t;});}
 
 const TTLS={guias:'Guias da Agenda',dashboard:'Dashboard',venda:'Nova Venda',estoque:'Entrada de Estoque',balanco:'Balanço de Estoque',notinhas:'Notinhas',caixa:'Caixa',posicao:'Estoque Atual',profissionais:'Profissionais',historico:'Historico',exportar:'Exportar CSV',cfg:'Configuracoes'};
-function nav(s){
+function nav(s,sub){
   document.querySelectorAll('.sec').forEach(x=>x.classList.remove('active'));
-  document.querySelectorAll('.ni').forEach(x=>x.classList.remove('active'));
   document.getElementById('s-'+s).classList.add('active');
-  document.querySelectorAll('.ni').forEach(x=>{if(x.getAttribute('onclick')==="nav('"+s+"')")x.classList.add('active');});
   document.getElementById('tb-ttl').textContent=TTLS[s]||s;
-  const fn={guias:function(){GV.boot();},dashboard:loadDashboard,venda:loadVendaForm,estoque:resetEstoque,balanco:loadBalanco,notinhas:loadNotinhas,caixa:loadCaixa,posicao:loadPosicao,profissionais:loadProfTable,historico:loadHistorico,cfg:loadCfg};
+  if(window.moldura)moldura.aoNavegar(s,sub);
+  const fn={guias:function(){GV.boot(sub);},dashboard:loadDashboard,venda:loadVendaForm,estoque:resetEstoque,balanco:loadBalanco,notinhas:loadNotinhas,caixa:loadCaixa,posicao:loadPosicao,profissionais:loadProfTable,historico:loadHistorico,cfg:loadCfg};
   if(fn[s])fn[s]();
 }
 
