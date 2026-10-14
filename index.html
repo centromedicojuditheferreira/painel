@@ -7,23 +7,25 @@
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#F5F5F7">
 <link rel="icon" type="image/png" href="img/levsoul-marca.png">
-<link rel="stylesheet" href="css/painel.css?v=3">
-<link rel="stylesheet" href="css/loja.css?v=3">
-<link rel="stylesheet" href="css/guias.css?v=3">
-<link rel="stylesheet" href="css/profissional.css?v=3">
+<link rel="stylesheet" href="css/painel.css?v=4">
+<link rel="stylesheet" href="css/loja.css?v=4">
+<link rel="stylesheet" href="css/guias.css?v=4">
+<link rel="stylesheet" href="css/profissional.css?v=4">
 </head>
 <body>
 <div class="toast" id="toast"></div>
 
 <!-- VISTA PUBLICA DO PROFISSIONAL -->
-<div id="pub-view" style="display:none;min-height:100vh;background:var(--bg);padding:24px">
-  <div style="max-width:600px;margin:0 auto">
-    <div style="background:var(--sbg);border-radius:12px;padding:20px 24px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between">
-      <div><div style="font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--stxt);font-family:var(--mo)">Centro Medico Judithe Ferreira</div><div style="font-size:18px;font-weight:700;color:#fff;margin-top:4px" id="pub-nm">-</div></div>
-      <div style="text-align:right"><div style="font-size:11px;color:var(--stxt)">Saldo devedor</div><div style="font-size:28px;font-weight:700;font-family:var(--mo)" id="pub-sd" style="color:#fff">R$ 0,00</div></div>
-    </div>
-    <div class="tw"><table><thead><tr><th>Data</th><th>Produto/Desc.</th><th>Valor</th><th>Tipo</th></tr></thead><tbody id="pub-tb"></tbody></table></div>
-  </div>
+<div id="pub-view" style="display:none">
+  <header class="pub-top"><div class="pub-in">
+    <img class="pub-marca" src="img/levsoul-marca.png" alt="" width="28" height="28">
+    <div class="pub-who"><b id="pub-nm">—</b><span>Notinha da conveniência &middot; Centro Médico Judithe Ferreira</span></div>
+  </div></header>
+  <main class="pub-in pub-main">
+    <section class="pub-saldo" aria-label="Saldo"><span id="pub-sd-rot">Saldo devedor</span><b id="pub-sd">R$ 0,00</b><small id="pub-sd-sub"></small></section>
+    <h2 class="pub-h">Lançamentos</h2>
+    <div class="pub-lista" id="pub-tb"></div>
+  </main>
 </div>
 
 
@@ -31,6 +33,7 @@
 <div id="prof-view" style="display:none">
   <header class="pf-top">
     <div class="pf-top-in">
+      <img class="pf-marca" src="img/levsoul-marca.png" alt="" width="28" height="28">
       <div class="pf-who"><b id="pf-nome">—</b><span>Confer&ecirc;ncia de agenda &middot; Centro M&eacute;dico Judithe Ferreira</span></div>
       <button type="button" class="pf-link" onclick="PF.sair()">Sair</button>
     </div>
@@ -304,9 +307,9 @@
 <!-- FIREBASE SDK -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-<script src="js/lojinha.js?v=3"></script>
-<script src="js/guias.js?v=3"></script>
-<script src="js/profissional.js?v=3"></script>
-<script src="js/moldura.js?v=3"></script>
+<script src="js/lojinha.js?v=4"></script>
+<script src="js/guias.js?v=4"></script>
+<script src="js/profissional.js?v=4"></script>
+<script src="js/moldura.js?v=4"></script>
 </body>
 </html>

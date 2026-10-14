@@ -594,34 +594,135 @@ function comprimeFoto(file){
   });
 }
 
-/* ═══ SECRETARIA — aba 👩‍⚕️ Semana no módulo GV ═══ */
+/* ═══ SECRETARIA — tela Conferência (design novo) ═══
+   Mesmas chamadas de antes: prof_secretaria_painel, prof_atender_pedido, prof_balcao_telefone e
+   prof_foto_confirmacao. Só a cara mudou: lista à esquerda, prazo e pedidos à direita, detalhe em janela. */
+var AVISO_TIPO = { abertura:'Abertura', lembrete:'Lembrete', ultimo:'Última chamada', encerrado:'Encerramento' };
+var cf = { d:null, filtro:'faltam', busca:'', vis:[], timer:null, pinta:null, aberto:null, topo:false };
+function el(tag, cls, html){ var e = document.createElement(tag); if(cls) e.className = cls; if(html != null) e.innerHTML = html; return e; }
+function bt(cls, html, fn){ var b = el('button', cls, html); b.type = 'button'; if(fn) b.addEventListener('click', fn); return b; }
+function svgI(d, t, w){ return window.moldura ? moldura.svg(d, t, w) : ''; }
+function semAc(s){ return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+function iniciais(n){ var p = String(n || '').trim().split(/\s+/).filter(Boolean); if(!p.length) return '?'; return (p[0][0] + (p.length > 1 ? p[p.length-1][0] : '')).toUpperCase(); }
+function quando(iso){ return fmtTs(iso).replace(', ', ' às '); }
+function diaHora(iso){ return fmtDiaHora(iso).replace(' às 12h', ' ao meio-dia'); }
+function capital(t){ t = String(t || ''); return t.charAt(0).toUpperCase() + t.slice(1); }
+function noTela(){ return !!document.getElementById('gv-conteudo') && !!window.GV && GV.telaAtual && GV.telaAtual() === 'prof'; }
+function periodoTxt(d){
+  var pIni = d.periodo_inicio || d.semana_inicio, pFim = d.periodo_fim || d.semana_fim;
+  return (d.periodo_especial ? 'Período de ' : 'Semana de ') + ddmm(pIni) + ' (' + DIAS[dLocal(pIni).getDay()].toLowerCase() + ') a ' +
+         ddmm(pFim) + ' (' + DIAS[dLocal(pFim).getDay()].toLowerCase() + ')';
+}
+function quandoAg(p){ return (p.data ? DIAS[dLocal(p.data).getDay()].slice(0,3) + ' ' + ddmm(p.data) : '') + (p.horario ? ' ' + hhmm(p.horario) : ''); }
+function pedEstado(p){
+  if(p.situacao === 'aberto') return p.mudou_no_feegow ? { rot:'Mudança já chegou', cor:'#248A3D' } : { rot:'Aberto', cor:'#D70015' };
+  if(p.situacao === 'atendido') return { rot:'Corrigido', cor:'#636366' };
+  if(p.situacao === 'recusado') return { rot:'Não procede', cor:'#636366' };
+  return { rot: String(p.situacao || '—'), cor:'#636366' };
+}
+function avisosDe(p){
+  var a = p.avisos || [], env = 0, pen = 0, err = 0;
+  a.forEach(function(x){ if(x.situacao === 'enviado') env++; else if(x.situacao === 'pendente') pen++; else if(x.situacao === 'erro') err++; });
+  if(!p.telefone) return { txt:'sem telefone', cls:'laranja' };
+  if(err) return { txt: err + (err === 1 ? ' aviso com erro' : ' avisos com erro'), cls:'vermelho' };
+  if(pen) return { txt: pen + (pen === 1 ? ' aviso a enviar' : ' avisos a enviar'), cls:'' };
+  if(env) return { txt: env + (env === 1 ? ' aviso enviado' : ' avisos enviados'), cls:'' };
+  return { txt:'—', cls:'' };
+}
+function ordenaProfs(l){
+  return l.slice().sort(function(a, b){
+    if(!!a.confirmado_em !== !!b.confirmado_em) return a.confirmado_em ? 1 : -1;
+    if(!a.confirmado_em) return (b.pendentes - a.pendentes) || String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR');
+    return a.confirmado_em < b.confirmado_em ? 1 : (a.confirmado_em > b.confirmado_em ? -1 : 0);
+  });
+}
+function linhaProf(p){
+  var meta = p.consultas + (p.consultas === 1 ? ' consulta' : ' consultas') + ' · ' + (p.pendentes === 1 ? '1 pendente' : p.pendentes + ' pendentes') +
+    (p.pedidos_abertos ? ' · ' + (p.pedidos_abertos === 1 ? '1 pedido aberto' : p.pedidos_abertos + ' pedidos abertos') : '') +
+    (!p.ultimo_acesso_em ? ' · ainda não entrou' : '') + (p.teste_ate ? ' · teste até ' + fmtTs(p.teste_ate) : '');
+  var rot = p.confirmado_em ? 'Confirmou ' + quando(p.confirmado_em) : 'Ainda não';
+  var cor = p.confirmado_em ? (p.confirmado_fora_do_prazo ? '#C93400' : '#248A3D') : '#D70015';
+  var av = avisosDe(p);
+  return '<span class="cf-ini" aria-hidden="true">' + esc(iniciais(p.nome)) + '</span>' +
+    '<span class="q"><span class="nm">' + esc(p.nome) + '</span><span class="mt">' + esc(meta) + '</span></span>' +
+    '<span class="dir"><span class="tag" style="color:' + cor + '">' + esc(rot) + (p.confirmado_em && p.confirmado_fora_do_prazo ? ' · atrasado' : '') + '</span>' +
+    '<span class="tr' + (av.cls ? ' ' + av.cls : '') + '">' + esc(av.txt) + '</span></span>';
+}
+function marcaLinha(){
+  document.querySelectorAll('#cf-conf .cf-linha.aberta').forEach(function(x){ x.classList.remove('aberta'); });
+  if(cf.aberto != null){ var r = document.querySelector('#cf-conf .cf-linha[data-prof="' + cf.aberto + '"]'); if(r) r.classList.add('aberta'); }
+}
+function alturaLista(){
+  var l = document.querySelector('#cf-conf .lista.alta'); if(!l) return;
+  var topo = l.getBoundingClientRect().top + window.scrollY;
+  l.style.height = Math.max(520, window.innerHeight - topo - 24) + 'px';
+}
+/* cabeçalho da página: botão de acessos (administrador) e a busca */
+function acoesTopo(aberta){
+  var ac = window.moldura && moldura.acoesDe('conferencia'); if(!ac) return;
+  if(painelAdmin() && !ac.querySelector('.cf-acessos')) ac.appendChild(bt('btn btn-s cf-acessos', 'Acessos e configurações', function(){ admin(); }));
+  var bu = ac.querySelector('.cf-busca');
+  if(aberta && !bu){
+    bu = el('label', 'busca cf-busca', svgI('M4.5 11a6.5 6.5 0 1 0 13 0 6.5 6.5 0 1 0-13 0M16 16l4 4', 16, 2) +
+      '<input type="search" placeholder="Buscar profissional" aria-label="Buscar profissional" autocomplete="off">');
+    var inp = bu.querySelector('input'); inp.value = cf.busca;
+    inp.addEventListener('input', function(){
+      cf.busca = inp.value; cf.topo = true;
+      if(cf.d && document.getElementById('cf-conf')) desenhaSec(cf.d);    /* só redesenha se a lista estiver na tela */
+    });
+    ac.appendChild(bu);
+  }
+  if(bu) bu.hidden = !aberta;
+}
+/* relógio do prazo (atualiza a cada 30 s enquanto a tela está aberta) */
+function pintaContagem(){
+  var d = cf.d, c = document.getElementById('cf-conta'), l1 = document.getElementById('cf-l1'), l2 = document.getElementById('cf-l2');
+  if(!d || !c){ pararRelogio(); return; }
+  var ms = new Date(d.prazo).getTime() - agora(), mf = new Date(d.fechamento).getTime() - agora();
+  c.className = 'cf-prazo-conta';
+  if(mf <= 0){
+    c.textContent = 'Semana fechada';
+    l1.innerHTML = 'Fechou ' + esc(diaHora(d.fechamento)) + '.';
+    l2.textContent = 'Os profissionais tinham até ' + diaHora(d.prazo) + '. A agenda seguiu para o faturamento com o que estava no Feegow.';
+  } else if(ms <= 0){
+    c.textContent = 'Prazo encerrado'; c.classList.add('laranja');
+    l1.innerHTML = 'Os profissionais tinham até <b>' + esc(diaHora(d.prazo)) + '</b>';
+    l2.textContent = 'Fechamento ' + diaHora(d.fechamento) + '. Depois disso a agenda segue para o faturamento com o que estiver no Feegow.';
+  } else {
+    var min = Math.floor(ms / 6e4), h = Math.floor(min / 60), dd = Math.floor(h / 24);
+    c.textContent = dd > 0 ? 'Faltam ' + dd + (dd === 1 ? ' dia e ' : ' dias e ') + (h % 24) + ' h' : (h > 0 ? 'Faltam ' + h + ' h e ' + (min % 60) + ' min' : 'Faltam ' + min + ' min');
+    if(ms < 864e5) c.classList.add('laranja');
+    l1.innerHTML = 'Profissionais até <b>' + esc(diaHora(d.prazo)) + '</b>';
+    l2.textContent = 'Fechamento ' + diaHora(d.fechamento) + '. Depois disso a agenda segue para o faturamento com o que estiver no Feegow.';
+  }
+}
+function iniciarRelogio(){ pintaContagem(); clearInterval(cf.timer); cf.timer = setInterval(pintaContagem, 30000); }
+function pararRelogio(){ clearInterval(cf.timer); cf.timer = null; }
+
+/* porta: a senha do balcão (pedida uma vez por sessão, como antes) */
 function secretaria(){
   var host = document.getElementById('gv-conteudo'); if(!host) return;
+  if(secr.senha){ carregaSec(secr.semana); return; }
+  pararRelogio(); cf.d = null;
+  if(window.moldura) moldura.resumo('conferencia', '');
+  acoesTopo(false);
   host.innerHTML = '';
-  var topo = document.createElement('div'); topo.className = 'oc-topo';
-  topo.innerHTML = '<h2>👩‍⚕️ Semana dos profissionais</h2>' +
-    '<p>Cada profissional confere a própria agenda a partir de domingo e confirma até <b>segunda</b>. Se algo estiver errado, ele avisa o balcão pelo WhatsApp e vocês corrigem no Feegow. ' +
-    'A semana fecha na <b>terça ao meio-dia</b> — o planejador roda na quarta de madrugada com o que estiver no Feegow.</p>';
-  host.appendChild(topo);
-  if(!secr.senha){
-    var f = document.createElement('div'); f.className = 'pf-form';
-    f.innerHTML = '<span>Senha do balcão:</span><input type="password" id="pf-sec-senha" autocomplete="off"><button type="button" class="gv-btn verde" id="pf-sec-ok">Abrir</button><span class="pf-erro" id="pf-sec-erro" style="display:none"></span>' +
-      (painelAdmin() ? '<button type="button" class="gv-btn mini" id="pf-adm-abrir0" title="Definir a senha do balcão, os acessos dos profissionais e as configurações">⚙️ Acessos e configurações</button>' : '');
-    host.appendChild(f);
-    var ba0 = f.querySelector('#pf-adm-abrir0'); if(ba0) ba0.onclick = admin;
-    var tenta = function(){
-      var s = $('#pf-sec-senha', f).value; if(!s) return;
-      $('#pf-sec-ok', f).disabled = true;
-      rpc('prof_secretaria_painel', { p_senha: s, p_semana_inicio: null })
-        .then(function(d){ secr.senha = s; secr.semana = d.semana_inicio; secr.semanas = semanasDe(d.semana_inicio); desenhaSec(d); })
-        .catch(function(e){ erroEm($('#pf-sec-erro', f), humano(e)); $('#pf-sec-ok', f).disabled = false; });
-    };
-    $('#pf-sec-ok', f).onclick = tenta;
-    $('#pf-sec-senha', f).addEventListener('keydown', function(e){ if(e.key === 'Enter') tenta(); });
-    $('#pf-sec-senha', f).focus();
-    return;
-  }
-  carregaSec(secr.semana);
+  var box = el('section', 'painel cf-porta'); box.setAttribute('aria-label', 'Senha do balcão');
+  box.innerHTML = '<h2>Senha do balcão</h2><p>A conferência dos profissionais abre com a senha do balcão.</p>' +
+    '<div class="cf-porta-l"><input type="password" class="fc" id="pf-sec-senha" autocomplete="off" aria-label="Senha do balcão" placeholder="Senha do balcão">' +
+    '<button type="button" class="btn btn-p" id="pf-sec-ok">Abrir</button></div><p class="cf-porta-erro" id="pf-sec-erro" hidden></p>';
+  host.appendChild(box);
+  var inp = $('#pf-sec-senha', box), ok = $('#pf-sec-ok', box), er = $('#pf-sec-erro', box);
+  var tenta = function(){
+    var s = inp.value; if(!s) return;
+    ok.disabled = true; er.hidden = true;
+    rpc('prof_secretaria_painel', { p_senha: s, p_semana_inicio: null })
+      .then(function(d){ secr.senha = s; secr.semana = d.semana_inicio; secr.semanas = semanasDe(d.semana_inicio); if(noTela()) desenhaSec(d); })
+      .catch(function(e){ er.textContent = humano(e); er.hidden = false; ok.disabled = false; });
+  };
+  ok.onclick = tenta;
+  inp.addEventListener('keydown', function(e){ if(e.key === 'Enter') tenta(); });
+  inp.focus();
 }
 function semanasDe(inicio){
   var out = [], d0 = dLocal(inicio);
@@ -633,116 +734,336 @@ function semanasDe(inicio){
   return out;
 }
 function carregaSec(inicio){
-  var host = document.getElementById('gv-conteudo'); if(!host) return;
-  var lo = document.createElement('p'); lo.className = 'gv-vazio'; lo.textContent = 'Carregando…'; host.appendChild(lo);
-  rpc('prof_secretaria_painel', { p_senha: secr.senha, p_semana_inicio: inicio })
-    .then(function(d){ secr.semana = d.semana_inicio; desenhaSec(d); })
+  var host = document.getElementById('gv-conteudo'); if(!host) return Promise.resolve();
+  var tela = host.querySelector('#cf-conf');
+  if(tela) tela.classList.add('carregando'); else host.innerHTML = '<div class="lista-vazio">Carregando…</div>';
+  return rpc('prof_secretaria_painel', { p_senha: secr.senha, p_semana_inicio: inicio })
+    .then(function(d){ secr.semana = d.semana_inicio; if(noTela()) desenhaSec(d); })
     .catch(function(e){
-      if(e.message === 'SENHA_INVALIDA' || e.message === 'BLOQUEADO_TEMPORARIAMENTE'){ secr.senha = null; secretaria(); return; }
-      lo.textContent = '⚠️ ' + humano(e);
+      if(e.message === 'SENHA_INVALIDA' || e.message === 'BLOQUEADO_TEMPORARIAMENTE'){ secr.senha = null; if(noTela()) secretaria(); return; }
+      var t2 = host.querySelector('#cf-conf');
+      if(t2){ t2.classList.remove('carregando'); if(typeof toast === 'function') toast(humano(e), 'ko'); }
+      else if(noTela()) host.innerHTML = '<div class="lista-vazio erro">' + esc(humano(e)) + '</div>';
     });
 }
+function recarregarSec(){ if(secr.senha && noTela() && document.getElementById('cf-conf')) carregaSec(secr.semana); }
 function desenhaSec(d){
   var host = document.getElementById('gv-conteudo'); if(!host) return;
   relogioOffset = new Date(d.agora).getTime() - Date.now();
-  host.innerHTML = '';
-  var topo = document.createElement('div'); topo.className = 'oc-topo';
-  topo.innerHTML = '<h2>👩‍⚕️ Semana dos profissionais</h2>' +
-    '<div class="pf-sec-topo"><span>' + (d.periodo_especial ? 'Período especial <b>' + ddmm(d.periodo_inicio) + ' – ' + ddmm(d.periodo_fim) + '</b> (semana ' + ddmm(d.semana_inicio) + ')' : 'Semana <b>' + ddmm(d.semana_inicio) + ' – ' + ddmm(d.semana_fim) + '</b>') + '</span>' +
-    '<span>Profissionais até <b>' + esc(fmtDiaHora(d.prazo)) + '</b></span>' +
-    '<span>Fechamento <b>' + esc(fmtDiaHora(d.fechamento)) + '</b>' + (d.fechada ? ' · <span class="tag-sit tag-s1">fechada</span>' : (d.prazo_passou ? ' · <span class="tag-sit tag-s1">prazo dos profissionais passou</span>' : '')) + '</span>' +
-    (painelAdmin() ? '<button type="button" class="gv-btn mini" id="pf-adm-abrir">⚙️ Acessos e configurações</button>' : '') + '</div>';
-  host.appendChild(topo);
-  var ba = topo.querySelector('#pf-adm-abrir'); if(ba) ba.onclick = admin;
-  var chips = document.createElement('div'); chips.className = 'pf-chips';
-  pintaSemanas(chips, secr.semanas, d.semana_inicio, function(ini){ host.innerHTML = ''; carregaSec(ini); });
-  host.appendChild(chips);
-
-  var profs = d.profissionais || [];
-  var h = '<div class="adm-sec">Quem já confirmou <small>(' + profs.filter(function(p){ return p.confirmado_em; }).length + ' de ' + profs.length + ')</small></div>';
-  h += '<table class="adm"><tr><th>Profissional · telefone</th><th>Consultas</th><th>Pendentes</th><th>Pedidos</th><th>Confirmou</th><th>Avisos</th></tr>';
-  if(!profs.length) h += '<tr><td colspan="6">Nenhum profissional com acesso ainda — o administrador cria no ⚙️.</td></tr>';
-  profs.forEach(function(p){
-    var av = p.avisos || [], env = av.filter(function(a){ return a.situacao === 'enviado'; }).length,
-        pen = av.filter(function(a){ return a.situacao === 'pendente'; }).length, err = av.filter(function(a){ return a.situacao === 'erro'; }).length;
-    var avTxt = !p.telefone ? '<span class="tag-sit tag-s1">sem telefone</span>' : (av.length ? (env + ' enviado' + (env===1?'':'s') + (pen ? ' · ' + pen + ' a enviar' : '') + (err ? ' · <span class="tag-sit tag-s0">' + err + ' com erro</span>' : '')) : '—');
-    h += '<tr><td><b>' + esc(p.nome) + '</b>' + (p.teste_ate ? ' <span class="tag-sit tag-s1">teste até ' + fmtTs(p.teste_ate) + '</span>' : '') +
-      '<br><small>' + (p.telefone ? '📞 ' + esc(p.telefone) : '<span class="tag-sit tag-s1">sem telefone</span>') + ' <button type="button" class="pf-fotobtn" title="editar telefone" data-tel="' + p.profissional_id + '">✏️</button></small></td><td>' + p.consultas + '</td>' +
-      '<td>' + (p.pendentes ? '<span class="tag-sit tag-s1">' + p.pendentes + '</span>' : '0') + '</td>' +
-      '<td>' + (p.pedidos_abertos ? '<span class="tag-sit tag-s1">' + p.pedidos_abertos + '</span>' : '0') + '</td>' +
-      '<td>' + (p.confirmado_em ? ('<span class="tag-sit" style="background:var(--ok-fundo);color:var(--ok)">' + fmtTs(p.confirmado_em) + (p.confirmado_fora_do_prazo ? ' · atrasado' : '') + '</span>' + (p.foto ? ' <button type="button" class="pf-fotobtn" title="ver a foto" data-foto="' + p.profissional_id + '">📷</button>' : '')) : '<span class="tag-sit tag-s0">ainda não</span>') + '</td>' +
-      '<td style="font-size:12.5px">' + avTxt + '</td></tr>';
-  });
-  h += '</table>';
-  var tb = document.createElement('div'); tb.innerHTML = h; host.appendChild(tb);
-  Array.prototype.forEach.call(tb.querySelectorAll('button[data-foto]'), function(b){ b.onclick = function(){ abreFoto(Number(b.getAttribute('data-foto')), d.semana_inicio); }; });
-  Array.prototype.forEach.call(tb.querySelectorAll('button[data-tel]'), function(b){ b.onclick = function(){ editaTelefoneBalcao(Number(b.getAttribute('data-tel')), d); }; });
-
-  var ped = d.pedidos || [];
-  if(ped.length){
-    var s = document.createElement('div'); s.className = 'adm-sec';
-    s.innerHTML = 'Pedidos de correção <small>(' + ped.filter(function(p){ return p.situacao === 'aberto'; }).length + ' abertos · corrija no Feegow e marque; verde = o sistema já viu a mudança chegar)</small>';
-    host.appendChild(s);
-  }
-  ped.forEach(function(p){
-    var aberto = p.situacao === 'aberto';
-    var card = document.createElement('article');
-    card.className = 'fcard ' + (aberto ? (p.mudou_no_feegow ? 'g2' : 'g1') : 'ginfo');
-    var esq = document.createElement('div');
-    esq.innerHTML = '<div class="fnum"><span class="fpac">' + esc(p.profissional) + '</span> pede: <b>' + esc(TIPOS[p.tipo] || p.tipo) + '</b>' + (p.detalhe ? ' — ' + esc(p.detalhe) : '') + '</div>' +
-      '<div class="fmeta">' + esc(p.paciente || '(paciente não encontrado)') + ' · ' + (p.data ? DIAS[dLocal(p.data).getDay()] + ' ' + ddmm(p.data) : '') + ' ' + hhmm(p.horario) + ' · ' + esc(p.convenio || '') + '</div>' +
-      '<div class="fdet">Status no pedido: ' + esc(p.status_no_pedido || '—') + ' · agora: <b>' + esc(p.status_atual || '—') + '</b>' +
-        (p.mudou_no_feegow ? ' · <span class="tag-sit" style="background:var(--ok-fundo);color:var(--ok)">mudança já chegou do Feegow</span>' : '') +
-        (p.agendamento_sumiu ? ' · <span class="tag-sit tag-s0">agendamento sumiu do Feegow</span>' : '') +
-        (p.fora_do_prazo ? ' · <span class="tag-sit tag-s0">pedido atrasado</span>' : '') + '</div>' +
-      '<div class="fmeta">Pedido em ' + fmtTs(p.criado_em) + (!aberto ? ' · ' + esc(p.situacao) + ' por ' + esc(p.atendido_por || '') + ' em ' + fmtTs(p.atendido_em) + (p.resposta ? ' — ' + esc(p.resposta) : '') : '') + '</div>';
-    if(aberto){
-      var ac = document.createElement('div'); ac.className = 'acoes';
-      var b1 = document.createElement('button'); b1.type = 'button'; b1.className = 'gv-btn verde mini'; b1.textContent = '✔ Corrigi no Feegow';
-      b1.onclick = function(){ atende(p.id, 'atendido', d.semana_inicio); };
-      var b2 = document.createElement('button'); b2.type = 'button'; b2.className = 'gv-btn mini'; b2.textContent = 'Não procede';
-      b2.onclick = function(){ atende(p.id, 'recusado', d.semana_inicio); };
-      ac.appendChild(b1); ac.appendChild(b2); esq.appendChild(ac);
-    }
-    card.appendChild(esq); card.appendChild(document.createElement('div'));
-    host.appendChild(card);
-  });
+  cf.d = d;
+  var profs = d.profissionais || [], ped = d.pedidos || [];
+  var nConf = profs.filter(function(p){ return p.confirmado_em; }).length;
+  var pIni = d.periodo_inicio || d.semana_inicio, pFim = d.periodo_fim || d.semana_fim;
+  var fechou = new Date(d.fechamento).getTime() <= agora(), passou = new Date(d.prazo).getTime() <= agora();
+  if(window.moldura) moldura.resumo('conferencia', (d.periodo_especial ? capital(mesNome(pIni)) + ', de ' : 'Semana de ') + ddmm(pIni) + ' a ' + ddmm(pFim) + ' · ' +
+    nConf + ' de ' + profs.length + ' já confirmaram · ' + (fechou ? 'semana fechada' : passou ? 'prazo dos profissionais encerrado' : 'prazo ' + fmtDiaHora(d.prazo).replace('-feira', '')));
+  acoesTopo(true);
+  var abertos = ped.filter(function(p){ return p.situacao === 'aberto'; }), resolvidos = ped.filter(function(p){ return p.situacao !== 'aberto'; });
   var badge = document.getElementById('gv-b-prof');
-  if(badge){ var n = ped.filter(function(p){ return p.situacao === 'aberto'; }).length; badge.textContent = n; badge.hidden = !n; }
-}
-function editaTelefoneBalcao(profId, d){
-  var p = (d.profissionais || []).find(function(x){ return x.profissional_id === profId; }); if(!p) return;
-  var m = modal('Telefone — ' + esc(p.nome),
-    '<p class="sub" style="margin-bottom:8px">É o número que recebe os avisos da conferência semanal. DDD + número, só dígitos.</p>' +
-    '<div class="fg"><input type="text" class="fc" id="pf-tel-novo" inputmode="numeric" value="' + esc(p.telefone || '') + '" placeholder="62999990000"></div><p class="pf-erro" id="pf-tel-erro" style="display:none"></p>',
-    '<button type="button" class="pf-btn" data-volta>Voltar</button><button type="button" class="pf-btn pf-pri" id="pf-tel-ok">Salvar</button>');
-  $('[data-volta]', m.el).onclick = m.fecha;
-  $('#pf-tel-ok', m.el).onclick = function(){
-    $('#pf-tel-ok', m.el).disabled = true;
-    rpc('prof_balcao_telefone', { p_senha: secr.senha, p_profissional_id: profId, p_telefone: $('#pf-tel-novo', m.el).value })
-      .then(function(){ m.fecha(); document.getElementById('gv-conteudo').innerHTML = ''; carregaSec(d.semana_inicio); })
-      .catch(function(e){ erroEm($('#pf-tel-erro', m.el), humano(e)); $('#pf-tel-ok', m.el).disabled = false; });
+  if(badge){ badge.textContent = abertos.length; badge.hidden = !abertos.length; }
+
+  var antes = host.querySelector('#cf-conf .lista-corpo');
+  var rolagem = (antes && !cf.topo) ? antes.scrollTop : 0;
+  cf.topo = false;
+  host.innerHTML = '';
+  var wrap = el('div', 'duas-col'); wrap.id = 'cf-conf';
+
+  /* lista dos profissionais */
+  var q = semAc(cf.busca).trim();
+  var base = profs.filter(function(p){ return !q || semAc(p.nome).indexOf(q) >= 0; });
+  var cont = { faltam:0, confirmaram:0, todos: base.length };
+  base.forEach(function(p){ cont[p.confirmado_em ? 'confirmaram' : 'faltam']++; });
+  var f = cf.filtro;
+  var vis = ordenaProfs(f === 'todos' ? base : base.filter(function(p){ return f === 'faltam' ? !p.confirmado_em : !!p.confirmado_em; }));
+  cf.vis = vis.map(function(p){ return p.profissional_id; });
+  var sec = el('section', 'lista alta'); sec.setAttribute('aria-label', 'Profissionais');
+  var topo = el('div', 'lista-topo');
+  var seg = el('div', 'seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'Mostrar');
+  [['faltam', 'Ainda não confirmaram', '#D70015'], ['confirmaram', 'Confirmaram', '#248A3D'], ['todos', 'Todos', '#AEAEB2']].forEach(function(x){
+    var on = f === x[0];
+    var b = bt(on ? 'on' : '', '<span class="q" style="background:' + x[2] + '"></span>' + x[1] + ' <span class="n">' + cont[x[0]] + '</span>', function(){
+      if(cf.filtro === x[0]) return;
+      cf.filtro = x[0]; cf.topo = true; desenhaSec(cf.d);
+    });
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    seg.appendChild(b);
+  });
+  topo.appendChild(seg);
+  topo.appendChild(el('span', 'mostrando', vis.length === 1 ? '1 profissional' : vis.length + ' profissionais'));
+  sec.appendChild(topo);
+  var corpo = el('div', 'lista-corpo');
+  if(!vis.length){
+    var V = q ? ['Ninguém com esse nome', 'Confira a grafia ou limpe a busca.', 'tit'] :
+      !profs.length ? ['Nenhum profissional com acesso ainda', 'O administrador cria os acessos em Acessos e configurações.', 'tit'] :
+      f === 'faltam' ? ['Todo mundo confirmou', 'A conferência deste período está completa.', 'ok'] :
+                       ['Ninguém confirmou ainda', 'As confirmações aparecem aqui conforme chegam.', 'tit'];
+    corpo.appendChild(el('div', 'lista-vazio', '<b class="' + V[2] + '">' + V[0] + '</b><br>' + V[1]));
+  }
+  [['Ainda não confirmaram', vis.filter(function(p){ return !p.confirmado_em; })],
+   ['Confirmaram', vis.filter(function(p){ return !!p.confirmado_em; })]].forEach(function(g){
+    if(!g[1].length) return;
+    corpo.appendChild(el('div', 'dia-cab', '<b>' + g[0] + '</b><span>' + (g[1].length === 1 ? '1 profissional' : g[1].length + ' profissionais') + '</span>'));
+    g[1].forEach(function(p){
+      var b = bt('linha cf-linha' + (cf.aberto === p.profissional_id ? ' aberta' : ''), linhaProf(p), function(){ abrirProf(p.profissional_id); });
+      b.setAttribute('aria-haspopup', 'dialog'); b.setAttribute('data-prof', p.profissional_id);
+      corpo.appendChild(b);
+    });
+  });
+  sec.appendChild(corpo);
+  wrap.appendChild(sec);
+
+  /* lado: prazo, pedidos de correção e como funciona */
+  var lado = el('div', 'lado');
+  var pz = el('section', 'painel cf-prazo'); pz.setAttribute('aria-label', 'Prazo');
+  pz.innerHTML = '<h2 class="cf-prazo-per">' + esc(periodoTxt(d)) + '</h2><span class="cf-prazo-conta" id="cf-conta"></span>' +
+    '<span class="cf-prazo-l1" id="cf-l1"></span><span class="cf-prazo-l2" id="cf-l2"></span>' +
+    '<div class="cf-barra"><div style="width:' + (profs.length ? Math.round(nConf / profs.length * 100) : 0) + '%"></div></div>' +
+    '<span class="cf-prazo-n">' + nConf + ' de ' + profs.length + ' confirmaram</span>';
+  if(secr.semanas && secr.semanas.length){
+    var ls = el('label', 'cf-semana-sel', '<span>Ver a semana</span>');
+    var sel = el('select', 'fc');
+    var temAtual = false;
+    secr.semanas.forEach(function(s, i){
+      var o = el('option', '', (i === 0 ? 'Semana atual · ' : '') + ddmm(s.inicio) + ' – ' + ddmm(s.fim));
+      o.value = s.inicio; if(s.inicio === d.semana_inicio){ o.selected = true; temAtual = true; }
+      sel.appendChild(o);
+    });
+    if(!temAtual){ var o2 = el('option', '', ddmm(d.semana_inicio) + ' – ' + ddmm(d.semana_fim)); o2.value = d.semana_inicio; o2.selected = true; sel.appendChild(o2); }
+    sel.addEventListener('change', function(){ cf.topo = true; carregaSec(sel.value); });
+    ls.appendChild(sel);
+    pz.appendChild(ls);
+  }
+  lado.appendChild(pz);
+  var pd = el('section', 'painel'); pd.setAttribute('aria-label', 'Pedidos de correção');
+  pd.appendChild(el('div', 'painel-cab', '<h2>Pedidos de correção</h2><span>' + (abertos.length === 1 ? '1 aberto' : abertos.length + ' abertos') + '</span>'));
+  if(!abertos.length) pd.appendChild(el('p', 'cf-ped-vazio', 'Nenhum pedido aberto. Quando um profissional pedir correção, ele aparece aqui: corrija no Feegow e marque “Corrigi no Feegow” ou “Não procede”.'));
+  var linhaPed = function(p){
+    var E = pedEstado(p);
+    var b = bt('cat cf-ped' + (p.situacao !== 'aberto' ? ' resolvido' : ''), '<span class="q" style="background:' + E.cor + '"></span>' +
+      '<span class="t"><b>' + esc((p.profissional || '—') + ' · ' + (TIPOS[p.tipo] || p.tipo)) + '</b><small>' +
+      esc([p.paciente || '(paciente não encontrado)', quandoAg(p), p.convenio].filter(Boolean).join(' · ')) + '</small></span>' +
+      '<span class="cf-ped-st" style="color:' + E.cor + '">' + esc(E.rot) + '</span>', function(){ abrirPedido(p.id); });
+    b.setAttribute('aria-haspopup', 'dialog');
+    return b;
   };
+  abertos.forEach(function(p){ pd.appendChild(linhaPed(p)); });
+  if(resolvidos.length){
+    pd.appendChild(el('div', 'dia-cab', '<b>Resolvidos</b><span>' + resolvidos.length + '</span>'));
+    resolvidos.forEach(function(p){ pd.appendChild(linhaPed(p)); });
+  }
+  lado.appendChild(pd);
+  lado.appendChild(el('section', 'painel nota-lado', '<h2>Como funciona</h2>' +
+    '<p>Cada profissional confere a própria agenda pelo celular e confirma até o prazo.</p>' +
+    '<p class="cinza">Se algo estiver errado, ele avisa o balcão pelo WhatsApp e vocês corrigem no Feegow. Quando a semana fecha, a agenda segue para o faturamento com o que estiver no Feegow.</p>'));
+  wrap.appendChild(lado);
+  host.appendChild(wrap);
+  alturaLista();
+  var c2 = host.querySelector('#cf-conf .lista-corpo'); if(c2) c2.scrollTop = rolagem;
+  iniciarRelogio();
+  if(cf.pinta) cf.pinta();
 }
+
+/* janela do profissional */
+function abrirProf(id, ids){
+  if(!window.moldura || !cf.d) return;
+  ids = (ids || cf.vis || []).slice();
+  var atual = id, modo = null, telRasc = '', erro = null, foto = null, fotoErro = null, fotoCarregando = false, ocupado = false;
+  var P = moldura.pop({ largura: '600px', aoFechar: function(){ cf.aberto = null; cf.pinta = null; marcaLinha(); } });
+  function limpa(){ modo = null; erro = null; foto = null; fotoErro = null; fotoCarregando = false; }
+  function pinta(){
+    var d = cf.d, p = (d.profissionais || []).find(function(x){ return x.profissional_id === atual; });
+    if(!p){ P.fechar(); return; }
+    cf.aberto = atual; marcaLinha();
+    P.topo.innerHTML = '<span class="pop-titulo-topo">Conferência dos profissionais</span>';
+    P.corpo.innerHTML = '';
+    var pIni = d.periodo_inicio || d.semana_inicio, pFim = d.periodo_fim || d.semana_fim;
+    P.corpo.appendChild(el('div', 'pp-cab', '<span class="pp-quando">' + esc((d.periodo_especial ? 'Conferência de ' + mesNome(pIni) : 'Semana') + ' · ' + ddmm(pIni) + ' a ' + ddmm(pFim)) + '</span>' +
+      '<h2>' + esc(p.nome) + '</h2><span class="pp-l1">' + esc(p.consultas + (p.consultas === 1 ? ' consulta' : ' consultas') + ' no período · ' +
+        (p.pendentes === 1 ? '1 ainda marcada ou em atendimento' : p.pendentes + ' ainda marcadas ou em atendimento')) + '</span>' +
+      (p.teste_ate ? '<span class="pp-l2">Acesso de teste aberto até ' + esc(fmtTs(p.teste_ate)) + '</span>' : '')));
+
+    var cx = el('div', 'pp-caixa');
+    var conf = !!p.confirmado_em;
+    var tg = el('span', 'pp-tag', esc(conf ? 'Confirmou em ' + quando(p.confirmado_em) : 'Ainda não confirmou'));
+    tg.style.color = conf ? (p.confirmado_fora_do_prazo ? '#C93400' : '#248A3D') : '#D70015';
+    cx.appendChild(tg);
+    cx.appendChild(el('span', 'pp-txt', esc(conf ? (p.confirmado_fora_do_prazo ? 'Confirmou depois do prazo.' : 'Dentro do prazo.') + (p.foto ? ' A confirmação tem foto.' : '')
+      : (p.ultimo_acesso_em ? 'Já entrou no painel (último acesso ' + fmtTs(p.ultimo_acesso_em) + '). Prazo: ' + fmtDiaHora(d.prazo).replace('-feira', '') + '.'
+                            : 'Ainda não entrou no painel. Se não tem o link de acesso, o administrador gera um em Acessos e configurações.'))));
+    if(conf && p.foto){
+      var fb = bt('btn-claro', svgI('M4 7.5h3l1.5-2h7l1.5 2h3v11H4zM9 13a3 3 0 1 0 6 0 3 3 0 1 0-6 0', 14, 2) +
+        (foto ? 'Esconder a foto' : (fotoCarregando ? 'Carregando a foto…' : 'Ver a foto')), function(){
+          if(foto){ foto = null; pinta(); return; }
+          if(fotoCarregando) return;
+          fotoCarregando = true; fotoErro = null; pinta();
+          var quem = atual;
+          rpc('prof_foto_confirmacao', { p_senha: secr.senha, p_profissional_id: p.profissional_id, p_semana_inicio: d.semana_inicio })
+            .then(function(r){ if(quem !== atual) return; fotoCarregando = false; foto = r; if(P.aberto) pinta(); })
+            .catch(function(e){ if(quem !== atual) return; fotoCarregando = false; fotoErro = humano(e); if(P.aberto) pinta(); });
+        });
+      cx.appendChild(fb);
+      if(fotoErro) cx.appendChild(el('span', 'pp-txt txt-vermelho', esc(fotoErro)));
+      if(foto) cx.appendChild(el('div', 'cf-foto2', '<img src="data:' + esc(foto.mime) + ';base64,' + foto.base64 + '" alt="Foto da confirmação">' +
+        '<span><b>Foto da confirmação</b><small>' + esc(fmtTs(foto.criado_em)) + ' · ' + Math.round((foto.tamanho || 0) / 1024) + ' KB</small></span>'));
+    }
+    P.corpo.appendChild(cx);
+
+    var fone = el('div', 'pp-fone cf-fone', '<span><small>Telefone dos avisos</small><b' + (p.telefone ? '' : ' class="txt-laranja"') + '>' +
+      esc(p.telefone || 'Sem telefone: não recebe os avisos') + '</b></span>');
+    fone.appendChild(bt('btn btn-s', modo === 'tel' ? 'Voltar' : (p.telefone ? 'Editar' : 'Cadastrar'), function(){
+      if(modo === 'tel'){ modo = null; erro = null; } else { modo = 'tel'; telRasc = p.telefone || ''; erro = null; }
+      pinta();
+    }));
+    P.corpo.appendChild(fone);
+    if(modo === 'tel'){
+      var ed = el('div', 'pp-bloco cf-tel-ed');
+      ed.appendChild(el('span', 'pp-l2', 'É o número que recebe os avisos da conferência semanal. DDD + número, só dígitos.'));
+      var lin = el('div', 'cf-tel-l');
+      var inp = el('input', 'fc'); inp.type = 'text'; inp.inputMode = 'numeric'; inp.placeholder = '62999990000'; inp.value = telRasc; inp.setAttribute('aria-label', 'Telefone');
+      inp.addEventListener('input', function(){ telRasc = inp.value; });
+      var sv = bt('btn btn-p', 'Salvar', function(){
+        if(ocupado) return;
+        ocupado = true; sv.disabled = true; sv.textContent = 'Salvando…';
+        rpc('prof_balcao_telefone', { p_senha: secr.senha, p_profissional_id: p.profissional_id, p_telefone: inp.value })
+          .then(function(){ ocupado = false; modo = null; erro = null; return carregaSec(d.semana_inicio); })
+          .catch(function(e){ ocupado = false; erro = humano(e); if(P.aberto) pinta(); });
+      });
+      inp.addEventListener('keydown', function(e){ if(e.key === 'Enter') sv.click(); });
+      lin.appendChild(inp); lin.appendChild(sv);
+      ed.appendChild(lin);
+      if(erro) ed.appendChild(el('span', 'cf-erro2', esc(erro)));
+      P.corpo.appendChild(ed);
+      setTimeout(function(){ if(document.body.contains(inp) && document.activeElement !== inp) inp.focus(); }, 0);
+    }
+
+    var av = p.avisos || [];
+    var avb = el('div', 'pp-bloco');
+    avb.appendChild(el('span', 'pp-rot', 'Avisos de WhatsApp desta semana'));
+    if(!p.telefone) avb.appendChild(el('span', 'pp-txt txt-laranja', 'Sem telefone: os avisos de abertura, lembrete, última chamada e encerramento não saem.'));
+    else if(!av.length) avb.appendChild(el('span', 'pp-txt', 'Nenhum aviso agendado para esta semana.'));
+    else {
+      var la = el('div', 'cf-avisos');
+      av.forEach(function(a){
+        var st = a.situacao === 'enviado' ? 'enviado' + (a.enviado_em ? ' ' + fmtTs(a.enviado_em) : '') : a.situacao === 'pendente' ? 'a enviar' :
+                 a.situacao === 'erro' ? 'com erro' : a.situacao === 'cancelado' ? 'cancelado' : String(a.situacao || '—');
+        la.appendChild(el('div', 'cf-aviso', '<span>' + esc(AVISO_TIPO[a.tipo] || a.tipo) + '</span><span class="' +
+          (a.situacao === 'erro' ? 'txt-vermelho' : a.situacao === 'enviado' ? 'txt-verde' : 'cinza') + '">' + esc(st) + '</span>'));
+      });
+      avb.appendChild(la);
+    }
+    P.corpo.appendChild(avb);
+
+    var meus = (d.pedidos || []).filter(function(x){ return x.profissional_id === p.profissional_id; });
+    if(meus.length){
+      var pb = el('div', 'pp-bloco');
+      pb.appendChild(el('span', 'pp-rot', 'Pedidos de correção'));
+      var lp = el('div', 'pp-lista');
+      meus.forEach(function(x){
+        var E = pedEstado(x);
+        lp.appendChild(bt('pp-linha', '<span class="q"><b>' + esc(TIPOS[x.tipo] || x.tipo) + '</b><small>' +
+          esc([x.paciente || '(paciente não encontrado)', quandoAg(x)].filter(Boolean).join(' · ')) + '</small></span>' +
+          '<span class="tr" style="color:' + E.cor + ';font-weight:600">' + esc(E.rot) + '</span>' + svgI('M9.5 6l6 6-6 6', 16, 2), function(){
+            var volta = p.profissional_id, lista = ids;
+            abrirPedido(x.id, function(){ abrirProf(volta, lista); });
+          }));
+      });
+      pb.appendChild(lp);
+      P.corpo.appendChild(pb);
+    }
+
+    var i = ids.indexOf(atual);
+    P.rodape.innerHTML = '';
+    P.rodape.hidden = ids.length < 2 || i < 0;
+    if(!P.rodape.hidden){
+      var bA = bt('btn btn-s', svgI('M14.5 6l-6 6 6 6', 16, 2.2) + 'Anterior', function(){ if(i > 0 && !ocupado){ atual = ids[i - 1]; limpa(); pinta(); } });
+      bA.disabled = i <= 0;
+      var bP = bt('btn btn-p', 'Próxima' + svgI('M9.5 6l6 6-6 6', 16, 2.2), function(){ if(i < ids.length - 1 && !ocupado){ atual = ids[i + 1]; limpa(); pinta(); } });
+      bP.disabled = i >= ids.length - 1;
+      P.rodape.appendChild(bA); P.rodape.appendChild(el('span', 'pop-pos', (i + 1) + ' de ' + ids.length)); P.rodape.appendChild(bP);
+    }
+  }
+  cf.pinta = function(){ if(P.aberto) pinta(); };
+  pinta();
+}
+
+/* janela do pedido de correção */
 function quemAssina(){
   return (typeof CU !== 'undefined' && CU && CU.nome) ? CU.nome : (prompt('Seu nome (fica registrado no pedido):') || '');
 }
-function atende(id, como, semana){
-  var quem = quemAssina(); if(!quem) return;
-  var resposta = como === 'recusado' ? prompt('Por que não procede? (o profissional vai ver)') : null;
-  if(como === 'recusado' && !resposta) return;
-  rpc('prof_atender_pedido', { p_senha: secr.senha, p_pedido_id: id, p_situacao: como, p_quem: quem, p_resposta: resposta })
-    .then(function(){ var host = document.getElementById('gv-conteudo'); host.innerHTML = ''; carregaSec(semana); })
-    .catch(function(e){ alert(humano(e)); });
-}
-function abreFoto(profId, semana){
-  rpc('prof_foto_confirmacao', { p_senha: secr.senha, p_profissional_id: profId, p_semana_inicio: semana }).then(function(f){
-    var m = modal('Foto da confirmação',
-      '<p style="font-size:13px;color:var(--txt2);margin-bottom:8px">' + fmtTs(f.criado_em) + ' · ' + Math.round(f.tamanho/1024) + ' KB</p>' +
-      '<div class="pf-foto"><img src="data:' + esc(f.mime) + ';base64,' + f.base64 + '" alt="foto da confirmação"></div>',
-      '<button type="button" class="pf-btn" data-volta>Fechar</button>');
-    $('[data-volta]', m.el).onclick = m.fecha;
-  }).catch(function(e){ alert(humano(e)); });
+function abrirPedido(pid, voltar){
+  if(!window.moldura || !cf.d) return;
+  var modo = null, texto = '', erro = null, ocupado = false, focar = false;
+  var P = moldura.pop({ largura: '600px', aoFechar: function(){ cf.pinta = null; } });
+  P.rodape.classList.add('fim'); P.rodape.hidden = false;
+  P.rodape.appendChild(bt('btn btn-s', 'Fechar', function(){ P.fechar(); }));
+  function atender(p, como, resposta){
+    var quem = quemAssina();
+    if(!quem){ ocupado = false; pinta(); return; }
+    rpc('prof_atender_pedido', { p_senha: secr.senha, p_pedido_id: p.id, p_situacao: como, p_quem: quem, p_resposta: resposta })
+      .then(function(){ ocupado = false; modo = null; texto = ''; erro = null; return carregaSec(cf.d.semana_inicio); })
+      .catch(function(e){ ocupado = false; erro = humano(e); if(P.aberto) pinta(); });
+  }
+  function pinta(){
+    var d = cf.d, p = (d.pedidos || []).find(function(x){ return x.id === pid; });
+    if(!p){ P.fechar(); return; }
+    P.topo.innerHTML = '';
+    if(voltar) P.topo.appendChild(bt('pop-volta', svgI('M14.5 6l-6 6 6 6', 16, 2.2) + esc(p.profissional || 'Voltar'), function(){ voltar(); }));
+    else P.topo.innerHTML = '<span class="pop-titulo-topo">Pedido de correção</span>';
+    P.corpo.innerHTML = '';
+    var aberto = p.situacao === 'aberto', E = pedEstado(p);
+    P.corpo.appendChild(el('div', 'pp-cab', '<span class="pp-quando">' + esc('Pedido de ' + (p.profissional || '—') + ' · ' + fmtTs(p.criado_em)) +
+      (p.fora_do_prazo ? ' · <span class="txt-laranja">fora do prazo</span>' : '') + '</span>' +
+      '<h2>' + esc(TIPOS[p.tipo] || p.tipo) + '</h2>' +
+      '<span class="pp-l1">' + esc([p.paciente || '(paciente não encontrado)', p.data ? DIAS[dLocal(p.data).getDay()] + ' ' + ddmm(p.data) + (p.horario ? ' às ' + hhmm(p.horario) : '') : '', p.convenio].filter(Boolean).join(' · ')) + '</span>'));
+    var cx = el('div', 'pp-caixa');
+    var tg = el('span', 'pp-tag', esc(aberto ? (p.mudou_no_feegow ? 'Aberto · a mudança já chegou do Feegow' : 'Aberto') : E.rot)); tg.style.color = E.cor;
+    cx.appendChild(tg);
+    if(p.detalhe) cx.appendChild(el('span', 'pp-txt', '<b>O que ele escreveu:</b> ' + esc(p.detalhe)));
+    cx.appendChild(el('span', 'pp-txt', 'Status quando pediu: ' + esc(p.status_no_pedido || '—') + ' · agora: <b>' + esc(p.status_atual || '—') + '</b>'));
+    if(p.agendamento_sumiu) cx.appendChild(el('span', 'pp-txt txt-vermelho', 'O agendamento sumiu do Feegow.'));
+    if(!aberto) cx.appendChild(el('span', 'pp-txt', esc((p.situacao === 'atendido' ? 'Corrigido' : p.situacao === 'recusado' ? 'Não procede' : p.situacao) +
+      (p.atendido_por ? ', por ' + p.atendido_por : '') + (p.atendido_em ? ', em ' + fmtTs(p.atendido_em) : '')) + (p.resposta ? '. <b>Resposta:</b> ' + esc(p.resposta) : '.')));
+    P.corpo.appendChild(cx);
+    if(aberto){
+      if(modo === 'recusar'){
+        var c = el('div', 'mal-conf');
+        c.appendChild(el('b', '', 'Por que não procede?'));
+        c.appendChild(el('span', 'pp-l2', 'O profissional vai ver esta resposta.'));
+        var ta = el('textarea', 'pp-nota'); ta.rows = 3; ta.value = texto; ta.setAttribute('aria-label', 'Resposta ao profissional');
+        ta.addEventListener('input', function(){ texto = ta.value; if(erro && texto.trim()){ erro = null; var e1 = c.querySelector('.mal-erro-txt'); if(e1) e1.remove(); } });
+        c.appendChild(ta);
+        if(erro) c.appendChild(el('span', 'mal-erro-txt', esc(erro)));
+        var l = el('div', 'mal-conf-bt');
+        l.appendChild(bt('btn btn-s', 'Cancelar', function(){ if(ocupado) return; modo = null; texto = ''; erro = null; pinta(); }));
+        var s = bt('btn btn-p', 'Enviar resposta', function(){
+          if(ocupado) return;
+          if(!texto.trim()){ erro = 'Escreva o motivo: o profissional vai ver.'; focar = true; pinta(); return; }
+          ocupado = true; s.disabled = true; s.textContent = 'Salvando…';
+          atender(p, 'recusado', texto);
+        });
+        l.appendChild(s);
+        c.appendChild(l);
+        P.corpo.appendChild(c);
+        if(focar){ focar = false; setTimeout(function(){ if(document.body.contains(ta)) ta.focus(); }, 0); }
+      } else {
+        var ac = el('div', 'pp-bloco mal-acoes');
+        ac.appendChild(el('span', 'pp-rot', 'Corrigiu no Feegow?'));
+        var lb = el('div', 'pp-adm-bt');
+        var b1 = bt('btn btn-g btn-p', 'Corrigi no Feegow', function(){
+          if(ocupado) return;
+          ocupado = true; b1.disabled = true; b1.textContent = 'Salvando…';
+          atender(p, 'atendido', null);
+        });
+        lb.appendChild(b1);
+        lb.appendChild(bt('btn btn-g btn-s', 'Não procede', function(){ if(ocupado) return; modo = 'recusar'; texto = ''; erro = null; focar = true; pinta(); }));
+        ac.appendChild(lb);
+        if(erro) ac.appendChild(el('span', 'mal-erro-txt', esc(erro)));
+        P.corpo.appendChild(ac);
+      }
+    }
+  }
+  cf.pinta = function(){ if(P.aberto && !modo) pinta(); };
+  pinta();
 }
 
 /* ═══ ⚙️ ADMINISTRAÇÃO — acessos, balcão, configurações (só o administrador do painel) ═══ */
@@ -798,13 +1119,13 @@ function desenhaAdmin(){
   var d = adm.dados, P = d.parametros || {}, H = P.avisos_horas || {}, B = d.balcao || {}, J = d.janela || {}, PE = P.periodo_especial || {};
   host.innerHTML = '';
   var topo = document.createElement('div'); topo.className = 'oc-topo';
-  topo.innerHTML = '<h2>⚙️ Profissionais — acessos e configurações</h2>' +
+  topo.innerHTML = '<h2>Profissionais: acessos e configurações</h2>' +
     '<p>Cada profissional entra na página de confirmação com a própria senha. Telefone é o que recebe os avisos de WhatsApp (só dígitos, com DDD). ' +
     'Remover um acesso não apaga o histórico de semanas e pedidos.</p>' +
-    '<div class="pf-form"><button type="button" class="gv-btn" id="pf-adm-voltar">← Voltar para a semana</button>' +
-    '<button type="button" class="gv-btn" id="pf-adm-recarregar">↻ Atualizar</button>' +
-    '<button type="button" class="gv-btn verde" id="pf-adm-repasse">💰 Repasse — quanto cada um recebe</button>' +
-    '<button type="button" class="gv-btn verde" id="pf-adm-f5">💵 Demonstrativos Unimed (F5)</button></div>';
+    '<div class="pf-form"><button type="button" class="gv-btn" id="pf-adm-voltar">Voltar para a conferência</button>' +
+    '<button type="button" class="gv-btn" id="pf-adm-recarregar">Atualizar</button>' +
+    '<button type="button" class="gv-btn verde" id="pf-adm-repasse">Repasse: quanto cada um recebe</button>' +
+    '<button type="button" class="gv-btn verde" id="pf-adm-f5">Demonstrativos Unimed (F5)</button></div>';
   host.appendChild(topo);
   $('#pf-adm-voltar', topo).onclick = function(){ host.innerHTML = ''; carregaSec(secr.semana); };
   $('#pf-adm-recarregar', topo).onclick = carregaAdmin;
@@ -892,7 +1213,7 @@ function desenhaAdmin(){
   sec.innerHTML = 'Profissionais <small>(' + profs.filter(function(p){ return p.tem_acesso; }).length + ' com acesso de ' + profs.length + ' com agenda nos últimos 90 dias)</small> ' +
     '<input class="pf-adm-busca" id="pf-adm-busca" type="search" placeholder="Buscar nome…" value="' + esc(adm.filtro) + '">';
   host.appendChild(sec);
-  var tb = document.createElement('div'); host.appendChild(tb);
+  var tb = document.createElement('div'); tb.className = 'adm-rolagem'; host.appendChild(tb);
   var render = function(){
     var f = (adm.filtro || '').toLowerCase();
     var lista = profs.filter(function(p){ return !f || (p.nome_feegow || '').toLowerCase().indexOf(f) >= 0 || (p.nome_exibicao || '').toLowerCase().indexOf(f) >= 0; });
@@ -908,7 +1229,7 @@ function desenhaAdmin(){
           : p.aguardando_1o_acesso ? '<span class="tag-sit tag-s0">link vencido — gere outro</span>'
           : (p.tem_acesso ? '<small>senha criada pelo administrador</small>' : '—')) + '</td>' +
         '<td style="font-size:12.5px">' + (p.tem_acesso ? ((p.confirmou_em ? '<span class="tag-sit" style="background:var(--ok-fundo);color:var(--ok)">confirmou ' + fmtTs(p.confirmou_em) + '</span>' : '<span class="tag-sit">não confirmou</span>') + (p.teste_ate ? '<br><span class="tag-sit tag-s1">teste até ' + fmtTs(p.teste_ate) + '</span>' : '') + (p.ultimo_acesso_em ? '<br><small>último acesso ' + fmtTs(p.ultimo_acesso_em) + '</small>' : '')) : '—') + '</td>' +
-        '<td style="white-space:nowrap">' + '<button type="button" class="gv-btn verde mini" data-convite="' + p.profissional_id + '" title="Gera (ou copia) o link para o profissional escolher a própria senha">🔗 Link de acesso</button> ' + (p.tem_acesso
+        '<td style="white-space:nowrap">' + '<button type="button" class="gv-btn verde mini" data-convite="' + p.profissional_id + '" title="Gera (ou copia) o link para o profissional escolher a própria senha">Link de acesso</button> ' + (p.tem_acesso
           ? '<button type="button" class="gv-btn mini" data-edita="' + p.profissional_id + '">Editar</button> <button type="button" class="gv-btn mini" data-remove="' + p.profissional_id + '">Remover</button>' +
             (p.teste_ate ? ' <button type="button" class="gv-btn mini" data-teste="' + p.profissional_id + '" data-min="0">Fechar teste</button>' : ' <button type="button" class="gv-btn mini" data-teste="' + p.profissional_id + '" data-min="120" title="Abre a conferência agora para este profissional, por 2 horas, ignorando o domingo">Abrir p/ teste 2h</button>') +
             (p.confirmou_em ? ' <button type="button" class="gv-btn mini" data-desfaz="' + p.profissional_id + '" title="Apaga a confirmação (e a foto) desta semana para ele poder confirmar de novo">Desfazer confirmação</button>' : '')
@@ -1277,7 +1598,7 @@ function desenhaRepasse(d){
   var sec = document.createElement('div'); sec.className = 'adm-sec';
   sec.innerHTML = 'Regime e recibo de cada profissional <small>(recibos emitidos: ' + brl(d.total_mes) + ')</small>';
   host.appendChild(sec);
-  var tb = document.createElement('div'); host.appendChild(tb);
+  var tb = document.createElement('div'); tb.className = 'adm-rolagem'; host.appendChild(tb);
   var profs = d.profissionais || [], regs = d.regimes || [];
   var opts = function(sel){ return '<option value=""' + (!sel ? ' selected' : '') + '>— sem regime —</option>' + regs.map(function(g){ return '<option value="' + g.codigo + '"' + (g.codigo === sel ? ' selected' : '') + '>' + esc(g.nome) + '</option>'; }).join(''); };
   var h = '<table class="adm"><tr><th>Profissional</th><th>Regime</th><th>Descrição no detalhe</th><th>Recibo do mês</th><th>Ações</th></tr>';
@@ -1332,5 +1653,5 @@ function desenhaRepasse(d){
   }; });
 }
 
-return { loginLista: loginLista, entrarPeloLogin: entrarPeloLogin, sair: sair, secretaria: secretaria, admin: admin, convite: convite };
+return { loginLista: loginLista, entrarPeloLogin: entrarPeloLogin, sair: sair, secretaria: secretaria, recarregarSec: recarregarSec, admin: admin, convite: convite };
 })();

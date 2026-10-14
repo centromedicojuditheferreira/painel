@@ -191,14 +191,22 @@ async function showPublicView(profId){
   document.getElementById('lo').style.display='none';
   document.getElementById('pub-view').style.display='block';
   const[profDoc,mvSnap]=await Promise.all([db.collection('profissionais').doc(profId).get(),db.collection('movimentacoes').where('profissional_id','==',profId).get()]);
-  if(!profDoc.exists){document.getElementById('pub-nm').textContent='Profissional nao encontrado';return;}
+  if(!profDoc.exists){document.getElementById('pub-nm').textContent='Profissional não encontrado';return;}
   const pd=profDoc.data();const sd=pd.saldo_devedor||0;
   document.getElementById('pub-nm').textContent=pd.nome;
-  const sdEl=document.getElementById('pub-sd');sdEl.textContent=sd>0?fmt(sd)+'  (devendo)':sd<0?'Credito: '+fmt(Math.abs(sd)):'Em dia';sdEl.style.color=sd>0?'#f87171':sd<0?'#4ade80':'#94a3b8';
+  const sdEl=document.getElementById('pub-sd');sdEl.textContent=sd===0?'Em dia':fmt(Math.abs(sd));sdEl.className=sd>0?'deve':sd<0?'credito':'';
+  document.getElementById('pub-sd-sub').textContent=sd>0?'devendo na conveniência':sd<0?'de crédito':'nenhum valor em aberto';
+  document.getElementById('pub-sd-rot').textContent=sd>0?'Saldo devedor':sd<0?'Crédito':'Saldo';
   const tb=document.getElementById('pub-tb');tb.innerHTML='';
   const movs=mvSnap.docs.map(d=>({id:d.id,...d.data()})).filter(semErro).sort(ordDesc);
-  if(!movs.length){tb.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Nenhum lancamento</td></tr>';return;}
-  movs.forEach(m=>{const tr=document.createElement('tr');const isCompra=m.tipo==='venda_profissional';const isPgto=['pagamento_notinha','bonificacao'].includes(m.tipo);tr.innerHTML='<td style="font-size:12px">'+fmtD(m.timestamp)+'</td><td>'+(m.produto_nome||m.descricao||'-')+'</td><td style="font-family:var(--mo);color:'+(isCompra?'var(--red)':isPgto?'var(--grn)':'var(--muted)')+'">'+( isCompra?'+ ':isPgto?'- ':'')+fmt(m.valor_total)+'</td><td>'+tipoBadge(m.tipo)+'</td>';tb.appendChild(tr);});
+  if(!movs.length){tb.innerHTML='<p class="pub-vazio">Nenhum lançamento.</p>';return;}
+  const esc=x=>{const e=document.createElement('span');e.textContent=x==null?'':String(x);return e.innerHTML;};
+  const rot={venda_profissional:'Compra',pagamento_notinha:'Pagamento',bonificacao:'Bonificação',edicao_profissional:'Ajuste'};
+  movs.forEach(m=>{const isCompra=m.tipo==='venda_profissional';const isPgto=['pagamento_notinha','bonificacao'].includes(m.tipo);
+    const l=document.createElement('div');l.className='pub-l';
+    l.innerHTML='<span class="nm">'+esc(m.produto_nome||m.descricao||'-')+'</span><span class="v '+(isCompra?'compra':isPgto?'pgto':'outro')+'">'+(isCompra?'+ ':isPgto?'− ':'')+fmt(m.valor_total)+'</span>'+
+      '<span class="mt">'+esc(fmtD(m.timestamp)+' · '+(rot[m.tipo]||m.tipo))+'</span>';
+    tb.appendChild(l);});
 }
 
 async function doLogin(){

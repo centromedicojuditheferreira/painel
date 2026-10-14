@@ -159,7 +159,7 @@ var moldura = (function () {
     var ehGV = x.s === 'guias';
     document.getElementById('pg-busca').hidden = !x.busca;
     document.getElementById('gv-recarregar').hidden = !ehGV;
-    var at = document.getElementById('gv-atualizado'); if (at) at.hidden = !ehGV;
+    var at = document.getElementById('gv-atualizado'); if (at) at.hidden = !ehGV || d === 'conferencia';   /* a hora é dos dados do faturamento */
     var ac = document.getElementById('pg-acoes');
     if (mudou) {                                  /* telas do GV podem pôr controles aqui (acoesDe) depois disto */
       ac.innerHTML = '';

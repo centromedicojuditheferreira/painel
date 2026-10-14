@@ -2998,7 +2998,8 @@ function refreshDonoAba(){
   var el = document.getElementById("gv-aba-dono");
   if(el) el.style.display = ehDono() ? "" : "none";
 }
-function recarregarTudo(){ carregar(); carregarFila(); loadCad(); loadExcl(); loadCorte(); loadFalhas(); loadMalotes(); }
+function recarregarTudo(){ carregar(); carregarFila(); loadCad(); loadExcl(); loadCorte(); loadFalhas(); loadMalotes();
+  if(estado.tela === "prof" && window.PF && PF.recarregarSec) PF.recarregarSec(); }
 function boot(t){
   if(!GV._init){
     GV._init = true;
