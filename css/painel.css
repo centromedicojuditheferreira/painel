@@ -356,3 +356,98 @@ textarea.pp-nota:focus{border-color:var(--cinza)}
 @media (max-width:600px){.pp-opcoes{grid-template-columns:1fr}.pop-corpo{padding:16px}}
 #s-notinhas>.sh{display:none}
 .lo-modo-b{min-height:32px;height:auto!important;padding:4px 8px!important;line-height:1.2}
+.fila-envio{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.fila-linha{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.fila-linha .busca{width:260px}
+.fila-linha .busca input{font-variant-numeric:tabular-nums}
+.fila-aviso2{min-height:18px;font-size:13px;font-weight:500;color:var(--verde)}
+.pop-dir{display:flex;align-items:center;gap:10px}
+.pp-datas{display:grid;grid-template-columns:130px minmax(0,1fr) minmax(0,1fr);box-shadow:inset 0 0 0 1px var(--linha)}
+.pp-datas>*{padding:10px 14px;border-bottom:1px solid var(--linha);font-size:15px}
+.pp-datas>:nth-child(-n+3){padding:8px 14px;font-size:13px;font-weight:600;color:var(--cinza)}
+.pp-datas>b{font-weight:600}
+.pp-datas .c{color:var(--cinza)}
+.pp-datas .mudou{color:var(--verde);font-weight:600}
+.nota-lado{padding:16px;display:flex;flex-direction:column;gap:8px}
+.nota-lado h2{font-size:17px;font-weight:600}
+.nota-lado p{font-size:15px;line-height:1.5}
+.cinza{color:var(--cinza)}
+.lista-vazio .ok{font-size:17px;font-weight:600;color:var(--verde)}
+.lista-vazio.erro{color:var(--vermelho)}
+.etqs{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.etq{display:inline-flex;align-items:center;height:24px;padding:0 8px;background:var(--preenche);color:var(--tinta);font-size:13px;font-weight:600}
+.etq.forte{background:var(--vermelho);color:#fff}
+.etq.vermelho{color:var(--vermelho)}
+.etq.verde{color:var(--verde)}
+.cat-alerta .alerta-ic{flex:none;display:flex;color:var(--vermelho)}
+.cat-alerta .t b{color:var(--vermelho)}
+.pp-caixa.aviso{background:var(--laranja-suave)}
+.pp-caixa.aviso .pp-txt{color:var(--laranja);font-weight:600}
+.pp-adm{display:flex;flex-direction:column;gap:6px;padding-top:12px;border-top:1px solid var(--linha)}
+.pp-adm-bt{display:flex;gap:8px;flex-wrap:wrap}
+.linha.apagada{opacity:.6}
+.pp-confirma{padding:14px 16px;background:var(--fundo);gap:10px}
+.passo{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.passo .btn{width:36px;padding:0;font-size:18px}
+.passo-n{min-width:28px;text-align:center;font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}
+.passo .cinza{font-size:13px}
+.pp-msg-cab{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.pp-msg{max-height:260px;overflow-y:auto;padding:14px 16px;box-shadow:inset 0 0 0 1px var(--linha);font-size:15px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* ═══ Malotes ═══ */
+.mal-ult{display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:right}
+.mal-ult[hidden]{display:none}
+.mal-ult span{font-size:13px;color:var(--cinza)}
+.mal-ult b{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.linha.mal{align-items:flex-start;padding:12px 16px}
+.linha.mal .nm{font-weight:600}
+.linha.mal .mt{font-variant-numeric:tabular-nums}
+.linha.mal .dir{max-width:40%}
+.linha .valor{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.mal-ic{flex:none;width:32px;height:32px;background:var(--preenche);color:var(--tint);display:flex;align-items:center;justify-content:center}
+.mal-passo{display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-bottom:1px solid var(--linha)}
+.mal-passo .n{flex:none;width:24px;height:24px;background:var(--tint);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
+.mal-passo .t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.mal-passo .t b{font-size:15px;font-weight:600}
+.mal-passo .t small{font-size:13px;color:var(--cinza);line-height:1.45}
+.mal-passo-nota{padding:12px 16px;font-size:13px;color:var(--cinza);line-height:1.45}
+.mal-passo-nota b{color:var(--tinta);font-weight:600}
+.mal-env{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--linha)}
+.mal-env:last-child{border-bottom:0}
+.mal-env .q{flex:none;width:10px;height:10px;background:var(--verde)}
+.mal-env .t{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.mal-env .t b{font-size:15px;font-weight:600}
+.mal-env .t small{font-size:13px;color:var(--cinza);font-variant-numeric:tabular-nums}
+.mal-env .v{flex:none;font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.mal-guias{gap:8px}
+.mal-guias-cab{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.mal-guias-cab .btn{flex:none;height:34px;font-size:13px}
+.mal-tab{max-height:220px;overflow-y:auto;box-shadow:inset 0 0 0 1px var(--linha)}
+.mal-tab-l{display:grid;grid-template-columns:28px 100px minmax(0,1fr) 76px 84px;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--linha);font-size:13px;font-variant-numeric:tabular-nums}
+.mal-tab-l:last-child{border-bottom:0}
+.mal-tab-l .p{color:var(--cinza3)}
+.mal-tab-l b{font-weight:600}
+.mal-tab-l .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mal-tab-l .d{color:var(--cinza)}
+.mal-tab-l .v{text-align:right}
+.mal-acoes{gap:10px}
+.btn.btn-g{height:40px;padding:0 16px;font-size:15px}
+.mal-conf{display:flex;flex-direction:column;gap:10px;padding:14px 16px;box-shadow:inset 0 0 0 1px var(--tint)}
+.mal-conf>b{font-size:15px;font-weight:600}
+.mal-conf-bt{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
+.mal-conf-bt .btn{height:38px;padding:0 16px;font-size:15px}
+.mal-erro-txt{font-size:13px;font-weight:600;color:var(--vermelho)}
+.mal-rodando{padding:14px 16px;box-shadow:inset 0 0 0 1px var(--linha);font-size:15px;font-weight:600;color:var(--cinza)}
+.pp-txt.mal-ok{color:var(--verde)}
+.pp-txt.mal-erro{color:var(--vermelho)}
+.mal-prob{display:flex;flex-direction:column;gap:8px;font-size:13px;line-height:1.5}
+.mal-prob-g{display:flex;flex-direction:column;gap:2px}
+.mal-prob-g>b{font-weight:600}
+.mal-prob-g span{padding-left:12px}
+.mal-prob-g span b{font-weight:600}
+.pp-salvo.erro{color:var(--vermelho);font-weight:600}
+@media (max-width:600px){
+  .mal-tab-l{grid-template-columns:22px 92px minmax(0,1fr) 76px}
+  .mal-tab-l .d{display:none}
+  .linha.mal .dir{max-width:46%}
+}

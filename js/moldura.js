@@ -78,7 +78,7 @@ var moldura = (function () {
 
   var app = document.getElementById('app');
   var menu = document.getElementById('menu');
-  var atual = 'agenda';
+  var atual = null;
   var chipsGV = [];
   var resumos = {};
   var fixo = false;
@@ -150,6 +150,7 @@ var moldura = (function () {
   function definir(d) {
     var x = DEST[d]; if (!x) return;
     var mudou = d !== atual;
+    if (mudou && popAtual) popAtual.fechar(true);   /* trocou de tela: a janela aberta era da tela anterior */
     atual = d;
     document.getElementById('pg-secao').textContent = x.secao;
     document.getElementById('pg-titulo').textContent = x.titulo;
@@ -159,11 +160,14 @@ var moldura = (function () {
     document.getElementById('pg-busca').hidden = !x.busca;
     document.getElementById('gv-recarregar').hidden = !ehGV;
     var at = document.getElementById('gv-atualizado'); if (at) at.hidden = !ehGV;
-    var ac = document.getElementById('pg-acoes'); ac.innerHTML = '';
-    (x.acoes || []).forEach(function (a) {
-      var b = document.createElement('button'); b.type = 'button'; b.className = 'btn btn-s'; b.textContent = a[0];
-      b.addEventListener('click', a[1]); ac.appendChild(b);
-    });
+    var ac = document.getElementById('pg-acoes');
+    if (mudou) {                                  /* telas do GV podem pôr controles aqui (acoesDe) depois disto */
+      ac.innerHTML = '';
+      (x.acoes || []).forEach(function (a) {
+        var b = document.createElement('button'); b.type = 'button'; b.className = 'btn btn-s'; b.textContent = a[0];
+        b.addEventListener('click', a[1]); ac.appendChild(b);
+      });
+    }
     var alvo = x.menu || d;
     menu.querySelectorAll('.menu-item').forEach(function (it) {
       var on = it.getAttribute('data-ir') === alvo;
@@ -174,6 +178,7 @@ var moldura = (function () {
     desenharAlertas();
     if (mudou) window.scrollTo(0, 0);
   }
+  function acoesDe(d) { return d === atual ? document.getElementById('pg-acoes') : null; }
   function resumo(d, txt) { resumos[d] = txt || ''; if (d === atual) document.getElementById('pg-resumo').textContent = resumos[d]; }
 
   /* ── barra "Resolver agora" (os chips vêm do GV; aparece em todas as telas) ── */
@@ -266,5 +271,5 @@ var moldura = (function () {
   });
   window.irPara = irPara;
   return { aoNavegar: aoNavegar, aoTrocarTela: aoTrocarTela, alertas: alertas, resumo: resumo,
-           irTelaGuias: irTelaGuias, atual: function () { return atual; }, pop: pop, svg: svg, I: I };
+           irTelaGuias: irTelaGuias, atual: function () { return atual; }, pop: pop, svg: svg, I: I, acoesDe: acoesDe };
 })();

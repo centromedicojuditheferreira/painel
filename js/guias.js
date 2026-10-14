@@ -149,7 +149,7 @@ function enviarFila(){
     if(r.status === 409){ avisoFila("Essa guia já está na fila — o robô já vai olhar.", true); return; }
     if(!r.ok) throw new Error("HTTP " + r.status);
     campo.value = ""; estado.filaDraft = "";
-    avisoFila("Mandei pro robô ✔ O resultado aparece aqui embaixo em instantes.", false);
+    avisoFila("Mandei pro robô. O resultado aparece na lista em instantes.", false);
     carregarFila();
   }).catch(function(e){ avisoFila("Não consegui mandar (" + e.message + ")", true); });
 }
@@ -169,10 +169,10 @@ function dispensarFila(id){
 function avisoFila(msg, ehErro){
   var el = document.getElementById("filaAviso");
   if(!el) return;
-  el.textContent = msg; el.style.display = "block";
-  el.style.background = ehErro ? "var(--critico-fundo)" : "var(--ok-fundo)";
+  el.textContent = msg;
   el.style.color = ehErro ? "var(--critico)" : "var(--ok)";
-  if(!ehErro){ setTimeout(function(){ el.style.display = "none"; }, 6000); }
+  clearTimeout(GV._avisoT);
+  if(!ehErro){ GV._avisoT = setTimeout(function(){ el.textContent = ""; }, 6000); }
 }
 function ligarPollFila(){ if(!GV._pf) GV._pf = setInterval(carregarFila, 20*1000); }
 function desligarPollFila(){ if(GV._pf){ clearInterval(GV._pf); GV._pf = null; } }
@@ -447,6 +447,18 @@ function ico(d, tam, traco, cor){
   return '<svg width="'+(tam||16)+'" height="'+(tam||16)+'" viewBox="0 0 24 24" fill="none" stroke="'+(cor||"currentColor")+'" stroke-width="'+(traco||2)+
          '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+d+'"></path></svg>';
 }
+/* anterior/próxima dentro da lista L, pela ordem da lista completa T (funciona mesmo se o item atual saiu de L) */
+function vizinhos(L, T, chave, atual){
+  var ordem = {}; T.forEach(function(x, k){ ordem[chave(x)] = k; });
+  var eu = ordem[atual], i = -1, ant = null, prox = null;
+  L.forEach(function(x, j){
+    var o = ordem[chave(x)];
+    if(chave(x) === atual) i = j;
+    if(o < eu) ant = x;
+    if(o > eu && !prox) prox = x;
+  });
+  return { i: i, ant: ant, prox: prox };
+}
 function novo(tag, cls, html){ var e = document.createElement(tag); if(cls) e.className = cls; if(html != null) e.innerHTML = html; return e; }
 function botao(cls, html, fn){ var b = novo("button", cls, html); b.type = "button"; if(fn) b.addEventListener("click", fn); return b; }
 function semAcento(s){ return String(s||"").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase(); }
@@ -535,7 +547,7 @@ function ajustaAltura(){
   var topo = l.getBoundingClientRect().top + window.scrollY;
   l.style.height = Math.max(520, window.innerHeight - topo - 24) + "px";
 }
-window.addEventListener("resize", function(){ if(estado.tela === "agenda") ajustaAltura(); });
+window.addEventListener("resize", function(){ ajustaAltura(); });
 function resumoAgenda(){
   if(!window.moldura) return;
   var d = diasUnicos();
@@ -821,297 +833,723 @@ function abrirPacAgenda(agid, ctx){
   pinta();
 }
 
-/* ═══ 🔁 Renovações: tela ═══ */
-function desenharFila(){
-  var main = document.getElementById("gv-conteudo");
-  main.innerHTML = "";
-  var topo = document.createElement("div"); topo.className = "fila-topo";
-  topo.innerHTML =
-    '<h2>🔁 Renovações — reconferir no SGU</h2>'+
-    '<p>A Unimed renovou a validade (senha ou carteirinha) de uma guia que <b>já existe</b>? '+
-    'Digite o número: o robô abre a guia no SGU, confere as duas datas e atualiza o sistema sozinho. '+
-    'O resultado aparece aqui embaixo — leu, tira com o ✕.</p>'+
-    '<div class="fila-form">'+
-      '<input id="filaNum" inputmode="numeric" autocomplete="off" placeholder="Número da guia (só números)">'+
-      '<button class="gv-btn" id="filaEnviar">Mandar pro robô</button>'+
-    '</div>'+
-    '<div class="fila-aviso" id="filaAviso"></div>';
-  main.appendChild(topo);
-
-  var campo = topo.querySelector("#filaNum");
-  campo.value = estado.filaDraft || "";
-  campo.addEventListener("input", function(){ estado.filaDraft = campo.value; });
-  campo.addEventListener("keydown", function(ev){ if(ev.key === "Enter") enviarFila(); });
-  topo.querySelector("#filaEnviar").addEventListener("click", enviarFila);
-  if(estado.filaDraft){
-    campo.focus();
-    try{ campo.setSelectionRange(campo.value.length, campo.value.length); }catch(e){}
-  }
-
-  if(estado.fila === null){
-    var c = document.createElement("div"); c.className = "carregando";
-    c.textContent = "Buscando a fila no banco…"; main.appendChild(c); return;
-  }
-  if(estado.filaErro){
-    var er = document.createElement("div"); er.className = "erro";
-    er.innerHTML = 'Não consegui ler a fila <span class="mono">pre_guias_reconferir</span>.<br>' + escapa(estado.filaErro);
-    main.appendChild(er); return;
-  }
-  if(!estado.fila.length){
-    var v = document.createElement("div"); v.className = "vazio";
-    v.innerHTML = "<b>Nada na fila ✔</b>Renovou uma guia com a Unimed? Digite o número acima que o robô confere no SGU.";
-    main.appendChild(v); return;
-  }
-  var linhas = estado.fila.slice().sort(function(a, b){
-    var fa = FILA_FINAIS.indexOf(a.situacao) >= 0 ? 1 : 0;
-    var fb = FILA_FINAIS.indexOf(b.situacao) >= 0 ? 1 : 0;
+/* ═══ 🔁 Renovações — design novo: lista das guias mandadas ao robô + "Resultados do robô" ═══
+   Gravações iguais às de antes: enviarFila (POST) e dispensarFila (PATCH) em pre_guias_reconferir. */
+var FILA_TXT = {
+  aguardando:    { rot:"Na fila do robô", curto:"Na fila do robô", cor:"#636366", sub:"O robô ainda vai olhar", acao:"O robô abre a guia no SGU e confere as duas datas (senha e carteirinha). O resultado aparece na lista em instantes." },
+  conferindo:    { rot:"Robô no SGU agora…", curto:"Na fila do robô", cor:"#636366", sub:"O robô ainda vai olhar", acao:"O robô abre a guia no SGU e confere as duas datas (senha e carteirinha). O resultado aparece na lista em instantes." },
+  renovada:      { rot:"Validade atualizada", curto:"Atualizadas", cor:"#248A3D", sub:"Já atualizada no sistema: é só ler", acao:"O robô atualizou a validade no sistema. A Agenda do painel atualiza em poucos minutos. É só ler e tirar da tela." },
+  sem_mudanca:   { rot:"SGU ainda com a data velha", curto:"Data velha no SGU", cor:"#C93400", sub:"Esperar uns minutos e mandar de novo", acao:"O SGU ainda mostra a data antiga. Se a Unimed confirmou a renovação, aguarde alguns minutos e mande o número de novo." },
+  fora_do_banco: { rot:"Guia fora do nosso banco", curto:"Fora do banco", cor:"#636366", sub:"Conferir se o número foi digitado certo", acao:"Essa guia não está no nosso banco. Se for guia nova da Unimed, o coletor captura sozinho. Se for renovação de guia antiga, confira se o número foi digitado certo." },
+  erro:          { rot:"Erro ao conferir", curto:"Erro", cor:"#D70015", sub:"Mandar de novo", acao:"O robô não conseguiu conferir. Mande o número de novo." }
+};
+function filaTxt(s){ return FILA_TXT[s] || { rot:s, curto:s, cor:"#636366", sub:"", acao:"" }; }
+function filaChave(l){ return (l.situacao === "aguardando" || l.situacao === "conferindo") ? "fila" : l.situacao; }
+function filaFinal(l){ return FILA_FINAIS.indexOf(l.situacao) >= 0; }
+function dataBr(iso){ if(!iso) return "—"; var p = String(iso).slice(0,10).split("-"); return p[2] + "/" + p[1] + "/" + p[0]; }
+function diaRotulo(iso){
+  if(!iso) return "—";
+  var d = new Date(iso), h = new Date();
+  var a = new Date(d.getFullYear(), d.getMonth(), d.getDate()), b = new Date(h.getFullYear(), h.getMonth(), h.getDate());
+  var dif = Math.round((b - a) / 86400000);
+  if(dif === 0) return "Hoje";
+  if(dif === 1) return "Ontem";
+  var dias = ["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
+  return dias[d.getDay()] + ", " + String(d.getDate()).padStart(2,"0") + "/" + String(d.getMonth()+1).padStart(2,"0");
+}
+function horaDe(iso){ if(!iso) return ""; var d = new Date(iso); return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0"); }
+function filaOrdenada(){
+  return (estado.fila || []).slice().sort(function(a, b){
+    var fa = filaFinal(a) ? 1 : 0, fb = filaFinal(b) ? 1 : 0;
     if(fa !== fb) return fa - fb;
     return a.criado_em < b.criado_em ? 1 : -1;
   });
-  linhas.forEach(function(l){ main.appendChild(fcardDe(l)); });
 }
-function fcardDe(l){
-  var meta = SIT_FILA[l.situacao] || {rot:l.situacao, cls:"sinfo", g:"ginfo"};
-  var card = document.createElement("article");
-  card.className = "fcard " + meta.g;
-  var esq = document.createElement("div");
-  var quando = "por " + escapa(l.autora || "—") + " · " + fmtQuando(l.criado_em) +
-               (l.conferida_em ? " · conferida " + fmtQuando(l.conferida_em) : "");
-  esq.innerHTML =
-    '<div class="fnum">guia ' + escapa(l.numero_guia) +
-      (l.paciente ? ' · <span class="fpac">' + escapa(l.paciente) + '</span>' : '') + '</div>'+
-    '<div class="fmeta">' + quando + '</div>'+
-    '<div class="fsit ' + meta.cls + '"><span class="rotulo">' + escapa(meta.rot) + '</span></div>'+
-    (l.detalhe ? '<div class="fdet">' + escapa(l.detalhe) + '</div>' : '');
-  card.appendChild(esq);
-  var dir = document.createElement("div");
-  if(FILA_FINAIS.indexOf(l.situacao) >= 0){
-    var x = document.createElement("button");
-    x.className = "fx"; x.textContent = "✕"; x.title = "Li — pode tirar da tela";
-    x.setAttribute("aria-label","Dispensar este aviso");
-    x.onclick = function(){ dispensarFila(l.id); };
-    dir.appendChild(x);
-  } else {
-    dir.innerHTML = '<span class="fespera" title="O robô ainda vai olhar">⏳</span>';
+/* ordem da tela: filtra e agrupa por dia na ordem em que o dia aparece (as que ainda estão na fila vêm primeiro) */
+function filaEmOrdem(filtro){
+  var t = filaOrdenada();
+  if(filtro && filtro !== "todos") t = t.filter(function(l){ return filaChave(l) === filtro; });
+  var ordemDias = [], porDia = {};
+  t.forEach(function(l){ var k = diaRotulo(l.criado_em); if(!porDia[k]){ porDia[k] = []; ordemDias.push(k); } porDia[k].push(l); });
+  var out = [];
+  ordemDias.forEach(function(k){ out = out.concat(porDia[k]); });
+  return out;
+}
+function filaDetalhe(l){
+  if(l.situacao === "fora_do_banco") return "Essa guia não está no nosso banco. Se for guia nova da Unimed, o coletor captura sozinho; se for renovação de guia antiga, confira se o número foi digitado certo.";
+  if(l.situacao === "sem_mudanca") return "O SGU ainda mostra a data antiga: senha até " + dataBr(l.senha_depois) + " · carteirinha até " + dataBr(l.cart_depois) + ". Se a Unimed confirmou a renovação, aguarde alguns minutos e mande de novo.";
+  if(l.situacao === "renovada"){
+    var f = function(a, b){ return a === b ? "sem mudança (" + dataBr(b) + ")" : dataBr(a) + " → " + dataBr(b); };
+    return "Renovou! Senha: " + f(l.senha_antes, l.senha_depois) + " · carteirinha: " + f(l.cart_antes, l.cart_depois) + ". A Agenda do painel atualiza em poucos minutos.";
   }
-  card.appendChild(dir);
-  return card;
+  if(l.situacao === "conferindo") return "O robô está com a guia aberta no SGU, conferindo as duas datas.";
+  if(l.situacao === "erro") return "O robô não conseguiu conferir esta guia.";
+  return "O robô ainda vai olhar esta guia.";
+}
+function filaCampo(){
+  /* número da guia + "Mandar pro robô" no cabeçalho (criado uma vez por visita, para não perder o que está sendo digitado) */
+  var ac = window.moldura && moldura.acoesDe("renovacoes");
+  if(!ac || ac.querySelector("#filaNum")) return;
+  var box = novo("div", "fila-envio");
+  box.innerHTML =
+    '<div class="fila-linha"><label class="busca" for="filaNum">' + ico("M9.5 4 7.5 20M16.5 4l-2 16M4.5 9h15M3.5 15h15", 16, 2) +
+    '<input id="filaNum" type="text" inputmode="numeric" autocomplete="off" placeholder="Número da guia (só números)" aria-label="Número da guia"></label>' +
+    '<button type="button" class="btn btn-p" id="filaEnviar">Mandar pro robô</button></div>' +
+    '<span class="fila-aviso2" id="filaAviso" role="status"></span>';
+  ac.appendChild(box);
+  var campo = box.querySelector("#filaNum");
+  campo.value = estado.filaDraft || "";
+  campo.addEventListener("input", function(){ estado.filaDraft = campo.value; });
+  campo.addEventListener("keydown", function(ev){ if(ev.key === "Enter") enviarFila(); });
+  box.querySelector("#filaEnviar").addEventListener("click", enviarFila);
+}
+function desenharFila(){
+  var main = document.getElementById("gv-conteudo");
+  filaCampo();
+  var antes = main.querySelector(".lista-corpo");
+  var rolagem = antes && !estado._filaTopo ? antes.scrollTop : 0;
+  estado._filaTopo = false;
+  main.innerHTML = "";
+  var todas = filaOrdenada();
+  var cont = { todos: todas.length, renovada:0, sem_mudanca:0, fora_do_banco:0, erro:0, fila:0 };
+  todas.forEach(function(l){ var k = filaChave(l); cont[k] = (cont[k] || 0) + 1; });
+  var nLer = cont.renovada + cont.sem_mudanca + cont.fora_do_banco + cont.erro;
+  if(window.moldura) moldura.resumo("renovacoes", estado.fila === null ? "" :
+    (nLer === 1 ? "1 resultado para ler" : nLer + " resultados para ler") + " · " +
+    (cont.fila === 0 ? "nenhuma guia na fila do robô" : (cont.fila === 1 ? "1 guia na fila do robô" : cont.fila + " guias na fila do robô")));
+  var filtro = estado.filaFiltro || "todos";
+  var vis = filaEmOrdem(filtro);
+
+  var wrap = novo("div", "duas-col");
+  var sec = novo("section", "lista alta"); sec.setAttribute("aria-label", "Guias mandadas ao robô");
+  var topo = novo("div", "lista-topo");
+  var seg = novo("div", "seg"); seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "Mostrar");
+  var defs = [["todos","Todos","#AEAEB2"],["renovada",FILA_TXT.renovada.curto,FILA_TXT.renovada.cor],["sem_mudanca",FILA_TXT.sem_mudanca.curto,FILA_TXT.sem_mudanca.cor],
+              ["fora_do_banco",FILA_TXT.fora_do_banco.curto,FILA_TXT.fora_do_banco.cor]];
+  if(cont.erro) defs.push(["erro","Erro",FILA_TXT.erro.cor]);
+  defs.push(["fila","Na fila do robô","#D2D2D7"]);
+  defs.forEach(function(d){
+    var on = filtro === d[0];
+    var b = botao(on ? "on" : "", '<span class="q" style="background:' + d[2] + '"></span>' + escapa(d[1]) + ' <span class="n">' + (cont[d[0]] || 0) + '</span>',
+      function(){ estado.filaFiltro = d[0]; estado._filaTopo = true; desenharFila(); });
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+    seg.appendChild(b);
+  });
+  topo.appendChild(seg);
+  topo.appendChild(novo("span", "mostrando", vis.length === 1 ? "1 guia" : vis.length + " guias"));
+  sec.appendChild(topo);
+  var corpo = novo("div", "lista-corpo");
+  if(estado.fila === null) corpo.appendChild(novo("div", "lista-vazio", "Buscando a fila no banco…"));
+  else if(estado.filaErro) corpo.appendChild(novo("div", "lista-vazio erro", "Não consegui ler a fila de renovações. " + escapa(estado.filaErro)));
+  else if(!vis.length) corpo.appendChild(novo("div", "lista-vazio", '<b class="ok">Nada na fila</b><br>Renovou uma guia com a Unimed? Digite o número lá em cima que o robô confere no SGU.'));
+  var porDia = {};
+  vis.forEach(function(l){ var k = diaRotulo(l.criado_em); (porDia[k] = porDia[k] || []).push(l); });
+  var dia = null;
+  vis.forEach(function(l){
+    var k = diaRotulo(l.criado_em);
+    if(dia !== k){ dia = k; corpo.appendChild(novo("div", "dia-cab", '<b>' + escapa(k) + '</b><span>' + (porDia[k].length === 1 ? "1 guia" : porDia[k].length + " guias") + '</span>')); }
+    var t = filaTxt(l.situacao);
+    var b = botao("linha" + (estado._filaAberta === l.id ? " aberta" : ""),
+      '<span class="h">' + escapa(horaDe(l.criado_em)) + '</span>' +
+      '<span class="q"><span class="nm">Guia ' + escapa(l.numero_guia) + '</span><span class="mt">' + escapa((l.paciente || "Paciente não identificado") + " · por " + (l.autora || "—")) + '</span></span>' +
+      '<span class="dir"><span class="tag" style="color:' + t.cor + '">' + escapa(t.rot) + '</span></span>',
+      function(){ abrirFilaItem(l.id, filtro); });
+    b.setAttribute("aria-haspopup", "dialog"); b.setAttribute("data-fila", l.id);
+    corpo.appendChild(b);
+  });
+  sec.appendChild(corpo);
+  wrap.appendChild(sec);
+
+  var lado = novo("div", "lado");
+  var res = novo("section", "painel"); res.setAttribute("aria-labelledby", "res-titulo");
+  res.appendChild(novo("div", "painel-cab", '<h2 id="res-titulo">Resultados do robô</h2><span>' + (nLer === 1 ? "1 para ler" : nLer + " para ler") + '</span>'));
+  ["fila","renovada","sem_mudanca","fora_do_banco","erro"].forEach(function(k){
+    if((k === "fila" || k === "erro") && !cont[k]) return;
+    var t = k === "fila" ? FILA_TXT.aguardando : filaTxt(k);
+    var b = botao("cat", '<span class="q" style="background:' + t.cor + '"></span><span class="t"><b>' + escapa(k === "fila" ? "Na fila do robô" : t.rot) + '</b><small>' + escapa(t.sub) + '</small></span>' +
+      '<span class="n">' + (cont[k] || 0) + '</span>' + ico(IC.dir, 16, 2), function(){ abrirFilaCat(k); });
+    b.setAttribute("aria-haspopup", "dialog");
+    res.appendChild(b);
+  });
+  lado.appendChild(res);
+  lado.appendChild(novo("section", "painel nota-lado",
+    '<h2>Como funciona</h2><p>A Unimed renovou a validade (senha ou carteirinha) de uma guia que <b>já existe</b>? Digite o número lá em cima: o robô abre a guia no SGU, confere as duas datas e atualiza o sistema sozinho.</p>' +
+    '<p class="cinza">O resultado aparece na lista. Leu, tire da tela.</p>'));
+  wrap.appendChild(lado);
+  main.appendChild(wrap);
+  ajustaAltura();
+  var c2 = main.querySelector(".lista-corpo"); if(c2) c2.scrollTop = rolagem;
+}
+function abrirFilaCat(k){
+  if(!window.moldura) return;
+  var P = moldura.pop({ largura:"620px", titulo:"Resultado do robô" });
+  var t = k === "fila" ? FILA_TXT.aguardando : filaTxt(k);
+  var lista = filaOrdenada().filter(function(l){ return filaChave(l) === k; });
+  P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-alerta" style="color:' + t.cor + '">' + (lista.length === 1 ? "1 guia" : lista.length + " guias") + '</span>' +
+    '<h2>' + escapa(k === "fila" ? "Na fila do robô" : t.rot) + '</h2>'));
+  P.corpo.appendChild(novo("div", "pp-caixa", '<span class="pp-rot">O que fazer</span><span class="pp-txt">' + escapa(t.acao) + '</span>'));
+  var ul = novo("div", "pp-lista");
+  lista.forEach(function(l){
+    ul.appendChild(botao("pp-linha", '<span class="w">' + escapa(fmtQuando(l.criado_em)) + '</span><span class="q"><b>Guia ' + escapa(l.numero_guia) + '</b><small>' +
+      escapa((l.paciente || "Paciente não identificado") + " · por " + (l.autora || "—")) + '</small></span>' + ico(IC.dir, 14, 2),
+      function(){ estado.filaFiltro = k; desenharFila(); abrirFilaItem(l.id, k); }));
+  });
+  if(!lista.length) ul.appendChild(novo("div", "lista-vazio", "Nenhuma guia aqui agora."));
+  P.corpo.appendChild(ul);
+  P.rodape.hidden = false; P.rodape.classList.add("fim");
+  P.rodape.appendChild(botao("btn btn-s", "Fechar", function(){ P.fechar(); }));
+  P.rodape.appendChild(botao("btn btn-p", "Ver só estes na lista", function(){ P.fechar(); estado.filaFiltro = k; estado._filaTopo = true; desenharFila(); }));
+}
+function abrirFilaItem(id, filtro){
+  if(!window.moldura) return;
+  var atualId = id;
+  var P = moldura.pop({ largura:"620px", titulo:"Guia mandada ao robô", aoFechar:function(){ estado._filaAberta = null; marca(); } });
+  function lista(){ return filaEmOrdem(filtro); }
+  function marca(){
+    document.querySelectorAll("#gv-conteudo .linha.aberta").forEach(function(x){ x.classList.remove("aberta"); });
+    if(estado._filaAberta){ var r = document.querySelector('#gv-conteudo .linha[data-fila="' + estado._filaAberta + '"]'); if(r) r.classList.add("aberta"); }
+  }
+  function pinta(){
+    var L = lista();
+    var i = L.findIndex(function(x){ return x.id === atualId; });
+    if(i < 0){ if(!L.length){ P.fechar(); return; } i = 0; atualId = L[0].id; }
+    var l = L[i], t = filaTxt(l.situacao);
+    estado._filaAberta = l.id; marca();
+    P.corpo.innerHTML = "";
+    P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-quando">Mandada por ' + escapa(l.autora || "—") + " · " + escapa(fmtQuando(l.criado_em).replace(" ", " às ")) + '</span>' +
+      '<h2>Guia ' + escapa(l.numero_guia) + '</h2><span class="pp-l1"' + (l.paciente ? '' : ' style="color:var(--cinza)"') + '>' + escapa(l.paciente || "Paciente não identificado") + '</span>'));
+    var cx = novo("div", "pp-caixa", '<span class="pp-tag" style="color:' + t.cor + '">' + escapa(t.rot) + '</span><span class="pp-txt">' + escapa(filaDetalhe(l)) + '</span>');
+    if(l.detalhe) cx.appendChild(novo("span", "pp-txt cinza", escapa(l.detalhe)));
+    P.corpo.appendChild(cx);
+    if(l.situacao === "renovada" || l.situacao === "sem_mudanca"){
+      var g = novo("div", "pp-datas", '<span></span><span class="c">Antes</span><span class="c">No SGU agora</span>');
+      [["Senha", l.senha_antes, l.senha_depois], ["Carteirinha", l.cart_antes, l.cart_depois]].forEach(function(d){
+        var mudou = d[1] !== d[2];
+        g.innerHTML += '<b>' + d[0] + '</b><span class="c">' + dataBr(d[1]) + '</span><span' + (mudou ? ' class="mudou"' : ' class="c"') + '>' + (mudou ? dataBr(d[2]) : "sem mudança") + '</span>';
+      });
+      P.corpo.appendChild(g);
+    }
+    P.corpo.appendChild(novo("span", "pp-l2", l.conferida_em ? "Conferida no SGU em " + escapa(fmtQuando(l.conferida_em).replace(" ", " às ")) : "Ainda não conferida"));
+    P.rodape.hidden = false; P.rodape.innerHTML = "";
+    var ant = L[i-1], prox = L[i+1];
+    var bA = botao("btn btn-s", ico(IC.esq, 16, 2.2) + "Anterior", function(){ if(ant){ atualId = ant.id; pinta(); } }); bA.disabled = !ant;
+    var bT = botao("btn btn-s", "Li, tirar da tela", function(){
+      if(!filaFinal(l)) return;
+      bT.disabled = true; bT.textContent = "Tirando…";
+      var seguinte = prox || ant;
+      dispensarFila(l.id);
+      setTimeout(function(){ if(!P.aberto) return; if(seguinte){ atualId = seguinte.id; pinta(); } else P.fechar(); }, 450);
+    });
+    bT.disabled = !filaFinal(l); bT.title = filaFinal(l) ? "Li — pode tirar da tela" : "O robô ainda vai olhar";
+    var bP = botao("btn btn-p", "Próxima" + ico(IC.dir, 16, 2.2), function(){ if(prox){ atualId = prox.id; pinta(); } }); bP.disabled = !prox;
+    P.rodape.appendChild(bA);
+    P.rodape.appendChild(novo("span", "pop-pos", (i + 1) + " de " + L.length));
+    var dir = novo("span", "pop-dir"); dir.appendChild(bT); dir.appendChild(bP);
+    P.rodape.appendChild(dir);
+  }
+  pinta();
 }
 
-/* ═══ 🧾 Cadastros: tela ═══ */
-function desenharCad(){
-  var main = document.getElementById("gv-conteudo");
-  main.innerHTML = "";
-  var topo = document.createElement("div"); topo.className = "oc-topo";
-  topo.innerHTML =
-    '<h2>🧾 Cadastros com problema</h2>'+
-    '<p>Um card por <b>paciente</b>: abra a ficha dele no Feegow e resolva o que está listado. '+
-    'O robô recompara com o espelho da Unimed a cada 15 minutos — <b>corrigiu? o card some sozinho na próxima rodada.</b> '+
-    'Marque o que você fez pra ninguém conferir a mesma coisa duas vezes.</p>'+
-    '<p>⚠️ <b>Card vermelho-escuro com aviso de dado inválido: NUNCA junte as fichas.</b> '+
-    'CPF de zeros ou carteirinha "0"/"01" agrupam gente que não tem nada a ver uma com a outra — '+
-    'ali o conserto é buscar o número certo, não mesclar.</p>';
-  main.appendChild(topo);
-  if(estado.cad === null){
-    var c = document.createElement("div"); c.className = "carregando";
-    c.textContent = "Buscando os alertas de cadastro…"; main.appendChild(c); return;
-  }
-  if(estado.cadErro){
-    var er = document.createElement("div"); er.className = "erro";
-    er.innerHTML = 'Não consegui ler <span class="mono">cad_alertas</span>.<br>' + escapa(estado.cadErro);
-    main.appendChild(er); return;
-  }
-  if(!estado.cad.length){
-    var v = document.createElement("div"); v.className = "vazio";
-    v.innerHTML = "<b>Nenhum problema de cadastro ✔</b>Carteirinhas, convênios e duplicidades estão batendo com o espelho da Unimed.";
-    main.appendChild(v); return;
-  }
-  estado.cad.forEach(function(cc){ main.appendChild(ccardDe(cc)); });
+/* ═══ 🧾 Cadastros — design novo: uma linha por paciente + "Problemas" ═══
+   Gravação igual à de antes: salvarOcNota("cadastro", ficha, {tratamento, nota}) → oc_notas. */
+var CAD_TXT = {
+  convenio_invertido:   { curto:"Convênio × carteirinha", titulo:"Convênio × carteirinha invertidos", sub:"Corrigir o convênio no Feegow",
+    acao:"A carteirinha está no convênio errado: o número diz Unimed Local (começa com 0178) e o cadastro diz Intercâmbio, ou o contrário. Corrigir o convênio no cadastro do Feegow." },
+  paciente_duplicado:   { curto:"Paciente duplicado", titulo:"Paciente duplicado", sub:"Conferir e juntar as fichas",
+    acao:"O mesmo CPF aparece em mais de uma ficha. Conferir e juntar os cadastros: se os nomes forem diferentes, o CPF é que está errado em uma delas. CPF inválido (de zeros) nunca se junta." },
+  carteirinha_repetida: { curto:"Carteirinha repetida", titulo:"Carteirinha repetida", sub:"Juntar, ou corrigir o número",
+    acao:"A mesma carteirinha está em mais de uma ficha e a guia vai cair no paciente errado. Juntar os cadastros, ou corrigir o número se forem pessoas diferentes." }
+};
+var CAD_LIXO = { titulo:"Dado inválido: nunca juntar", sub:"CPF de zeros ou carteirinha 0 e 01 agrupam gente diferente",
+  acao:"CPF de zeros ou carteirinha “0” e “01” agrupam gente que não tem nada a ver uma com a outra. Aqui o conserto é buscar o número certo e preencher. Nunca junte essas fichas." };
+var TRAT_CAD_ROT = { pendente:"Pendente", corrigido:"Corrigido", estava_certo:"Estava certo", sem_solucao:"Sem solução" };
+var IC_ALERTA = "M12 3.5 21.5 20h-19zM12 10v4.5M12 17.2h.01";
+function cadTxt(t){ return CAD_TXT[t] || { curto:t, titulo:t, sub:"", acao:"" }; }
+function cadTipos(c){ var v = {}, out = []; c.problemas.forEach(function(p){ if(!v[p.tipo]){ v[p.tipo] = 1; out.push(p.tipo); } }); return out; }
+function futTxt(n){ return !n ? "sem consulta marcada" : (n === 1 ? "1 consulta marcada" : n + " consultas marcadas"); }
+function campoBusca(dest, id, ph, valor, aoDigitar){
+  /* busca no cabeçalho, criada uma vez por visita */
+  var ac = window.moldura && moldura.acoesDe(dest);
+  if(!ac || ac.querySelector("#" + id)) return;
+  var l = novo("label", "busca", ico("M4.5 11a6.5 6.5 0 1 0 13 0 6.5 6.5 0 1 0-13 0M16 16l4 4", 16, 2));
+  var i = novo("input"); i.id = id; i.type = "search"; i.placeholder = ph; i.setAttribute("aria-label", ph); i.autocomplete = "off"; i.value = valor || "";
+  i.addEventListener("input", function(){ aoDigitar(i.value); });
+  l.appendChild(i); ac.appendChild(l);
 }
-function textoProblema(p){
-  var nomes = p.outros.map(function(x){ return escapa(x.nome) + ' <span class="mono">#' + escapa(x.id) + '</span>'; }).join(" · ");
-  if(p.tipo === "convenio_invertido") return escapa(p.detalhe || "");
+function textoProblema2(p){
+  var outros = p.outros || [];
+  var lista = outros.slice(0, 6).map(function(x){ return escapa(x.nome) + " #" + escapa(x.id); }).join(" · ");
+  if(outros.length > 6) lista += " e mais " + (outros.length - 6);
+  if(!lista) lista = "—";
+  if(p.tipo === "convenio_invertido"){
+    var d = escapa(p.detalhe || "");
+    return d.replace("Corrigir o convênio no cadastro do Feegow.", "<b>Corrigir o convênio no cadastro do Feegow.</b>");
+  }
   if(p.tipo === "carteirinha_repetida"){
-    if(p.lixo) return '<b>Carteirinha inválida</b> <span class="mono">' + escapa(p.carteirinha || "—") + '</span> — está assim em ' +
-      p.no_grupo + ' fichas diferentes. <b>Buscar o número real na Unimed e preencher.</b> ' +
-      '🚫 Não juntar com: ' + (nomes || "—") + '.';
-    return 'Mesma carteirinha <span class="mono">' + escapa(p.carteirinha || "—") + '</span> em ' +
-      (p.outros.length === 1 ? 'outra ficha' : 'outras ' + p.outros.length + ' fichas') + ': ' + nomes +
-      '. <b>Juntar os cadastros</b> — ou corrigir o número, se forem pessoas diferentes.';
+    if(p.lixo) return '<b>Carteirinha inválida</b> “' + escapa(p.carteirinha || "—") + '”: está assim em ' + p.no_grupo + ' fichas diferentes. <b>Buscar o número real na Unimed e preencher.</b> Não juntar com: ' + lista + '.';
+    return 'Mesma carteirinha <b>' + escapa(p.carteirinha || "—") + '</b> em ' + (outros.length === 1 ? 'outra ficha' : 'outras ' + outros.length + ' fichas') + ': ' + lista +
+           '. <b>Juntar os cadastros</b>, ou corrigir o número se forem pessoas diferentes.';
   }
   if(p.tipo === "paciente_duplicado"){
-    if(p.lixo) return '<b>CPF inválido</b> no cadastro — o mesmo número está em ' + p.no_grupo + ' fichas. ' +
-      '<b>Corrigir o CPF do paciente.</b> 🚫 Não juntar com as outras fichas: são pessoas diferentes.';
-    if(String(p.oc_ref || "").indexOf("nn:") === 0)
-      return 'Mesmo nome e nascimento de: ' + nomes + '. <b>Conferir e juntar</b> — o agendamento e a guia podem estar caindo em fichas diferentes.';
-    return 'Mesmo CPF de: ' + nomes + '. <b>Conferir e juntar</b> — se os nomes forem diferentes, o CPF é que está errado em uma delas.';
+    if(p.lixo) return '<b>CPF inválido</b> no cadastro: o mesmo número está em ' + p.no_grupo + ' fichas. <b>Corrigir o CPF do paciente.</b> Não juntar com as outras fichas: são pessoas diferentes.';
+    if(String(p.oc_ref || "").indexOf("nn:") === 0) return 'Mesmo nome e nascimento de: ' + lista + '. <b>Conferir e juntar</b>: o agendamento e a guia podem estar caindo em fichas diferentes.';
+    return 'Mesmo CPF de: ' + lista + '. <b>Conferir e juntar</b>: se os nomes forem diferentes, o CPF é que está errado em uma delas.';
   }
   return escapa(p.detalhe || "");
 }
-function ccardDe(c){
-  var card = document.createElement("article");
-  card.className = "fcard " + (cadAberto(c) ? "g0" : "g2");
-  var esq = document.createElement("div");
-  var tags = "";
-  if(c.futuras > 0) tags += '<span class="tagx fut">'+c.futuras+' futura'+(c.futuras===1?'':'s')+'</span>';
-  if(c.problemas.length > 1) tags += '<span class="tagx aguarda">'+c.problemas.length+' problemas</span>';
-  if(c.lixo) tags += '<span class="tagx reinc" title="Dado inválido no cadastro — não juntar fichas">não juntar</span>';
-  if(c.reincidente) tags += '<span class="tagx reinc" title="Marcou corrigido faz tempo e o problema continua no espelho">reincidente</span>';
-
-  var itens = c.problemas.map(function(p){
-    return '<div style="margin-top:7px">'+
-             '<span class="rotulo" style="background:var(--critico-fundo);color:var(--critico);display:inline-block;'+
-             'border-radius:7px;font:700 12px \'Public Sans\';padding:3px 9px">'+ escapa(CAD_TIT[p.tipo] || p.tipo) +'</span>'+
-             '<div class="fdet">'+ textoProblema(p) +'</div>'+
-           '</div>';
-  }).join("");
-
-  esq.innerHTML =
-    '<div class="fnum"><span class="fpac">' + escapa(c.paciente || "—") + '</span> · ficha ' +
-      '<span class="mono">#' + escapa(c.paciente_id) + '</span>' + tags + '</div>' + itens;
-
-  var acoes = document.createElement("div"); acoes.className = "acoes";
-  var sel = document.createElement("select");
-  sel.setAttribute("aria-label","O que você fez");
-  TRAT_CAD.forEach(function(t){
-    var o = document.createElement("option"); o.value = t[0]; o.textContent = t[1];
-    if((c.tratamento||"pendente")===t[0]) o.selected = true;
-    sel.appendChild(o);
+function cadVisiveis(){
+  var q = semAcento(estado.cadBusca || "").trim();
+  var f = estado.cadFiltro || "todos";
+  return (estado.cad || []).filter(function(c){
+    if(q && semAcento(c.paciente + " " + c.paciente_id).indexOf(q) < 0) return false;
+    if(f !== "todos" && cadTipos(c).indexOf(f) < 0) return false;
+    if(estado.cadLixo && !c.lixo) return false;
+    return true;
   });
-  sel.className = "trat-"+(c.tratamento||"pendente");
-  var nota = document.createElement("input");
-  nota.className = "nota"; nota.placeholder = "Anotar (o que corrigiu, com quem falou…)";
-  nota.value = c.nota || "";
-  var salvo = document.createElement("span"); salvo.className = "salvo"; salvo.textContent = "salvo ✔";
-  var at = document.createElement("span"); at.className = "autora-tag";
-  if(c.autora) at.textContent = "por "+c.autora;
-  function persistir(){
-    salvo.textContent = "salvando…"; salvo.classList.add("mostra");
-    salvarOcNota("cadastro", c.oc_ref, { tratamento: sel.value, nota: nota.value.trim() }, function(okp){
-      salvo.textContent = okp ? "salvo ✔" : "erro ao salvar ✖";
-      salvo.style.color = okp ? "var(--ok)" : "var(--critico)";
-      if(okp){
-        c.tratamento = sel.value; c.nota = nota.value.trim(); c.autora = autora();
-        setTimeout(function(){ salvo.classList.remove("mostra"); }, 1600);
-        badgesTopo(); desenharCad();
-      }
+}
+function desenharCad(){
+  var main = document.getElementById("gv-conteudo");
+  campoBusca("cadastros", "cadBusca", "Buscar paciente ou ficha", estado.cadBusca, function(v){ estado.cadBusca = v; estado.cadLimite = 150; estado._cadTopo = true; desenharCad(); });
+  var antes = main.querySelector(".lista-corpo");
+  var rolagem = antes && !estado._cadTopo ? antes.scrollTop : 0;
+  estado._cadTopo = false;
+  main.innerHTML = "";
+  var todas = estado.cad || [];
+  var abertos = todas.filter(cadAberto).length;
+  var comFut = todas.filter(function(c){ return c.futuras > 0; }).length;
+  if(window.moldura) moldura.resumo("cadastros", estado.cad === null ? "" :
+    (abertos === 1 ? "1 ficha com problema sem resposta" : abertos + " fichas com problema sem resposta") + " · " + comFut + " com consulta marcada · o robô recompara a cada 15 minutos");
+  var q = semAcento(estado.cadBusca || "").trim();
+  var base = todas.filter(function(c){ return !q || semAcento(c.paciente + " " + c.paciente_id).indexOf(q) >= 0; });
+  var cont = { todos: base.length, convenio_invertido:0, paciente_duplicado:0, carteirinha_repetida:0 };
+  base.forEach(function(c){ cadTipos(c).forEach(function(t){ cont[t] = (cont[t] || 0) + 1; }); });
+  var vis = cadVisiveis();
+  var filtro = estado.cadFiltro || "todos";
+
+  var wrap = novo("div", "duas-col");
+  var sec = novo("section", "lista alta"); sec.setAttribute("aria-label", "Fichas com problema");
+  var topo = novo("div", "lista-topo"), esq = novo("div", "lista-topo-esq");
+  var seg = novo("div", "seg"); seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "Mostrar");
+  [["todos","Todos"],["convenio_invertido",CAD_TXT.convenio_invertido.curto],["paciente_duplicado",CAD_TXT.paciente_duplicado.curto],["carteirinha_repetida",CAD_TXT.carteirinha_repetida.curto]].forEach(function(d){
+    var on = filtro === d[0];
+    var b = botao(on ? "on" : "", escapa(d[1]) + ' <span class="n">' + (cont[d[0]] || 0) + '</span>', function(){ estado.cadFiltro = d[0]; estado.cadLimite = 150; estado._cadTopo = true; desenharCad(); });
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+    seg.appendChild(b);
+  });
+  esq.appendChild(seg);
+  if(estado.cadLixo) esq.appendChild(botao("so-tipo", "Só dado inválido " + ico(IC.x, 12, 2.6), function(){ estado.cadLixo = false; estado._cadTopo = true; desenharCad(); }));
+  topo.appendChild(esq);
+  topo.appendChild(novo("span", "mostrando", vis.length === 1 ? "1 ficha" : vis.length + " fichas"));
+  sec.appendChild(topo);
+  var corpo = novo("div", "lista-corpo");
+  if(estado.cad === null) corpo.appendChild(novo("div", "lista-vazio", "Buscando os alertas de cadastro…"));
+  else if(estado.cadErro) corpo.appendChild(novo("div", "lista-vazio erro", "Não consegui ler os alertas de cadastro. " + escapa(estado.cadErro)));
+  else if(!vis.length) corpo.appendChild(novo("div", "lista-vazio", q ? "Nenhuma ficha com esse nome." :
+    '<b class="ok">Nenhum problema de cadastro</b><br>Carteirinhas, convênios e duplicidades estão batendo com o espelho da Unimed.'));
+  var lim = estado.cadLimite || 150;
+  var mostra = vis.slice(0, lim);
+  var nCom = vis.filter(function(c){ return c.futuras > 0; }).length, nSem = vis.length - nCom;
+  var grupo = null;
+  mostra.forEach(function(c){
+    var g = c.futuras > 0 ? "com" : "sem";
+    if(g !== grupo){
+      grupo = g;
+      var n = g === "com" ? nCom : nSem;
+      corpo.appendChild(novo("div", "dia-cab", '<b>' + (g === "com" ? "Com consulta marcada" : "Sem consulta marcada") + '</b><span>' + (n === 1 ? "1 ficha" : n + " fichas") + '</span>'));
+    }
+    var tipos = cadTipos(c), t = c.tratamento || "pendente";
+    var rot = cadTxt(tipos[0]).curto + (tipos.length > 1 ? " +" + (tipos.length - 1) : "");
+    var sub = t !== "pendente" ? (TRAT_CAD_ROT[t] || t) : (c.reincidente ? "Reincidente" : (c.lixo ? "Não juntar" : ""));
+    var subCor = t === "corrigido" ? "#248A3D" : (t !== "pendente" ? "#636366" : "#D70015");
+    var b = botao("linha" + (estado._cadAberta === c.paciente_id ? " aberta" : ""),
+      '<span class="q"><span class="nm">' + escapa(c.paciente || "—") + '</span><span class="mt">Ficha #' + escapa(c.paciente_id) + " · " + futTxt(c.futuras) + '</span></span>' +
+      '<span class="dir"><span class="tag" style="color:' + (t === "pendente" ? "#D70015" : "#AEAEB2") + '">' + escapa(rot) + '</span>' +
+      (sub ? '<span class="tr" style="color:' + subCor + ';font-weight:600">' + escapa(sub) + '</span>' : '') + '</span>',
+      function(){ abrirCadItem(c.paciente_id); });
+    b.setAttribute("aria-haspopup", "dialog"); b.setAttribute("data-cad", c.paciente_id);
+    corpo.appendChild(b);
+  });
+  if(vis.length > lim){
+    var m = novo("div", "lista-mais");
+    m.appendChild(botao("btn btn-s", "Mostrar mais " + Math.min(150, vis.length - lim) + " de " + (vis.length - lim), function(){ estado.cadLimite = lim + 150; desenharCad(); }));
+    corpo.appendChild(m);
+  }
+  sec.appendChild(corpo);
+  wrap.appendChild(sec);
+
+  var lado = novo("div", "lado");
+  var pr = novo("section", "painel"); pr.setAttribute("aria-labelledby", "cad-prob");
+  pr.appendChild(novo("div", "painel-cab", '<h2 id="cad-prob">Problemas</h2><span>' + (todas.length === 1 ? "1 ficha" : todas.length + " fichas") + '</span>'));
+  var contT = { convenio_invertido:0, paciente_duplicado:0, carteirinha_repetida:0 };
+  todas.forEach(function(c){ cadTipos(c).forEach(function(t){ contT[t] = (contT[t] || 0) + 1; }); });
+  ["convenio_invertido","paciente_duplicado","carteirinha_repetida"].forEach(function(k){
+    var T = cadTxt(k);
+    var b = botao("cat", '<span class="q" style="background:#D70015"></span><span class="t"><b>' + escapa(T.titulo) + '</b><small>' + escapa(T.sub) + '</small></span><span class="n">' + contT[k] + '</span>' + ico(IC.dir, 16, 2),
+      function(){ abrirCadCat(k); });
+    b.setAttribute("aria-haspopup", "dialog");
+    pr.appendChild(b);
+  });
+  var nLixo = todas.filter(function(c){ return c.lixo; }).length;
+  if(nLixo){
+    var bl = botao("cat cat-alerta", '<span class="alerta-ic">' + ico(IC_ALERTA, 16, 2) + '</span><span class="t"><b>' + escapa(CAD_LIXO.titulo) + '</b><small>' + escapa(CAD_LIXO.sub) + '</small></span><span class="n">' + nLixo + '</span>' + ico(IC.dir, 16, 2),
+      function(){ abrirCadCat("lixo"); });
+    bl.setAttribute("aria-haspopup", "dialog");
+    pr.appendChild(bl);
+  }
+  lado.appendChild(pr);
+  lado.appendChild(novo("section", "painel nota-lado",
+    '<h2>Como funciona</h2><p>Uma linha por <b>paciente</b>: abra a ficha no Feegow e resolva o que está listado.</p>' +
+    '<p>O robô recompara com o espelho da Unimed a cada 15 minutos. <b>Corrigiu? A linha some sozinha na próxima rodada.</b></p>' +
+    '<p class="cinza">Marque o que você fez, para ninguém conferir a mesma coisa duas vezes.</p>'));
+  wrap.appendChild(lado);
+  main.appendChild(wrap);
+  ajustaAltura();
+  var c2 = main.querySelector(".lista-corpo"); if(c2) c2.scrollTop = rolagem;
+}
+function abrirCadCat(k){
+  if(!window.moldura) return;
+  var ehLixo = k === "lixo";
+  var T = ehLixo ? CAD_LIXO : cadTxt(k);
+  var lista = (estado.cad || []).filter(function(c){ return ehLixo ? c.lixo : cadTipos(c).indexOf(k) >= 0; });
+  var P = moldura.pop({ largura:"640px", titulo:"Problemas de cadastro" });
+  P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-alerta">' + (lista.length === 1 ? "1 ficha" : lista.length + " fichas") + '</span><h2>' + escapa(ehLixo ? T.titulo : T.titulo) + '</h2>'));
+  P.corpo.appendChild(novo("div", "pp-caixa", '<span class="pp-rot">O que fazer</span><span class="pp-txt">' + escapa(T.acao) + '</span>'));
+  var ul = novo("div", "pp-lista");
+  lista.slice(0, 300).forEach(function(c){
+    ul.appendChild(botao("pp-linha", '<span class="q"><b>' + escapa(c.paciente || "—") + '</b><small>Ficha #' + escapa(c.paciente_id) + " · " + futTxt(c.futuras) + '</small></span>' + ico(IC.dir, 14, 2),
+      function(){
+        estado.cadFiltro = ehLixo ? "todos" : k; estado.cadLixo = ehLixo; estado.cadBusca = "";
+        var inp = document.getElementById("cadBusca"); if(inp) inp.value = "";
+        var vis = cadVisiveis(); var pos = vis.indexOf(c);
+        estado.cadLimite = Math.max(150, pos + 2); estado._cadTopo = true;
+        desenharCad(); abrirCadItem(c.paciente_id);
+      }));
+  });
+  P.corpo.appendChild(ul);
+  P.rodape.hidden = false; P.rodape.classList.add("fim");
+  P.rodape.appendChild(botao("btn btn-s", "Fechar", function(){ P.fechar(); }));
+  P.rodape.appendChild(botao("btn btn-p", "Ver só estes na lista", function(){
+    P.fechar();
+    if(ehLixo){ estado.cadLixo = true; estado.cadFiltro = "todos"; } else { estado.cadFiltro = k; estado.cadLixo = false; }
+    estado.cadBusca = ""; var inp = document.getElementById("cadBusca"); if(inp) inp.value = "";
+    estado.cadLimite = 150; estado._cadTopo = true; desenharCad();
+  }));
+}
+function abrirCadItem(id){
+  if(!window.moldura) return;
+  var atualId = id, msg = null, msgId = null, notaTimer = null;
+  var P = moldura.pop({ largura:"640px", titulo:"Cadastro com problema", aoFechar:function(){ estado._cadAberta = null; marca(); } });
+  function marca(){
+    document.querySelectorAll("#gv-conteudo .linha.aberta").forEach(function(x){ x.classList.remove("aberta"); });
+    if(estado._cadAberta){ var r = document.querySelector('#gv-conteudo .linha[data-cad="' + estado._cadAberta + '"]'); if(r) r.classList.add("aberta"); }
+  }
+  function pinta(){
+    var L = cadVisiveis();
+    var i = L.findIndex(function(x){ return x.paciente_id === atualId; });
+    var c = i >= 0 ? L[i] : (estado.cad || []).find(function(x){ return x.paciente_id === atualId; });
+    if(!c){ P.fechar(); return; }
+    estado._cadAberta = c.paciente_id; marca();
+    var t = c.tratamento || "pendente";
+    P.corpo.innerHTML = "";
+    var tags = "";
+    if(c.futuras > 0) tags += '<span class="etq forte">' + futTxt(c.futuras) + '</span>';
+    if(c.problemas.length > 1) tags += '<span class="etq">' + c.problemas.length + ' problemas</span>';
+    if(c.lixo) tags += '<span class="etq vermelho">Não juntar</span>';
+    if(c.reincidente) tags += '<span class="etq vermelho" title="Marcou corrigido faz tempo e o problema continua no espelho">Reincidente</span>';
+    P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-quando">Ficha #' + escapa(c.paciente_id) + '</span><h2>' + escapa(c.paciente || "—") + '</h2>' +
+      (tags ? '<span class="etqs">' + tags + '</span>' : '')));
+    c.problemas.forEach(function(p){
+      P.corpo.appendChild(novo("div", "pp-caixa", '<span class="pp-tag" style="color:#D70015">' + escapa(cadTxt(p.tipo).titulo) + '</span><span class="pp-txt">' + textoProblema2(p) + '</span>'));
+    });
+    var fe = novo("a", "btn-claro", "Abrir Pacientes no Feegow " + ico(IC.fora, 14, 2));
+    fe.href = "https://app.feegow.com/main/?P=Pacientes&Pers=1"; fe.target = "_blank"; fe.rel = "noopener";
+    P.corpo.appendChild(fe);
+    var blocoT = novo("div", "pp-bloco", '<span class="pp-rot">O que você fez?</span>');
+    var ops = novo("div", "pp-opcoes"); ops.setAttribute("role", "group"); ops.setAttribute("aria-label", "O que você fez?");
+    var notaEl = novo("textarea", "pp-nota");
+    TRAT_CAD.forEach(function(tt){
+      var on = tt[0] === t;
+      var b = botao("pp-op" + (on ? " on" : ""), '<span class="cx">' + (on ? ico(IC.ok, 12, 3, "#FFFFFF") : "") + '</span>' + escapa(tt[1]), function(){
+        clearTimeout(notaTimer);
+        if(tt[0] === (c.tratamento || "pendente") && notaEl.value.trim() === (c.nota || "")) return;
+        salva(c, tt[0], notaEl.value.trim());
+      });
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+      ops.appendChild(b);
+    });
+    blocoT.appendChild(ops);
+    P.corpo.appendChild(blocoT);
+    var blocoN = novo("div", "pp-bloco", '<label class="pp-rot" for="nota-cad">Anotação</label>');
+    notaEl.id = "nota-cad"; notaEl.rows = 2; notaEl.placeholder = "O que corrigiu, com quem falou…"; notaEl.value = c.nota || "";
+    notaEl.addEventListener("change", function(){
+      var v = notaEl.value.trim(); if(v === (c.nota || "")) return;
+      clearTimeout(notaTimer); notaTimer = setTimeout(function(){ salva(c, c.tratamento || "pendente", v); }, 220);
+    });
+    blocoN.appendChild(notaEl);
+    P.corpo.appendChild(blocoN);
+    var est = msgId === c.paciente_id ? msg : null, txt, cor;
+    if(est === "salvando"){ txt = "Salvando…"; cor = "#AEAEB2"; }
+    else if(est === "ok"){ txt = "Salvo agora · por " + (autora() || "você"); cor = "#248A3D"; }
+    else if(est === "erro"){ txt = "Não consegui salvar. Confira a internet e tente de novo."; cor = "#D70015"; }
+    else { txt = t !== "pendente" ? "Marcado antes como " + (TRAT_CAD_ROT[t] || t).toLowerCase() + (c.autora ? ", por " + c.autora : "") + "." : "Marque o que fez: salva sozinho"; cor = "#AEAEB2"; }
+    var sv = novo("div", "pp-salvo", ico(IC.ok, 14, 2.2, cor) + '<span' + (est === "erro" ? ' style="color:#D70015"' : '') + '>' + escapa(txt) + '</span>');
+    sv.setAttribute("aria-live", "polite");
+    P.corpo.appendChild(sv);
+    P.rodape.hidden = false; P.rodape.innerHTML = "";
+    var V = vizinhos(L, estado.cad || [], function(y){ return y.paciente_id; }, c.paciente_id), ant = V.ant, prox = V.prox;
+    var bA = botao("btn btn-s", ico(IC.esq, 16, 2.2) + "Anterior", function(){ if(ant){ atualId = ant.paciente_id; pinta(); } }); bA.disabled = !ant;
+    var bP = botao("btn btn-p", "Próxima" + ico(IC.dir, 16, 2.2), function(){
+      if(!prox) return;
+      atualId = prox.paciente_id;
+      if(L.indexOf(prox) >= (estado.cadLimite || 150)){ estado.cadLimite = L.indexOf(prox) + 2; desenharCad(); }
+      pinta();
+    }); bP.disabled = !prox;
+    P.rodape.appendChild(bA);
+    P.rodape.appendChild(novo("span", "pop-pos", i >= 0 ? (i + 1) + " de " + L.length : "Saiu desta lista · " + L.length + " restantes"));
+    P.rodape.appendChild(bP);
+  }
+  function salva(c, trat, nota){
+    var id = c.paciente_id;
+    msgId = id; msg = "salvando"; if(P.aberto) pinta();
+    salvarOcNota("cadastro", c.oc_ref, { tratamento: trat, nota: nota }, function(ok){
+      if(ok){ c.tratamento = trat; c.nota = nota; c.autora = autora(); badgesTopo(); if(estado.tela === "cad") desenharCad(); }
+      if(msgId === id) msg = ok ? "ok" : "erro";
+      if(P.aberto) pinta();
     });
   }
-  sel.addEventListener("change", persistir);
-  nota.addEventListener("keydown", function(ev){ if(ev.key==="Enter"){ nota.blur(); } });
-  nota.addEventListener("blur", function(){ if(nota.value.trim() !== (c.nota||"")) persistir(); });
-  acoes.appendChild(sel); acoes.appendChild(nota); acoes.appendChild(salvo); acoes.appendChild(at);
-  esq.appendChild(acoes);
-  card.appendChild(esq);
-  card.appendChild(document.createElement("div"));
-  return card;
+  pinta();
 }
 
-/* ═══ 🗑️ Exclusões (apagar-todas): tela ═══ */
+/* ═══ 🗑️ Exclusões — design novo: séries apagadas inteiras + "Situação" ═══
+   Gravação igual à de antes: salvarOcNota("exclusao", ref, {quem_fez, tratamento, nota}) → oc_notas;
+   o dono continua com aprovarExclusao (libera a proteção) e dispensarExclusao (tira da tela). */
+var EXCL_SIT = {
+  aberta:     { label:"Sem resposta", cor:"#D70015", sub:"Restaurar no Feegow ou confirmar que era para apagar",
+                acao:"Abrir o Feegow e conferir. Apagou sem querer? Restaure os agendamentos e marque “Restaurei”. Era para apagar mesmo? Marque “Estava certo apagar”." },
+  aguardando: { label:"Aguardando o dono", cor:"#C93400", sub:"A secretária disse que era para apagar",
+                acao:"A secretária marcou “Estava certo apagar”. O administrador confere e aprova: aí a proteção é solta e a linha sai sozinha na próxima rodada." },
+  resolvida:  { label:"Resolvidas", cor:"#248A3D", sub:"Restauradas ou sem solução, esperando a conferência",
+                acao:"Restaurou no Feegow? A conferência da madrugada vê que as sessões voltaram e a linha some sozinha." }
+};
+var TRAT_EXCL_ROT = { pendente:"Pendente", restaurei:"Restaurei no Feegow", estava_certo:"Estava certo apagar", sem_solucao:"Sem solução" };
+var QUEM_ROT = { fui_eu:"Fui eu", outra_pessoa:"Outra pessoa", nao_sei:"Não sei" };
+function exclSit(x){ return x.aguardando_dono ? "aguardando" : ((!x.tratamento || x.tratamento === "pendente") ? "aberta" : "resolvida"); }
+function exclVisiveis(){
+  var q = semAcento(estado.exclBusca || "").trim();
+  var f = estado.exclFiltro || "aberta";
+  return (estado.excl || []).filter(function(x){
+    if(q && semAcento((x.paciente || "") + " " + (x.profissional || "")).indexOf(q) < 0) return false;
+    return f === "todas" || exclSit(x) === f;
+  });
+}
+function protegidasRot(iso){ var d = diaRotulo(iso); return "Protegidas " + (d === "Hoje" ? "hoje" : d === "Ontem" ? "ontem" : "em " + d.charAt(0).toLowerCase() + d.slice(1)); }
+function sessoesTxt(n){ return n === 1 ? "1 sessão apagada" : n + " sessões apagadas"; }
 function desenharExcl(){
   var main = document.getElementById("gv-conteudo");
+  campoBusca("exclusoes", "exclBusca", "Buscar paciente ou profissional", estado.exclBusca, function(v){ estado.exclBusca = v; estado._exclTopo = true; desenharExcl(); });
+  var antes = main.querySelector(".lista-corpo");
+  var rolagem = antes && !estado._exclTopo ? antes.scrollTop : 0;
+  estado._exclTopo = false;
   main.innerHTML = "";
-  var topo = document.createElement("div"); topo.className = "oc-topo edu";
-  topo.innerHTML =
-    '<h2>🗑️ Apagar-todas — proteção do faturamento</h2>'+
-    '<p><b>Regra da casa:</b> nunca use "excluir TODAS as sessões" no Feegow — sempre <b>"somente este"</b> ou <b>"deste dia em diante"</b>. '+
-    'Quando a série inteira é apagada, o robô PROTEGE os agendamentos (eles não somem do faturamento) e a família aparece aqui.</p>'+
-    '<p>Apagou sem querer? <b>Restaure os agendamentos no Feegow</b> e marque "Restaurei" — a conferência da madrugada vê que voltou e o card some sozinho. '+
-    'Era pra apagar mesmo (alta, desistência)? Marque <b>"Estava certo apagar"</b> — o dono aprova e o sistema libera.</p>'+
-    '<p>⏳ <b>O card fica aqui até ser resolvido</b> — não some na virada do dia. Só o administrador pode tirá-lo da tela.</p>';
-  main.appendChild(topo);
-  if(estado.excl === null){
-    var c = document.createElement("div"); c.className = "carregando";
-    c.textContent = "Buscando as famílias protegidas…"; main.appendChild(c); return;
-  }
-  if(estado.exclErro){
-    var er = document.createElement("div"); er.className = "erro";
-    er.innerHTML = 'Não consegui ler <span class="mono">oc_exclusoes</span>.<br>' + escapa(estado.exclErro);
-    main.appendChild(er); return;
-  }
-  if(!estado.excl.length){
-    var v = document.createElement("div"); v.className = "vazio";
-    v.innerHTML = "<b>Nada pendente ✔</b>Nenhuma série apagada esperando conserto.";
-    main.appendChild(v); return;
-  }
-  estado.excl.forEach(function(x){ main.appendChild(xcardDe(x)); });
+  var todas = estado.excl || [];
+  var abertas = todas.filter(function(x){ return exclSit(x) !== "resolvida"; }).length;
+  var agu = todas.filter(function(x){ return exclSit(x) === "aguardando"; }).length;
+  if(window.moldura) moldura.resumo("exclusoes", estado.excl === null ? "" :
+    (abertas === 1 ? "1 série apagada esperando conserto" : abertas + " séries apagadas esperando conserto") + " · " +
+    (agu === 0 ? "nenhuma aguardando o dono" : (agu === 1 ? "1 aguardando o dono" : agu + " aguardando o dono")));
+  var q = semAcento(estado.exclBusca || "").trim();
+  var base = todas.filter(function(x){ return !q || semAcento((x.paciente || "") + " " + (x.profissional || "")).indexOf(q) >= 0; });
+  var cont = { aberta:0, aguardando:0, resolvida:0, todas: base.length };
+  base.forEach(function(x){ cont[exclSit(x)]++; });
+  var filtro = estado.exclFiltro || "aberta";
+  var vis = exclVisiveis();
+
+  var wrap = novo("div", "duas-col");
+  var sec = novo("section", "lista alta"); sec.setAttribute("aria-label", "Séries apagadas");
+  var topo = novo("div", "lista-topo");
+  var seg = novo("div", "seg"); seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "Mostrar");
+  [["aberta","Sem resposta",EXCL_SIT.aberta.cor],["aguardando","Aguardando o dono",EXCL_SIT.aguardando.cor],["resolvida","Resolvidas",EXCL_SIT.resolvida.cor],["todas","Todas","#AEAEB2"]].forEach(function(d){
+    var on = filtro === d[0];
+    var b = botao(on ? "on" : "", '<span class="q" style="background:' + d[2] + '"></span>' + d[1] + ' <span class="n">' + cont[d[0]] + '</span>',
+      function(){ estado.exclFiltro = d[0]; estado._exclTopo = true; desenharExcl(); });
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+    seg.appendChild(b);
+  });
+  topo.appendChild(seg);
+  topo.appendChild(novo("span", "mostrando", vis.length === 1 ? "1 série" : vis.length + " séries"));
+  sec.appendChild(topo);
+  var corpo = novo("div", "lista-corpo");
+  if(estado.excl === null) corpo.appendChild(novo("div", "lista-vazio", "Buscando as séries protegidas…"));
+  else if(estado.exclErro) corpo.appendChild(novo("div", "lista-vazio erro", "Não consegui ler as exclusões. " + escapa(estado.exclErro)));
+  else if(!vis.length) corpo.appendChild(novo("div", "lista-vazio", q ? "<b>Ninguém com esse nome</b><br>Confira a grafia ou limpe a busca." : '<b class="ok">Nada pendente</b><br>Nenhuma série apagada nesta situação.'));
+  var dia = null, porDia = {};
+  vis.forEach(function(x){ var k = protegidasRot(x.protegido_em); porDia[k] = (porDia[k] || 0) + 1; });
+  vis.forEach(function(x){
+    var k = protegidasRot(x.protegido_em);
+    if(dia !== k){ dia = k; corpo.appendChild(novo("div", "dia-cab", '<b>' + escapa(k) + '</b><span>' + (porDia[k] === 1 ? "1 série" : porDia[k] + " séries") + '</span>')); }
+    var s = exclSit(x), S = EXCL_SIT[s];
+    var rot = s === "resolvida" ? (TRAT_EXCL_ROT[x.tratamento] || x.tratamento) : S.label;
+    var sub = x.reincidente ? '<span class="tr" style="color:#D70015;font-weight:600">Restaurei, e não voltou</span>' :
+      (x.quem_fez ? '<span class="tr">Quem apagou: ' + escapa((QUEM_ROT[x.quem_fez] || x.quem_fez).toLowerCase()) + '</span>' : '');
+    var b = botao("linha" + (estado._exclAberta === x.oc_ref ? " aberta" : ""),
+      '<span class="h">' + escapa(horaDe(x.protegido_em)) + '</span>' +
+      '<span class="q"><span class="nm">' + escapa(x.paciente || "—") + '</span><span class="mt">' + escapa((x.profissional || "—") + " · " + (x.dia_semana || "?") + " às " + (x.horario || "?") + " · " + sessoesTxt(x.n_sessoes)) + '</span></span>' +
+      '<span class="dir"><span class="tag" style="color:' + S.cor + '">' + escapa(rot) + '</span>' + sub + '</span>',
+      function(){ abrirExclItem(x.oc_ref, filtro); });
+    b.setAttribute("aria-haspopup", "dialog"); b.setAttribute("data-excl", x.oc_ref);
+    corpo.appendChild(b);
+  });
+  sec.appendChild(corpo);
+  wrap.appendChild(sec);
+
+  var lado = novo("div", "lado");
+  var pn = novo("section", "painel"); pn.setAttribute("aria-labelledby", "excl-sit");
+  pn.appendChild(novo("div", "painel-cab", '<h2 id="excl-sit">Situação</h2><span>' + (todas.length === 1 ? "1 série" : todas.length + " séries") + '</span>'));
+  var contT = { aberta:0, aguardando:0, resolvida:0 };
+  todas.forEach(function(x){ contT[exclSit(x)]++; });
+  ["aberta","aguardando","resolvida"].forEach(function(k){
+    var S = EXCL_SIT[k];
+    var b = botao("cat", '<span class="q" style="background:' + S.cor + '"></span><span class="t"><b>' + S.label + '</b><small>' + escapa(S.sub) + '</small></span><span class="n">' + contT[k] + '</span>' + ico(IC.dir, 16, 2),
+      function(){ abrirExclCat(k); });
+    b.setAttribute("aria-haspopup", "dialog");
+    pn.appendChild(b);
+  });
+  lado.appendChild(pn);
+  lado.appendChild(novo("section", "painel nota-lado",
+    '<h2>Regra da casa</h2><p>Nunca use “excluir <b>todas</b> as sessões” no Feegow. Sempre <b>“somente este”</b> ou <b>“deste dia em diante”</b>.</p>' +
+    '<p>Quando a série inteira é apagada, o robô <b>protege</b> os agendamentos (eles não somem do faturamento) e a série aparece aqui.</p>' +
+    '<p class="cinza">A linha fica até ser resolvida: não some na virada do dia. Só o administrador pode tirá-la da tela.</p>'));
+  wrap.appendChild(lado);
+  main.appendChild(wrap);
+  ajustaAltura();
+  var c2 = main.querySelector(".lista-corpo"); if(c2) c2.scrollTop = rolagem;
+  if(estado._exclPinta) estado._exclPinta();
 }
-function xcardDe(x){
-  var card = document.createElement("article");
-  card.className = "fcard " + (x.aguardando_dono ? "g1" : (exclAberta(x) ? "g0" : "g2"));
-  var esq = document.createElement("div");
-  var tags = "";
-  if(x.aguardando_dono) tags += '<span class="tagx aguarda">aguardando o dono</span>';
-  if(x.reincidente) tags += '<span class="tagx reinc" title="Marcou restaurei faz tempo e a proteção continua de pé — o Feegow ainda não mostrou as sessões de volta">restaurei — e não voltou</span>';
-  esq.innerHTML =
-    '<div class="fnum"><span class="fpac">' + escapa(x.paciente || "—") + '</span> · ' + escapa(x.profissional || "—") + tags + '</div>'+
-    '<div class="fmeta">' + escapa(x.dia_semana || "?") + ' às ' + escapa(x.horario || "?") +
-      ' · <b>' + x.n_sessoes + ' sessões apagadas</b> · protegido em ' + fmtQuando(x.protegido_em) + '</div>'+
-    '<div class="fdet">Datas: ' + escapa(x.datas_fmt || "—") + '</div>';
-  var acoes = document.createElement("div"); acoes.className = "acoes";
-  var selQ = document.createElement("select");
-  selQ.setAttribute("aria-label","Quem apagou");
-  QUEM_FEZ.forEach(function(t){
-    var o = document.createElement("option"); o.value = t[0]; o.textContent = t[1];
-    if((x.quem_fez||"")===t[0]) o.selected = true;
-    selQ.appendChild(o);
+function abrirExclCat(k){
+  if(!window.moldura) return;
+  var S = EXCL_SIT[k];
+  var lista = (estado.excl || []).filter(function(x){ return exclSit(x) === k; });
+  var P = moldura.pop({ largura:"640px", titulo:"Séries apagadas" });
+  P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-alerta" style="color:' + S.cor + '">' + (lista.length === 1 ? "1 série" : lista.length + " séries") + '</span><h2>' + S.label + '</h2>'));
+  P.corpo.appendChild(novo("div", "pp-caixa", '<span class="pp-rot">O que fazer</span><span class="pp-txt">' + escapa(S.acao) + '</span>'));
+  var ul = novo("div", "pp-lista");
+  lista.forEach(function(x){
+    ul.appendChild(botao("pp-linha", '<span class="w">' + escapa(fmtQuando(x.protegido_em)) + '</span><span class="q"><b>' + escapa(x.paciente || "—") + '</b><small>' +
+      escapa((x.profissional || "—") + " · " + (x.dia_semana || "?") + " às " + (x.horario || "?")) + '</small></span>' + ico(IC.dir, 14, 2),
+      function(){ estado.exclFiltro = k; estado.exclBusca = ""; var i = document.getElementById("exclBusca"); if(i) i.value = ""; desenharExcl(); abrirExclItem(x.oc_ref, k); }));
   });
-  var selT = document.createElement("select");
-  selT.setAttribute("aria-label","O que você fez");
-  TRAT_EXCL.forEach(function(t){
-    var o = document.createElement("option"); o.value = t[0]; o.textContent = t[1];
-    if((x.tratamento||"pendente")===t[0]) o.selected = true;
-    selT.appendChild(o);
-  });
-  selT.className = "trat-"+(x.tratamento||"pendente");
-  var nota = document.createElement("input");
-  nota.className = "nota"; nota.placeholder = "Anotar (por que apagou, com quem confirmou…)";
-  nota.value = x.nota || "";
-  var salvo = document.createElement("span"); salvo.className = "salvo"; salvo.textContent = "salvo ✔";
-  var at = document.createElement("span"); at.className = "autora-tag";
-  if(x.autora) at.textContent = "por "+x.autora;
-  function persistir(){
-    salvo.textContent = "salvando…"; salvo.classList.add("mostra");
-    salvarOcNota("exclusao", x.oc_ref,
-      { quem_fez: selQ.value || null, tratamento: selT.value, nota: nota.value.trim() },
-      function(okp){
-        salvo.textContent = okp ? "salvo ✔" : "erro ao salvar ✖";
-        salvo.style.color = okp ? "var(--ok)" : "var(--critico)";
-        if(okp){
-          x.quem_fez = selQ.value || null; x.tratamento = selT.value;
-          x.nota = nota.value.trim(); x.autora = autora();
-          x.aguardando_dono = (selT.value === "estava_certo" && !x.aprovada_em);
-          setTimeout(function(){ salvo.classList.remove("mostra"); }, 1600);
-          badgesTopo(); desenharExcl();
-        }
+  if(!lista.length) ul.appendChild(novo("div", "lista-vazio", "Nenhuma série nesta situação agora."));
+  P.corpo.appendChild(ul);
+  P.rodape.hidden = false; P.rodape.classList.add("fim");
+  P.rodape.appendChild(botao("btn btn-s", "Fechar", function(){ P.fechar(); }));
+  P.rodape.appendChild(botao("btn btn-p", "Ver só estes na lista", function(){
+    P.fechar(); estado.exclFiltro = k; estado.exclBusca = ""; var i = document.getElementById("exclBusca"); if(i) i.value = "";
+    estado._exclTopo = true; desenharExcl();
+  }));
+}
+function abrirExclItem(ref, filtro){
+  if(!window.moldura) return;
+  var atual = ref, msg = null, msgId = null, notaTimer = null;
+  var P = moldura.pop({ largura:"640px", titulo:"Série apagada inteira", aoFechar:function(){ estado._exclAberta = null; estado._exclPinta = null; marca(); } });
+  function marca(){
+    document.querySelectorAll("#gv-conteudo .linha.aberta").forEach(function(x){ x.classList.remove("aberta"); });
+    if(estado._exclAberta){ var r = document.querySelector('#gv-conteudo .linha[data-excl="' + CSS.escape(estado._exclAberta) + '"]'); if(r) r.classList.add("aberta"); }
+  }
+  function pinta(){
+    var L = exclVisiveis();
+    var i = L.findIndex(function(x){ return x.oc_ref === atual; });
+    var x = i >= 0 ? L[i] : (estado.excl || []).find(function(y){ return y.oc_ref === atual; });
+    if(!x){ P.fechar(); return; }
+    estado._exclAberta = x.oc_ref; marca();
+    var s = exclSit(x), S = EXCL_SIT[s], t = x.tratamento || "pendente";
+    P.corpo.innerHTML = "";
+    var tags = x.reincidente ? '<span class="etqs"><span class="etq vermelho" title="Marcou restaurei faz tempo e a proteção continua de pé: o Feegow ainda não mostrou as sessões de volta">Restaurei, e não voltou</span></span>' : "";
+    P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-quando">Protegida em ' + escapa(fmtQuando(x.protegido_em).replace(" ", " às ")) + '</span>' +
+      '<h2>' + escapa(x.paciente || "—") + '</h2><span class="pp-l1">' + escapa((x.profissional || "—") + " · toda " + (x.dia_semana || "?") + " às " + (x.horario || "?")) + '</span>' + tags));
+    P.corpo.appendChild(novo("div", "pp-caixa",
+      '<span class="pp-tag" style="color:' + S.cor + '">' + escapa(s === "resolvida" ? (TRAT_EXCL_ROT[t] || t) : S.label) + '</span>' +
+      '<span class="pp-txt"><b>' + sessoesTxt(x.n_sessoes) + '</b> · datas: ' + escapa(x.datas_fmt || "—") + '</span>' +
+      '<span class="pp-txt cinza">Protegidos pelo robô: não somem do faturamento enquanto a linha estiver aqui.</span>'));
+    P.corpo.appendChild(novo("div", "pp-bloco", '<span class="pp-rot">O que fazer</span><span class="pp-txt">Apagou sem querer? <b>Restaure os agendamentos no Feegow</b> e marque “Restaurei”: a conferência da madrugada vê que voltou e a linha some sozinha. Era para apagar mesmo (alta, desistência)? Marque <b>“Estava certo apagar”</b>: o dono aprova e o sistema libera.</span>'));
+    var notaEl = novo("textarea", "pp-nota");
+    var bq = novo("div", "pp-bloco", '<span class="pp-rot">Quem apagou?</span>');
+    var segQ = novo("div", "seg"); segQ.setAttribute("role", "group"); segQ.setAttribute("aria-label", "Quem apagou?");
+    QUEM_FEZ.filter(function(w){ return w[0]; }).forEach(function(w){
+      var on = w[0] === (x.quem_fez || "");
+      var b = botao(on ? "on" : "", escapa(w[1]), function(){ clearTimeout(notaTimer); if(on) return; salva(x, { quem_fez: w[0], tratamento: t, nota: notaEl.value.trim() }); });
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+      segQ.appendChild(b);
+    });
+    bq.appendChild(segQ);
+    P.corpo.appendChild(bq);
+    var bt = novo("div", "pp-bloco", '<span class="pp-rot">O que você fez?</span>');
+    var ops = novo("div", "pp-opcoes"); ops.setAttribute("role", "group"); ops.setAttribute("aria-label", "O que você fez?");
+    TRAT_EXCL.forEach(function(tt){
+      var on = tt[0] === t;
+      var b = botao("pp-op" + (on ? " on" : ""), '<span class="cx">' + (on ? ico(IC.ok, 12, 3, "#FFFFFF") : "") + '</span>' + escapa(tt[1]), function(){
+        clearTimeout(notaTimer);
+        if(tt[0] === t && notaEl.value.trim() === (x.nota || "")) return;
+        salva(x, { quem_fez: x.quem_fez || null, tratamento: tt[0], nota: notaEl.value.trim() });
       });
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+      ops.appendChild(b);
+    });
+    bt.appendChild(ops);
+    P.corpo.appendChild(bt);
+    if(s === "aguardando") P.corpo.appendChild(novo("div", "pp-caixa aviso", '<span class="pp-txt">Aguardando o dono aprovar. Só o administrador libera a proteção ou tira a linha da tela.</span>'));
+    var bn = novo("div", "pp-bloco", '<label class="pp-rot" for="nota-excl">Anotação</label>');
+    notaEl.id = "nota-excl"; notaEl.rows = 2; notaEl.placeholder = "Por que apagou, com quem confirmou…"; notaEl.value = x.nota || "";
+    notaEl.addEventListener("change", function(){
+      var v = notaEl.value.trim(); if(v === (x.nota || "")) return;
+      clearTimeout(notaTimer); notaTimer = setTimeout(function(){ salva(x, { quem_fez: x.quem_fez || null, tratamento: t, nota: v }); }, 220);
+    });
+    bn.appendChild(notaEl);
+    P.corpo.appendChild(bn);
+    var est = msgId === x.oc_ref ? msg : null, txt, cor;
+    if(est === "salvando"){ txt = "Salvando…"; cor = "#AEAEB2"; }
+    else if(est === "ok"){ txt = "Salvo agora · por " + (autora() || "você"); cor = "#248A3D"; }
+    else if(est === "erro"){ txt = "Não consegui salvar. Confira a internet e tente de novo."; cor = "#D70015"; }
+    else { txt = (t !== "pendente" || x.quem_fez) ? "Marcado antes" + (x.autora ? " por " + x.autora : "") + "." : "Marque quem apagou e o que fez: salva sozinho"; cor = "#AEAEB2"; }
+    var sv = novo("div", "pp-salvo", ico(IC.ok, 14, 2.2, cor) + '<span' + (est === "erro" ? ' style="color:#D70015"' : '') + '>' + escapa(txt) + '</span>');
+    sv.setAttribute("aria-live", "polite");
+    P.corpo.appendChild(sv);
+    if(ehDono()){
+      var adm = novo("div", "pp-adm", '<span class="pp-rot">Administrador</span>');
+      var linhaB = novo("div", "pp-adm-bt");
+      if(x.aguardando_dono){
+        var ba = botao("btn btn-p", "Aprovar e liberar", function(){ aprovarExclusao(x, ba); });
+        ba.title = "Confirma que era para apagar mesmo: a reconciliação libera na próxima rodada";
+        linhaB.appendChild(ba);
+      }
+      var bx = botao("btn btn-s", "Tirar da tela", function(){ dispensarExclusao(x, bx); });
+      bx.title = "Só esconde a linha: NÃO solta a proteção do faturamento";
+      linhaB.appendChild(bx);
+      adm.appendChild(linhaB);
+      P.corpo.appendChild(adm);
+    }
+    P.rodape.hidden = false; P.rodape.innerHTML = "";
+    var V = vizinhos(L, estado.excl || [], function(y){ return y.oc_ref; }, x.oc_ref), ant = V.ant, prox = V.prox;
+    var bA = botao("btn btn-s", ico(IC.esq, 16, 2.2) + "Anterior", function(){ if(ant){ atual = ant.oc_ref; pinta(); } }); bA.disabled = !ant;
+    var bP = botao("btn btn-p", "Próxima" + ico(IC.dir, 16, 2.2), function(){ if(prox){ atual = prox.oc_ref; pinta(); } }); bP.disabled = !prox;
+    P.rodape.appendChild(bA);
+    P.rodape.appendChild(novo("span", "pop-pos", i >= 0 ? (i + 1) + " de " + L.length : "Saiu desta lista · " + L.length + " restantes"));
+    P.rodape.appendChild(bP);
   }
-  selQ.addEventListener("change", persistir);
-  selT.addEventListener("change", persistir);
-  nota.addEventListener("keydown", function(ev){ if(ev.key==="Enter"){ nota.blur(); } });
-  nota.addEventListener("blur", function(){ if(nota.value.trim() !== (x.nota||"")) persistir(); });
-  acoes.appendChild(selQ); acoes.appendChild(selT); acoes.appendChild(nota); acoes.appendChild(salvo); acoes.appendChild(at);
-  esq.appendChild(acoes);
-  card.appendChild(esq);
-  var dir = document.createElement("div");
-  dir.style.cssText = "display:flex;flex-direction:column;gap:6px;align-items:flex-end";
-  if(x.aguardando_dono && ehDono()){
-    var b = document.createElement("button");
-    b.className = "gv-btn verde mini"; b.textContent = "👑 Aprovar e liberar";
-    b.title = "Confirma que era pra apagar mesmo — a reconciliação enterra na próxima rodada";
-    b.onclick = function(){ aprovarExclusao(x, b); };
-    dir.appendChild(b);
+  function salva(x, campos){
+    var id = x.oc_ref;
+    msgId = id; msg = "salvando"; if(P.aberto) pinta();
+    salvarOcNota("exclusao", x.oc_ref, campos, function(ok){
+      if(ok){
+        x.quem_fez = campos.quem_fez || null; x.tratamento = campos.tratamento; x.nota = campos.nota; x.autora = autora();
+        x.aguardando_dono = (campos.tratamento === "estava_certo" && !x.aprovada_em);
+        badgesTopo(); if(estado.tela === "excl") desenharExcl();
+      }
+      if(msgId === id) msg = ok ? "ok" : "erro";
+      if(P.aberto) pinta();
+    });
   }
-  if(ehDono()){
-    var bx = document.createElement("button");
-    bx.className = "fx"; bx.textContent = "✕";
-    bx.title = "Tirar da tela (só o administrador) — NÃO solta a proteção do faturamento";
-    bx.setAttribute("aria-label", "Dispensar este card");
-    bx.onclick = function(){ dispensarExclusao(x, bx); };
-    dir.appendChild(bx);
-  }
-  card.appendChild(dir);
-  return card;
+  estado._exclPinta = function(){ if(P.aberto) pinta(); };
+  pinta();
 }
 
 /* ═══ 👑 visão do dono · v2 ═══ */
@@ -1371,99 +1809,260 @@ function salvarCorteNota(ref, campos, aoSalvar){
     .catch(function(){ if(aoSalvar) aoSalvar(false); });
 }
 
-/* ── ✂️ tela ── */
-function desenharCorte(){
-  var host = document.getElementById("gv-conteudo"); if(!host) return;
-  host.innerHTML = "";
-  var topo = document.createElement("div"); topo.className = "gv-explica";
-  topo.innerHTML =
-    "<b>✂️ A tesoura do dia.</b> Quem está aqui <b>perdeu a cobertura</b>: ou hoje é a última " +
-    "consulta viável (corte às <b>21h</b> — sábado, <b>11h</b>), ou os futuros já estão sem guia. " +
-    "O caminho: abrir o link do <b>PRÓXIMO</b> agendamento no Feegow e apagar <b>\u201ceste e os " +
-    "próximos\u201d</b> (nunca os anteriores!) — depois assinar aqui no botão <b>Excluí</b>. " +
-    "O card some sozinho quando o espelho confirmar. <b>Aguardando</b> = guia solicitada, " +
-    "prazo máximo de 2 dias; venceu, corta.";
-  host.appendChild(topo);
-  if(estado.corteErro){
-    var er = document.createElement("p"); er.className = "gv-vazio";
-    er.textContent = "⚠️ " + estado.corteErro + " — o 11_SQL_CORTE.sql já rodou no banco?";
-    host.appendChild(er); return;
-  }
-  if(estado.corte === null){
-    var lo = document.createElement("p"); lo.className = "gv-vazio";
-    lo.textContent = "Carregando a fila…"; host.appendChild(lo); return;
-  }
-  var rows = estado.corte.slice();
-  if(!rows.length){
-    var ok = document.createElement("p"); ok.className = "gv-vazio";
-    ok.textContent = "✂️ Fila limpa — ninguém pra cortar. A agenda está blindada.";
-    host.appendChild(ok); return;
-  }
-  var ordem = { cortar_hoje:0, prazo_vencido:1, cortar_agora:2, excluido_conferir:3, aguardando:4, indulto:5 };
-  rows.sort(function(a,b){ return (ordem[a.estado]||9) - (ordem[b.estado]||9); });
-  rows.forEach(function(c){ host.appendChild(cardCorte(c)); });
+/* ── ✂️ tela — design novo: a tesoura do dia ──
+   Gravações iguais às de antes: salvarCorteNota(ref, {tratamento:"excluido", indulto_ate:null})
+   e salvarCorteNota(ref, {tratamento:"indulto", indulto_ate, nota}) → corte_notas. */
+var CORTE_TXT = {
+  cortar_hoje:       { label:"Cortar hoje", grupo:"Cortar hoje, até as 21h", cor:"#D70015", ordem:0, sub:"Última consulta viável: corte às 21h (sábado, 11h)",
+                       acao:"Hoje é a última consulta que a cobertura alcança. Sem guia nova até as 21h (sábado, 11h), abrir o próximo agendamento no Feegow, apagar “este e os próximos” e assinar aqui." },
+  prazo_vencido:     { label:"Prazo vencido", grupo:"Prazo vencido", cor:"#D70015", ordem:1, sub:"A guia solicitada não chegou em 2 dias",
+                       acao:"A guia foi solicitada, mas o prazo de 2 dias venceu. Cortar: abrir o próximo agendamento no Feegow, apagar “este e os próximos” e assinar aqui." },
+  cortar_agora:      { label:"Cortar agora", grupo:"Cortar agora", cor:"#D70015", ordem:2, sub:"Os próximos atendimentos já estão sem guia",
+                       acao:"Os próximos atendimentos já estão sem cobertura. Abrir o próximo agendamento no Feegow, apagar “este e os próximos” (nunca os anteriores) e assinar aqui." },
+  incompleto:        { label:"Apagou incompleto", grupo:"Apagou incompleto", cor:"#D70015", ordem:3, sub:"Assinada como excluída, mas os futuros ainda existem",
+                       acao:"Alguém assinou “Excluí”, mas os futuros continuam no Feegow: provavelmente apagou só um. Abrir o Feegow e apagar “este e os próximos”." },
+  excluido_conferir: { label:"Excluída, conferindo", grupo:"Excluída, conferindo", cor:"#C93400", ordem:4, sub:"Assinada: some quando o espelho confirmar",
+                       acao:"A exclusão foi assinada. A linha some sozinha quando o espelho do Feegow confirmar que os futuros saíram." },
+  aguardando:        { label:"Aguardando guia", grupo:"Aguardando guia", cor:"#636366", ordem:5, sub:"Guia solicitada: prazo máximo de 2 dias",
+                       acao:"A guia foi solicitada e está segurando o corte por no máximo 2 dias. Venceu o prazo, corta." },
+  indulto:           { label:"Indulto ativo", grupo:"Indulto ativo", cor:"#636366", ordem:6, sub:"Corte segurado por alguns dias, assinado",
+                       acao:"Alguém segurou o corte por alguns dias, com motivo registrado. Quando o indulto vence, o paciente volta para a tesoura." }
+};
+var MOTIVO_ROT = { guia_vencida:"Guia vencida", sessao_em_feriado:"Cai no feriado", sem_saldo_na_fila:"Fila passa do saldo", saldo_esgotado:"Saldo esgotado", sem_guia:"Sem guia" };
+function corteEst(c){ return c.apagou_incompleto ? "incompleto" : c.estado; }
+function corteTxt(e){ return CORTE_TXT[e] || { label:e, grupo:e, cor:"#636366", ordem:9, sub:"", acao:"" }; }
+function motivosTxt(t){ return String(t || "").split(" · ").filter(Boolean).map(function(m){ return MOTIVO_ROT[m] || m; }).join(" · "); }
+function corteAssinatura(c){
+  if(c.tratamento === "indulto" && c.indulto_ate) return "Indulto até " + fmtData(c.indulto_ate) + (c.autora ? " · por " + c.autora : "") + (c.nota ? " · " + c.nota : "");
+  if(c.tratamento === "excluido" && c.nota_atualizada_em) return "Assinada como excluída" + (c.autora ? " por " + c.autora : "") + " em " + fmtQuando(c.nota_atualizada_em).replace(" ", " às ");
+  return "";
 }
-function cardCorte(c){
-  var meta = SIT_CORTE[c.estado] || {rot:c.estado, cls:"sinfo", g:"ginfo"};
-  var card = document.createElement("article");
-  card.className = "card " + meta.g + (c.estado === "indulto" ? " tratada" : "");
-  var det = [];
-  det.push("<b>" + (c.n_descobertos||0) + "</b> futuro(s) sem cobertura: " + escapa(c.datas_fmt||"—"));
-  if(c.motivos) det.push("motivo: " + escapa(c.motivos));
-  if(c.prazo) det.push("⏱️ prazo: <b>" + fmtPrazo(c.prazo) + "</b>");
-  if(c.estado === "aguardando")
-    det.push("🔁 guia " + (c.hold_fila_em ? "na fila do robô" : "solicitada no balcão") + " — segurando o corte");
-  if(c.apagou_incompleto)
-    det.push('<span class="reinc">⚠️ APAGOU INCOMPLETO — assinado como excluída, mas os futuros AINDA existem. Foi apagado só um? Abrir o Feegow e apagar \u201ceste e os próximos\u201d.</span>');
-  if(c.tratamento === "indulto" && c.indulto_ate)
-    det.push("🕊️ indulto até <b>" + fmtData(c.indulto_ate) + "</b>" + (c.autora ? " · por " + escapa(c.autora) : ""));
-  if(c.tratamento === "excluido" && c.nota_atualizada_em)
-    det.push("✂️ assinada como excluída " + (c.autora ? "por <b>" + escapa(c.autora) + "</b> " : "") + "em " + fmtQuando(c.nota_atualizada_em));
-  card.innerHTML =
-    '<div class="hora">✂️</div>' +
-    '<div class="quem">' +
-      '<div class="paciente">' + escapa(c.paciente) + '</div>' +
-      '<div class="meta"><span class="esp">' + escapa(c.especialidade) + '</span></div>' +
-    '</div>' +
-    '<div class="sit ' + meta.cls + '"><span class="rotulo">' + escapa(meta.rot) + '</span>' +
-      '<div class="detalhe">' + det.join("<br>") + '</div></div>';
-  var acoes = document.createElement("div"); acoes.className = "acoes";
-  if(c.alvo_agendamento_id){
-    var lk = document.createElement("a");
-    lk.className = "fone"; lk.target = "_blank"; lk.rel = "noopener";
-    lk.href = "https://app.feegow.com/main/?P=Agenda-1&Pers=1&AgendamentoID=" + c.alvo_agendamento_id;
-    lk.innerHTML = "🎯 abrir o PRÓXIMO no Feegow";
-    lk.title = "Abre direto no agendamento a apagar — dele em diante";
-    acoes.appendChild(lk);
+function corteOrdenada(){
+  return (estado.corte || []).slice().sort(function(a, b){ return corteTxt(corteEst(a)).ordem - corteTxt(corteEst(b)).ordem; });
+}
+function corteVisiveis(){
+  var q = semAcento(estado.corteBusca || "").trim(), f = estado.corteFiltro || "todos";
+  return corteOrdenada().filter(function(c){
+    if(q && semAcento(c.paciente).indexOf(q) < 0) return false;
+    return f === "todos" || corteEst(c) === f;
+  });
+}
+function futSemCob(n){ return n === 1 ? "1 futura sem cobertura" : (n || 0) + " futuras sem cobertura"; }
+function desenharCorte(){
+  var main = document.getElementById("gv-conteudo"); if(!main) return;
+  campoBusca("corte", "corteBusca", "Buscar paciente", estado.corteBusca, function(v){ estado.corteBusca = v; estado._corteTopo = true; desenharCorte(); });
+  var antes = main.querySelector(".lista-corpo");
+  var rolagem = antes && !estado._corteTopo ? antes.scrollTop : 0;
+  estado._corteTopo = false;
+  main.innerHTML = "";
+  var todas = corteOrdenada();
+  var ativos = todas.filter(corteAtivo).length, nHoje = todas.filter(function(c){ return c.estado === "cortar_hoje"; }).length;
+  if(window.moldura) moldura.resumo("corte", estado.corte === null ? "" :
+    (ativos === 1 ? "1 paciente para cortar" : ativos + " pacientes para cortar") + " · " + (nHoje === 0 ? "nenhum com corte hoje" : nHoje + " com corte hoje às 21h"));
+  var q = semAcento(estado.corteBusca || "").trim();
+  var base = todas.filter(function(c){ return !q || semAcento(c.paciente).indexOf(q) >= 0; });
+  var cont = { todos: base.length };
+  Object.keys(CORTE_TXT).forEach(function(k){ cont[k] = 0; });
+  base.forEach(function(c){ cont[corteEst(c)] = (cont[corteEst(c)] || 0) + 1; });
+  var filtro = estado.corteFiltro || "todos";
+  var vis = corteVisiveis();
+
+  var wrap = novo("div", "duas-col");
+  var sec = novo("section", "lista alta"); sec.setAttribute("aria-label", "Pacientes para cortar");
+  var topo = novo("div", "lista-topo");
+  var seg = novo("div", "seg"); seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "Mostrar");
+  var defs = [["todos","Todos","#AEAEB2"],["cortar_hoje","Cortar hoje",TOM.r],["cortar_agora","Cortar agora",TOM.r],["incompleto","Apagou incompleto",TOM.r]];
+  ["prazo_vencido","excluido_conferir","aguardando","indulto"].forEach(function(k){ if(cont[k] > 0) defs.push([k, CORTE_TXT[k].label, CORTE_TXT[k].cor]); });
+  defs.forEach(function(d){
+    var on = filtro === d[0];
+    var b = botao(on ? "on" : "", '<span class="q" style="background:' + d[2] + '"></span>' + d[1] + ' <span class="n">' + (cont[d[0]] || 0) + '</span>',
+      function(){ estado.corteFiltro = d[0]; estado._corteTopo = true; desenharCorte(); });
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+    seg.appendChild(b);
+  });
+  topo.appendChild(seg);
+  topo.appendChild(novo("span", "mostrando", vis.length === 1 ? "1 paciente" : vis.length + " pacientes"));
+  sec.appendChild(topo);
+  var corpo = novo("div", "lista-corpo");
+  if(estado.corteErro) corpo.appendChild(novo("div", "lista-vazio erro", "Não consegui ler a fila do corte. " + escapa(estado.corteErro)));
+  else if(estado.corte === null) corpo.appendChild(novo("div", "lista-vazio", "Carregando a fila…"));
+  else if(!vis.length) corpo.appendChild(novo("div", "lista-vazio", q ? "<b>Ninguém com esse nome</b><br>Confira a grafia ou limpe a busca." : '<b class="ok">Fila limpa</b><br>Ninguém para cortar. A agenda está blindada.'));
+  var grupo = null, porEst = {};
+  vis.forEach(function(c){ var e = corteEst(c); porEst[e] = (porEst[e] || 0) + 1; });
+  vis.forEach(function(c){
+    var e = corteEst(c), S = corteTxt(e);
+    if(grupo !== e){ grupo = e; corpo.appendChild(novo("div", "dia-cab", '<b>' + escapa(S.grupo) + '</b><span>' + (porEst[e] === 1 ? "1 paciente" : porEst[e] + " pacientes") + '</span>')); }
+    var sub = (e === "indulto" || e === "excluido_conferir") ? corteAssinatura(c) : motivosTxt(c.motivos);
+    var b = botao("linha" + (estado._corteAberta === c.oc_ref ? " aberta" : "") + (e === "indulto" ? " apagada" : ""),
+      '<span class="q"><span class="nm">' + escapa(c.paciente || "—") + '</span><span class="mt">' + escapa((ESP_ROT[c.especialidade] || c.especialidade || "—") + " · " + futSemCob(c.n_descobertos) + ": " + (c.datas_fmt || "—")) + '</span></span>' +
+      '<span class="dir"><span class="tag" style="color:' + S.cor + '">' + escapa(S.label) + '</span>' + (sub ? '<span class="tr">' + escapa(sub) + '</span>' : '') + '</span>',
+      function(){ abrirCorteItem(c.oc_ref); });
+    b.setAttribute("aria-haspopup", "dialog"); b.setAttribute("data-corte", c.oc_ref);
+    corpo.appendChild(b);
+  });
+  sec.appendChild(corpo);
+  wrap.appendChild(sec);
+
+  var lado = novo("div", "lado");
+  var pn = novo("section", "painel"); pn.setAttribute("aria-labelledby", "corte-sit");
+  pn.appendChild(novo("div", "painel-cab", '<h2 id="corte-sit">Situação</h2><span>' + (todas.length === 1 ? "1 paciente" : todas.length + " pacientes") + '</span>'));
+  var contT = {}; Object.keys(CORTE_TXT).forEach(function(k){ contT[k] = 0; });
+  todas.forEach(function(c){ contT[corteEst(c)] = (contT[corteEst(c)] || 0) + 1; });
+  ["cortar_hoje","prazo_vencido","cortar_agora","incompleto","excluido_conferir","aguardando","indulto"].forEach(function(k){
+    if(!(contT[k] > 0 || k === "cortar_hoje" || k === "cortar_agora" || k === "aguardando")) return;
+    var S = CORTE_TXT[k];
+    var b = botao("cat", '<span class="q" style="background:' + S.cor + '"></span><span class="t"><b>' + S.label + '</b><small>' + escapa(S.sub) + '</small></span><span class="n">' + contT[k] + '</span>' + ico(IC.dir, 16, 2),
+      function(){ abrirCorteCat(k); });
+    b.setAttribute("aria-haspopup", "dialog");
+    pn.appendChild(b);
+  });
+  lado.appendChild(pn);
+  lado.appendChild(novo("section", "painel nota-lado",
+    '<h2>A tesoura do dia</h2><p>Quem está aqui <b>perdeu a cobertura</b>: ou hoje é a última consulta viável (corte às <b>21h</b>, sábado às <b>11h</b>), ou os próximos já estão sem guia.</p>' +
+    '<p>O caminho: abrir o <b>próximo</b> agendamento no Feegow e apagar <b>“este e os próximos”</b>, nunca os anteriores. Depois assinar aqui em <b>Excluí no Feegow</b>.</p>' +
+    '<p class="cinza">A linha some sozinha quando o espelho confirmar. Aguardando guia = guia solicitada, prazo máximo de 2 dias; venceu, corta.</p>'));
+  wrap.appendChild(lado);
+  main.appendChild(wrap);
+  ajustaAltura();
+  var c2 = main.querySelector(".lista-corpo"); if(c2) c2.scrollTop = rolagem;
+  if(estado._cortePinta) estado._cortePinta();
+}
+function abrirCorteCat(k){
+  if(!window.moldura) return;
+  var S = corteTxt(k);
+  var lista = corteOrdenada().filter(function(c){ return corteEst(c) === k; });
+  var P = moldura.pop({ largura:"640px", titulo:"Tesoura do dia" });
+  P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-alerta" style="color:' + S.cor + '">' + (lista.length === 1 ? "1 paciente" : lista.length + " pacientes") + '</span><h2>' + escapa(S.label) + '</h2>'));
+  P.corpo.appendChild(novo("div", "pp-caixa", '<span class="pp-rot">O que fazer</span><span class="pp-txt">' + escapa(S.acao) + '</span>'));
+  var ul = novo("div", "pp-lista");
+  lista.forEach(function(c){
+    ul.appendChild(botao("pp-linha", '<span class="q"><b>' + escapa(c.paciente || "—") + '</b><small>' + escapa((ESP_ROT[c.especialidade] || c.especialidade || "—") + " · " + (c.datas_fmt || "—") + (c.motivos ? " · " + motivosTxt(c.motivos) : "")) + '</small></span>' + ico(IC.dir, 14, 2),
+      function(){ estado.corteFiltro = k; estado.corteBusca = ""; var i = document.getElementById("corteBusca"); if(i) i.value = ""; desenharCorte(); abrirCorteItem(c.oc_ref); }));
+  });
+  if(!lista.length) ul.appendChild(novo("div", "lista-vazio", "Ninguém nesta situação agora."));
+  P.corpo.appendChild(ul);
+  P.rodape.hidden = false; P.rodape.classList.add("fim");
+  P.rodape.appendChild(botao("btn btn-s", "Fechar", function(){ P.fechar(); }));
+  P.rodape.appendChild(botao("btn btn-p", "Ver só estes na lista", function(){
+    P.fechar(); estado.corteFiltro = k; estado.corteBusca = ""; var i = document.getElementById("corteBusca"); if(i) i.value = "";
+    estado._corteTopo = true; desenharCorte();
+  }));
+}
+function abrirCorteItem(ref){
+  if(!window.moldura) return;
+  var atual = ref, modo = "acoes", dias = 3, motivo = "", aviso = null;
+  var P = moldura.pop({ largura:"640px", titulo:"Tesoura do dia", aoFechar:function(){ estado._corteAberta = null; estado._cortePinta = null; marca(); } });
+  function marca(){
+    document.querySelectorAll("#gv-conteudo .linha.aberta").forEach(function(x){ x.classList.remove("aberta"); });
+    if(estado._corteAberta){ var r = document.querySelector('#gv-conteudo .linha[data-corte="' + CSS.escape(estado._corteAberta) + '"]'); if(r) r.classList.add("aberta"); }
   }
-  var cel = primeiroCelular(c.celulares_raw, c.telefones_raw);
-  if(cel) acoes.appendChild(botaoFone(cel));
-  var bEx = document.createElement("button"); bEx.type = "button";
-  bEx.className = "fone"; bEx.innerHTML = "✂️ Excluí no Feegow";
-  bEx.title = "Assinar que os futuros foram apagados (este e os próximos)";
-  bEx.onclick = function(){
-    if(!autora()){ alert("Entre com seu PIN primeiro — a assinatura precisa de nome."); return; }
-    if(!confirm("Confirmar: os agendamentos futuros de " + c.paciente + " (" + c.especialidade + ") foram apagados no Feegow?")) return;
-    bEx.disabled = true;
-    salvarCorteNota(c.oc_ref, { tratamento: "excluido", indulto_ate: null },
-      function(ok){ if(!ok){ bEx.disabled = false; alert("Não consegui salvar — tente de novo."); } });
-  };
-  acoes.appendChild(bEx);
-  var bIn = document.createElement("button"); bIn.type = "button";
-  bIn.className = "fone"; bIn.innerHTML = "🕊️ Indulto…";
-  bIn.title = "Segurar o corte por alguns dias (assinado)";
-  bIn.onclick = function(){
-    if(!autora()){ alert("Entre com seu PIN primeiro — o indulto é assinado."); return; }
-    var d = parseInt(window.prompt("Não cortar por quantos dias? (1 a 14)", "3"), 10);
-    if(!d || d < 1 || d > 14) return;
-    var ate = new Date(); ate.setDate(ate.getDate() + d);
-    var iso = ate.getFullYear() + "-" + String(ate.getMonth()+1).padStart(2,"0") + "-" + String(ate.getDate()).padStart(2,"0");
-    var motivo = window.prompt("Motivo do indulto (fica registrado):", "") || "";
-    salvarCorteNota(c.oc_ref, { tratamento: "indulto", indulto_ate: iso, nota: motivo }, null);
-  };
-  acoes.appendChild(bIn);
-  card.appendChild(acoes);
-  return card;
+  function ateIso(d){ var a = new Date(); a.setDate(a.getDate() + d); return a.getFullYear() + "-" + String(a.getMonth()+1).padStart(2,"0") + "-" + String(a.getDate()).padStart(2,"0"); }
+  function pinta(){
+    var L = corteVisiveis();
+    var i = L.findIndex(function(x){ return x.oc_ref === atual; });
+    var c = i >= 0 ? L[i] : (estado.corte || []).find(function(x){ return x.oc_ref === atual; });
+    if(!c){ P.fechar(); return; }
+    estado._corteAberta = c.oc_ref; marca();
+    var e = corteEst(c), S = corteTxt(e), ativo = corteAtivo(c);
+    var quando = e === "cortar_hoje" ? "Prazo: " + (c.prazo ? fmtPrazo(c.prazo) : "hoje às 21h") :
+                 e === "prazo_vencido" ? "Prazo vencido" + (c.prazo ? ": " + fmtPrazo(c.prazo) : "") :
+                 e === "incompleto" ? "Assinou, mas os futuros continuam no Feegow" :
+                 e === "cortar_agora" ? "Sem cobertura: cortar agora" : S.sub;
+    P.corpo.innerHTML = "";
+    P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-quando" style="color:' + (ativo ? "#D70015" : "#636366") + ';font-weight:600">' + escapa(quando) + '</span>' +
+      '<h2>' + escapa(c.paciente || "—") + '</h2><span class="pp-l1">' + escapa(ESP_ROT[c.especialidade] || c.especialidade || "—") + '</span>'));
+    var cx = novo("div", "pp-caixa", '<span class="pp-tag" style="color:' + S.cor + '">' + escapa(S.label) + '</span>' +
+      '<span class="pp-txt"><b>' + futSemCob(c.n_descobertos) + ':</b> ' + escapa(c.datas_fmt || "—") + '</span>' +
+      (c.motivos ? '<span class="pp-txt cinza">Motivo: ' + escapa(motivosTxt(c.motivos)) + '</span>' : ''));
+    if(e === "incompleto") cx.appendChild(novo("span", "pp-txt", '<b style="color:#D70015">Apagou incompleto:</b> foi assinada como excluída, mas os futuros ainda existem. Foi apagado só um? Abrir o Feegow e apagar “este e os próximos”.'));
+    if(e === "aguardando") cx.appendChild(novo("span", "pp-txt", "Guia " + (c.hold_fila_em ? "na fila do robô" : "solicitada no balcão") + ": segurando o corte."));
+    var ass = corteAssinatura(c);
+    if(ass) cx.appendChild(novo("span", "pp-txt cinza", escapa(ass)));
+    P.corpo.appendChild(cx);
+    if(c.alvo_agendamento_id){
+      var a = novo("a", "btn-claro", "Abrir o próximo no Feegow " + ico(IC.fora, 14, 2));
+      a.href = "https://app.feegow.com/main/?P=Agenda-1&Pers=1&AgendamentoID=" + c.alvo_agendamento_id;
+      a.target = "_blank"; a.rel = "noopener"; a.title = "Abre direto no agendamento a apagar: dele em diante";
+      P.corpo.appendChild(a);
+    }
+    var cel = primeiroCelular(c.celulares_raw, c.telefones_raw);
+    var fone = novo("div", "pp-fone");
+    if(cel){
+      var dig = foneDigitos(cel);
+      fone.innerHTML = '<span><small>Celular</small><b>' + escapa(foneBonito(cel)) + '</b></span>';
+      var bc = botao("btn btn-s btn-sm", "Copiar", function(){
+        (navigator.clipboard ? navigator.clipboard.writeText(dig) : Promise.reject())
+          .then(function(){ bc.textContent = "Copiado"; setTimeout(function(){ bc.textContent = "Copiar"; }, 1600); }, function(){ window.prompt("Copie o número:", dig); });
+      });
+      fone.appendChild(bc);
+    } else fone.innerHTML = '<span><small>Celular</small><b>Sem celular no cadastro</b></span>';
+    P.corpo.appendChild(fone);
+    var ac = novo("div", "pp-bloco");
+    if(modo === "acoes"){
+      ac.appendChild(novo("span", "pp-rot", "Depois de apagar no Feegow"));
+      var lb = novo("div", "pp-adm-bt");
+      lb.appendChild(botao("btn btn-p", "Excluí no Feegow", function(){
+        if(!autora()){ aviso = "Entre com seu PIN primeiro: a assinatura precisa de nome."; pinta(); return; }
+        modo = "confirma"; aviso = null; pinta();
+      }));
+      lb.appendChild(botao("btn btn-s", "Segurar o corte", function(){
+        if(!autora()){ aviso = "Entre com seu PIN primeiro: o indulto é assinado."; pinta(); return; }
+        modo = "indulto"; dias = 3; motivo = ""; aviso = null; pinta();
+      }));
+      ac.appendChild(lb);
+    } else if(modo === "confirma"){
+      ac.classList.add("pp-confirma");
+      ac.appendChild(novo("span", "pp-txt", "Confirmar: os agendamentos futuros de <b>" + escapa(c.paciente) + "</b> (" + escapa(ESP_ROT[c.especialidade] || c.especialidade || "—") + ") foram apagados no Feegow?"));
+      var lc = novo("div", "pp-adm-bt");
+      lc.appendChild(botao("btn btn-s", "Cancelar", function(){ modo = "acoes"; pinta(); }));
+      var bs = botao("btn btn-p", "Sim, apaguei", function(){
+        bs.disabled = true; bs.textContent = "Salvando…";
+        salvarCorteNota(c.oc_ref, { tratamento: "excluido", indulto_ate: null }, function(ok){
+          modo = "acoes"; aviso = ok ? "ok:Assinado. A linha some quando o espelho confirmar." : "Não consegui salvar. Tente de novo.";
+          if(P.aberto) pinta();
+        });
+      });
+      lc.appendChild(bs);
+      ac.appendChild(lc);
+    } else {
+      ac.classList.add("pp-confirma");
+      ac.appendChild(novo("span", "pp-rot", "Não cortar por quantos dias?"));
+      var st = novo("div", "passo");
+      var bm = botao("btn btn-s", "−", function(){ dias = Math.max(1, dias - 1); pinta(); }); bm.setAttribute("aria-label", "Menos um dia"); bm.disabled = dias <= 1;
+      var bp = botao("btn btn-s", "+", function(){ dias = Math.min(14, dias + 1); pinta(); }); bp.setAttribute("aria-label", "Mais um dia"); bp.disabled = dias >= 14;
+      st.appendChild(bm); st.appendChild(novo("b", "passo-n", String(dias))); st.appendChild(bp);
+      st.appendChild(novo("span", "cinza", "De 1 a 14 dias · segura até " + fmtData(ateIso(dias)).slice(0, 5)));
+      ac.appendChild(st);
+      var mi = novo("input", "fc"); mi.placeholder = "Motivo do indulto (fica registrado)"; mi.value = motivo;
+      mi.addEventListener("input", function(){ motivo = mi.value; });
+      ac.appendChild(mi);
+      var li = novo("div", "pp-adm-bt");
+      li.appendChild(botao("btn btn-s", "Cancelar", function(){ modo = "acoes"; pinta(); }));
+      var bi = botao("btn btn-p", "Segurar por " + dias + (dias === 1 ? " dia" : " dias"), function(){
+        bi.disabled = true; bi.textContent = "Salvando…";
+        salvarCorteNota(c.oc_ref, { tratamento: "indulto", indulto_ate: ateIso(dias), nota: motivo || "" }, function(ok){
+          modo = "acoes"; aviso = ok ? "ok:Indulto registrado." : "Não consegui salvar. Tente de novo.";
+          if(P.aberto) pinta();
+        });
+      });
+      li.appendChild(bi);
+      ac.appendChild(li);
+    }
+    P.corpo.appendChild(ac);
+    if(aviso){
+      var ok = aviso.indexOf("ok:") === 0;
+      P.corpo.appendChild(novo("div", "pp-salvo", ico(ok ? IC.ok : IC_ALERTA, 14, 2.2, ok ? "#248A3D" : "#D70015") + '<span style="color:' + (ok ? "#248A3D" : "#D70015") + '">' + escapa(ok ? aviso.slice(3) : aviso) + '</span>'));
+    }
+    P.rodape.hidden = false; P.rodape.innerHTML = "";
+    var V = vizinhos(L, corteOrdenada(), function(y){ return y.oc_ref; }, c.oc_ref);
+    var bA = botao("btn btn-s", ico(IC.esq, 16, 2.2) + "Anterior", function(){ if(V.ant){ atual = V.ant.oc_ref; modo = "acoes"; aviso = null; pinta(); } }); bA.disabled = !V.ant;
+    var bP = botao("btn btn-p", "Próxima" + ico(IC.dir, 16, 2.2), function(){ if(V.prox){ atual = V.prox.oc_ref; modo = "acoes"; aviso = null; pinta(); } }); bP.disabled = !V.prox;
+    P.rodape.appendChild(bA);
+    P.rodape.appendChild(novo("span", "pop-pos", V.i >= 0 ? (V.i + 1) + " de " + L.length : "Saiu desta lista · " + L.length + " restantes"));
+    P.rodape.appendChild(bP);
+  }
+  estado._cortePinta = function(){ if(P.aberto && modo === "acoes") pinta(); };
+  pinta();
 }
 
 /* ── 📵 dados ── */
@@ -1514,67 +2113,196 @@ function textoFalha(f){
   return corpo;
 }
 
-/* ── 📵 tela ── */
-function desenharFalhas(){
-  var host = document.getElementById("gv-conteudo"); if(!host) return;
-  host.innerHTML = "";
-  var topo = document.createElement("div"); topo.className = "gv-explica";
-  topo.innerHTML =
-    "<b>📵 Mensagens que o robô NÃO conseguiu entregar</b> (consultas de hoje em diante). " +
-    "A regra da casa: <b>ninguém sai da agenda sem ter sido avisado</b> — então é a recepção quem manda na mão: " +
-    "<b>copiar o número</b>, achar a conversa na plataforma, <b>copiar a mensagem pronta</b> e enviar. " +
-    "SEM CELULAR = completar o cadastro primeiro.";
-  host.appendChild(topo);
-  if(estado.falhasErro){
-    var er = document.createElement("p"); er.className = "gv-vazio";
-    er.textContent = "⚠️ " + estado.falhasErro + " — o 11_SQL_CORTE.sql já rodou no banco?";
-    host.appendChild(er); return;
-  }
-  if(estado.falhas === null){
-    var lo = document.createElement("p"); lo.className = "gv-vazio";
-    lo.textContent = "Carregando…"; host.appendChild(lo); return;
-  }
-  if(!estado.falhas.length){
-    var ok = document.createElement("p"); ok.className = "gv-vazio";
-    ok.textContent = "📵 Nenhuma falha — todas as mensagens do período chegaram.";
-    host.appendChild(ok); return;
-  }
-  estado.falhas.forEach(function(f){ host.appendChild(cardFalha(f)); });
+/* ── 📵 tela — design novo: mensagens que o robô não entregou ──
+   Não grava nada: copia o número e a mensagem pronta (textoFalha, igual antes). */
+var FALHA_TXT = {
+  falhou:      { label:"Envio falhou", cor:"#C93400", sub:"Mandar na mão pela plataforma",
+                 acao:"Copiar o número, achar a conversa na plataforma, copiar a mensagem pronta e enviar. Ninguém sai da agenda sem ter sido avisado." },
+  sem_celular: { label:"Sem celular", cor:"#D70015", sub:"Completar o cadastro no Feegow primeiro",
+                 acao:"O cadastro não tem celular. Completar no Feegow antes de qualquer coisa; depois mandar a mensagem pronta." }
+};
+function falhaSit(f){ return f.status_envio === "SEM CELULAR" ? "sem_celular" : "falhou"; }
+function tipoMsgRot(t){ return t === "lembrete" ? "Lembrete" : "Confirmação"; }
+function diaConsulta(iso){
+  if(!iso) return "—";
+  var p = String(iso).slice(0,10).split("-"), d = new Date(+p[0], +p[1]-1, +p[2]), h = new Date();
+  var hoje = new Date(h.getFullYear(), h.getMonth(), h.getDate());
+  var dif = Math.round((d - hoje) / 86400000), dm = p[2] + "/" + p[1];
+  if(dif === 0) return "hoje, " + dm;
+  if(dif === 1) return "amanhã, " + dm;
+  return ["domingo","segunda","terça","quarta","quinta","sexta","sábado"][d.getDay()] + ", " + dm;
 }
-function cardFalha(f){
-  var semCel = (f.status_envio === "SEM CELULAR");
-  var card = document.createElement("article");
-  card.className = "card " + (semCel ? "g0" : "g1");
-  var det = [];
-  det.push("consulta <b>" + escapa(f.data_fmt||"") + "</b> às <b>" + escapa(f.horario||"") + "</b> · " + escapa(f.profissional||"—"));
-  det.push("mensagem: <b>" + escapa(f.tipo) + "</b> · falha: <b>" + escapa(f.status_envio) + "</b>" +
-           (f.erro_detalhe ? ' <span class="mono">(' + escapa(String(f.erro_detalhe).slice(0,80)) + ')</span>' : ""));
-  if(f.ultima_tentativa) det.push("última tentativa " + fmtQuando(f.ultima_tentativa));
-  if(semCel) det.push("<b>cadastro sem celular</b> — completar no Feegow antes de qualquer coisa");
-  card.innerHTML =
-    '<div class="hora">' + escapa(f.horario||"—") + '</div>' +
-    '<div class="quem">' +
-      '<div class="paciente">' + escapa(f.nome_paciente||("ID:"+f.paciente_id)) + '</div>' +
-      '<div class="meta"><span class="esp">' + escapa(f.especialidade||"—") + '</span></div>' +
-    '</div>' +
-    '<div class="sit ' + (semCel ? "s0" : "s1") + '"><span class="rotulo">' + (semCel ? "Sem celular" : "Envio falhou") + '</span>' +
-      '<div class="detalhe">' + det.join("<br>") + '</div></div>';
-  var acoes = document.createElement("div"); acoes.className = "acoes";
-  var cel = primeiroCelular(f.celulares_raw, f.telefones_raw);
-  if(cel) acoes.appendChild(botaoFone(cel));
-  var bMsg = document.createElement("button"); bMsg.type = "button";
-  bMsg.className = "fone"; bMsg.innerHTML = "📋 copiar a mensagem pronta";
-  bMsg.title = "O texto do padrão novo, com os dados deste paciente preenchidos";
-  bMsg.onclick = function(){
-    var txt = textoFalha(f);
+function falhaOrdenada(){
+  return (estado.falhas || []).slice().sort(function(a, b){
+    var x = String(a.data_atendimento || "") + String(a.horario || ""), y = String(b.data_atendimento || "") + String(b.horario || "");
+    return x < y ? -1 : x > y ? 1 : 0;
+  });
+}
+function falhaVisiveis(){
+  var q = semAcento(estado.falhaBusca || "").trim(), f = estado.falhaFiltro || "todos";
+  return falhaOrdenada().filter(function(x){
+    if(q && semAcento(x.nome_paciente || "").indexOf(q) < 0) return false;
+    return f === "todos" || falhaSit(x) === f;
+  });
+}
+function desenharFalhas(){
+  var main = document.getElementById("gv-conteudo"); if(!main) return;
+  campoBusca("falhas", "falhaBusca", "Buscar paciente", estado.falhaBusca, function(v){ estado.falhaBusca = v; estado._falhaTopo = true; desenharFalhas(); });
+  var antes = main.querySelector(".lista-corpo");
+  var rolagem = antes && !estado._falhaTopo ? antes.scrollTop : 0;
+  estado._falhaTopo = false;
+  main.innerHTML = "";
+  var todas = estado.falhas || [];
+  var semCel = todas.filter(function(x){ return falhaSit(x) === "sem_celular"; }).length;
+  if(window.moldura) moldura.resumo("falhas", estado.falhas === null ? "" :
+    (todas.length === 1 ? "1 mensagem que o robô não entregou" : todas.length + " mensagens que o robô não entregou") + " · " +
+    (semCel === 1 ? "1 paciente sem celular" : semCel + " pacientes sem celular") + " · consultas de hoje em diante");
+  var q = semAcento(estado.falhaBusca || "").trim();
+  var base = todas.filter(function(x){ return !q || semAcento(x.nome_paciente || "").indexOf(q) >= 0; });
+  var cont = { todos: base.length, falhou:0, sem_celular:0 };
+  base.forEach(function(x){ cont[falhaSit(x)]++; });
+  var filtro = estado.falhaFiltro || "todos";
+  var vis = falhaVisiveis();
+
+  var wrap = novo("div", "duas-col");
+  var sec = novo("section", "lista alta"); sec.setAttribute("aria-label", "Mensagens não entregues");
+  var topo = novo("div", "lista-topo");
+  var seg = novo("div", "seg"); seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "Mostrar");
+  [["todos","Todas","#AEAEB2"],["falhou","Envio falhou",FALHA_TXT.falhou.cor],["sem_celular","Sem celular",FALHA_TXT.sem_celular.cor]].forEach(function(d){
+    var on = filtro === d[0];
+    var b = botao(on ? "on" : "", '<span class="q" style="background:' + d[2] + '"></span>' + d[1] + ' <span class="n">' + cont[d[0]] + '</span>',
+      function(){ estado.falhaFiltro = d[0]; estado._falhaTopo = true; desenharFalhas(); });
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+    seg.appendChild(b);
+  });
+  topo.appendChild(seg);
+  topo.appendChild(novo("span", "mostrando", vis.length === 1 ? "1 mensagem" : vis.length + " mensagens"));
+  sec.appendChild(topo);
+  var corpo = novo("div", "lista-corpo");
+  if(estado.falhasErro) corpo.appendChild(novo("div", "lista-vazio erro", "Não consegui ler as falhas de envio. " + escapa(estado.falhasErro)));
+  else if(estado.falhas === null) corpo.appendChild(novo("div", "lista-vazio", "Carregando…"));
+  else if(!vis.length) corpo.appendChild(novo("div", "lista-vazio", q ? "<b>Ninguém com esse nome</b><br>Confira a grafia ou limpe a busca." : '<b class="ok">Nenhuma falha</b><br>Todas as mensagens do período chegaram.'));
+  var dia = null, porDia = {};
+  vis.forEach(function(x){ porDia[x.data_atendimento] = (porDia[x.data_atendimento] || 0) + 1; });
+  vis.forEach(function(x){
+    if(dia !== x.data_atendimento){
+      dia = x.data_atendimento;
+      corpo.appendChild(novo("div", "dia-cab", '<b>Consultas de ' + escapa(diaConsulta(x.data_atendimento)) + '</b><span>' + (porDia[dia] === 1 ? "1 mensagem" : porDia[dia] + " mensagens") + '</span>'));
+    }
+    var S = FALHA_TXT[falhaSit(x)];
+    var b = botao("linha" + (estado._falhaAberta === x.agendamento_id + x.tipo ? " aberta" : ""),
+      '<span class="h">' + escapa(x.horario || "—") + '</span>' +
+      '<span class="q"><span class="nm">' + escapa(x.nome_paciente || ("ID:" + x.paciente_id)) + '</span><span class="mt">' +
+      escapa((x.profissional || "—") + " · " + tipoMsgRot(x.tipo) + (x.situacao ? " · guia: " + String(x.situacao).toLowerCase() : "")) + '</span></span>' +
+      '<span class="dir"><span class="tag" style="color:' + S.cor + '">' + S.label + '</span>' +
+      (x.ultima_tentativa ? '<span class="tr">tentou ' + escapa(fmtQuando(x.ultima_tentativa).replace(" ", " às ")) + '</span>' : '') + '</span>',
+      function(){ abrirFalhaItem(x.agendamento_id + x.tipo); });
+    b.setAttribute("aria-haspopup", "dialog"); b.setAttribute("data-falha", x.agendamento_id + x.tipo);
+    corpo.appendChild(b);
+  });
+  sec.appendChild(corpo);
+  wrap.appendChild(sec);
+
+  var lado = novo("div", "lado");
+  var pn = novo("section", "painel"); pn.setAttribute("aria-labelledby", "falha-sit");
+  pn.appendChild(novo("div", "painel-cab", '<h2 id="falha-sit">Situação</h2><span>' + (todas.length === 1 ? "1 mensagem" : todas.length + " mensagens") + '</span>'));
+  var contT = { falhou:0, sem_celular:0 };
+  todas.forEach(function(x){ contT[falhaSit(x)]++; });
+  ["falhou","sem_celular"].forEach(function(k){
+    var S = FALHA_TXT[k];
+    var b = botao("cat", '<span class="q" style="background:' + S.cor + '"></span><span class="t"><b>' + S.label + '</b><small>' + escapa(S.sub) + '</small></span><span class="n">' + contT[k] + '</span>' + ico(IC.dir, 16, 2),
+      function(){ abrirFalhaCat(k); });
+    b.setAttribute("aria-haspopup", "dialog");
+    pn.appendChild(b);
+  });
+  lado.appendChild(pn);
+  lado.appendChild(novo("section", "painel nota-lado",
+    '<h2>Regra da casa</h2><p>São as mensagens que o robô <b>não conseguiu entregar</b>, de consultas de hoje em diante.</p>' +
+    '<p><b>Ninguém sai da agenda sem ter sido avisado</b>: a recepção manda na mão. Copiar o número, achar a conversa na plataforma, copiar a mensagem pronta e enviar.</p>' +
+    '<p class="cinza">Sem celular: completar o cadastro no Feegow primeiro.</p>'));
+  wrap.appendChild(lado);
+  main.appendChild(wrap);
+  ajustaAltura();
+  var c2 = main.querySelector(".lista-corpo"); if(c2) c2.scrollTop = rolagem;
+}
+function abrirFalhaCat(k){
+  if(!window.moldura) return;
+  var S = FALHA_TXT[k];
+  var lista = (estado.falhas || []).filter(function(x){ return falhaSit(x) === k; });
+  var P = moldura.pop({ largura:"640px", titulo:"Mensagens não entregues" });
+  P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-alerta" style="color:' + S.cor + '">' + (lista.length === 1 ? "1 mensagem" : lista.length + " mensagens") + '</span><h2>' + S.label + '</h2>'));
+  P.corpo.appendChild(novo("div", "pp-caixa", '<span class="pp-rot">O que fazer</span><span class="pp-txt">' + escapa(S.acao) + '</span>'));
+  var ul = novo("div", "pp-lista");
+  lista.forEach(function(x){
+    ul.appendChild(botao("pp-linha", '<span class="w">' + escapa(String(x.data_fmt || "").slice(0,5) + " " + (x.horario || "")) + '</span><span class="q"><b>' + escapa(x.nome_paciente || "—") + '</b><small>' +
+      escapa((x.profissional || "—") + " · " + tipoMsgRot(x.tipo)) + '</small></span>' + ico(IC.dir, 14, 2),
+      function(){ estado.falhaFiltro = k; estado.falhaBusca = ""; var i = document.getElementById("falhaBusca"); if(i) i.value = ""; desenharFalhas(); abrirFalhaItem(x.agendamento_id + x.tipo); }));
+  });
+  if(!lista.length) ul.appendChild(novo("div", "lista-vazio", "Nenhuma mensagem aqui agora."));
+  P.corpo.appendChild(ul);
+  P.rodape.hidden = false; P.rodape.classList.add("fim");
+  P.rodape.appendChild(botao("btn btn-s", "Fechar", function(){ P.fechar(); }));
+  P.rodape.appendChild(botao("btn btn-p", "Ver só estes na lista", function(){
+    P.fechar(); estado.falhaFiltro = k; estado.falhaBusca = ""; var i = document.getElementById("falhaBusca"); if(i) i.value = "";
+    estado._falhaTopo = true; desenharFalhas();
+  }));
+}
+function abrirFalhaItem(chave){
+  if(!window.moldura) return;
+  var atual = chave;
+  var P = moldura.pop({ largura:"640px", titulo:"Mensagem não entregue", aoFechar:function(){ estado._falhaAberta = null; marca(); } });
+  function k(x){ return x.agendamento_id + x.tipo; }
+  function marca(){
+    document.querySelectorAll("#gv-conteudo .linha.aberta").forEach(function(x){ x.classList.remove("aberta"); });
+    if(estado._falhaAberta){ var r = document.querySelector('#gv-conteudo .linha[data-falha="' + CSS.escape(estado._falhaAberta) + '"]'); if(r) r.classList.add("aberta"); }
+  }
+  function copia(txt, botaoEl, okTxt, base){
     (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject())
-      .then(function(){ bMsg.innerHTML = "✔ copiada — é só colar na conversa"; },
-            function(){ window.prompt("Copie a mensagem:", txt); });
-    setTimeout(function(){ bMsg.innerHTML = "📋 copiar a mensagem pronta"; }, 2200);
-  };
-  acoes.appendChild(bMsg);
-  card.appendChild(acoes);
-  return card;
+      .then(function(){ botaoEl.textContent = okTxt; setTimeout(function(){ botaoEl.textContent = base; }, 2200); },
+            function(){ window.prompt("Copie:", txt); });
+  }
+  function pinta(){
+    var L = falhaVisiveis();
+    var V = vizinhos(L, falhaOrdenada(), k, atual);
+    var x = V.i >= 0 ? L[V.i] : (estado.falhas || []).find(function(y){ return k(y) === atual; });
+    if(!x){ P.fechar(); return; }
+    estado._falhaAberta = k(x); marca();
+    var s = falhaSit(x), S = FALHA_TXT[s];
+    P.corpo.innerHTML = "";
+    P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-quando">Consulta de ' + escapa(diaConsulta(x.data_atendimento)) + " às " + escapa(x.horario || "—") + '</span>' +
+      '<h2>' + escapa(x.nome_paciente || ("ID:" + x.paciente_id)) + '</h2><span class="pp-l1">' + escapa((x.profissional || "—") + (x.especialidade ? " · " + x.especialidade : "")) + '</span>'));
+    P.corpo.appendChild(novo("div", "pp-caixa",
+      '<span class="pp-tag" style="color:' + S.cor + '">' + S.label + '</span>' +
+      '<span class="pp-txt">Mensagem de ' + tipoMsgRot(x.tipo).toLowerCase() + ' · falha: ' + escapa(String(x.status_envio || "").toLowerCase()) +
+      (x.erro_detalhe ? ' (' + escapa(String(x.erro_detalhe).slice(0, 80).toLowerCase()) + ')' : '') + '</span>' +
+      (x.ultima_tentativa ? '<span class="pp-l2">Última tentativa ' + escapa(fmtQuando(x.ultima_tentativa).replace(" ", " às ")) + '</span>' : '') +
+      (s === "sem_celular" ? '<span class="pp-txt" style="color:#D70015"><b>Cadastro sem celular:</b> completar no Feegow antes de qualquer coisa.</span>' : '')));
+    var cel = primeiroCelular(x.celulares_raw, x.telefones_raw);
+    if(cel){
+      var dig = foneDigitos(cel);
+      var fone = novo("div", "pp-fone", '<span><small>Celular</small><b>' + escapa(foneBonito(cel)) + '</b></span>');
+      var bc = botao("btn btn-s btn-sm", "Copiar", function(){ copia(dig, bc, "Copiado", "Copiar"); });
+      bc.title = "Copiar o número (só dígitos, sem o 55): é assim que a busca da plataforma acha";
+      fone.appendChild(bc);
+      P.corpo.appendChild(fone);
+    }
+    var txt = textoFalha(x);
+    var bm = novo("div", "pp-bloco");
+    var cab = novo("div", "pp-msg-cab", '<span class="pp-rot">Mensagem pronta · ' + tipoMsgRot(x.tipo).toLowerCase() + '</span>');
+    var bmsg = botao("btn btn-p btn-sm", "Copiar a mensagem", function(){ copia(txt, bmsg, "Copiada: é só colar na conversa", "Copiar a mensagem"); });
+    bmsg.title = "O texto do padrão novo, com os dados deste paciente preenchidos";
+    cab.appendChild(bmsg);
+    bm.appendChild(cab);
+    bm.appendChild(novo("div", "pp-msg", escapa(txt)));
+    P.corpo.appendChild(bm);
+    P.rodape.hidden = false; P.rodape.innerHTML = "";
+    var bA = botao("btn btn-s", ico(IC.esq, 16, 2.2) + "Anterior", function(){ if(V.ant){ atual = k(V.ant); pinta(); } }); bA.disabled = !V.ant;
+    var bP = botao("btn btn-p", "Próxima" + ico(IC.dir, 16, 2.2), function(){ if(V.prox){ atual = k(V.prox); pinta(); } }); bP.disabled = !V.prox;
+    P.rodape.appendChild(bA);
+    P.rodape.appendChild(novo("span", "pop-pos", V.i >= 0 ? (V.i + 1) + " de " + L.length : L.length + " na lista"));
+    P.rodape.appendChild(bP);
+  }
+  pinta();
 }
 
 /* ═══════════════════ 📦 MALOTES (F4) ═══════════════════ */
@@ -1751,13 +2479,24 @@ function loadMalotes(){
         return r.json();
       });
   };
-  Promise.all([
+  /* os enviados ao SGU são só consulta (lado direito e "último envio"): se falharem, o resto da tela segue */
+  var enviados = q("fx4_malotes?select=*&estado=eq.enviado&order=enviado_em.desc.nullslast,id.desc&limit=11")
+    .then(function(env){
+      if(!env.length) return { env: env, confs: [] };
+      var ids = env.map(function(m){ return m.id; }).join(",");
+      return q("fx4_conferencias_xml?select=malote_id,veredito,qt_guias,qt_linhas,valor_total&veredito=eq.ok&malote_id=in.(" + ids + ")&order=id.desc")
+        .then(function(c){ return { env: env, confs: c }; }, function(){ return { env: env, confs: [] }; });
+    })
+    .catch(function(){ return null; });
+  return Promise.all([
     q("fx4_fila_malote?select=*"),
     q("fx4_malotes?select=*&estado=neq.enviado&order=id.desc"),
     q("fx4_rejeicoes_sgu?select=*&order=criada_em.desc&limit=100"),
-    q("fx4_conferencias_xml?select=malote_id,veredito,problemas,resumo,arquivo,qt_guias,qt_linhas,valor_total,conferida_em&order=id.desc&limit=60")
+    q("fx4_conferencias_xml?select=malote_id,veredito,problemas,resumo,arquivo,qt_guias,qt_linhas,valor_total,conferida_em&order=id.desc&limit=60"),
+    enviados
   ]).then(function(res){
-    estado.malotes = { fila: res[0], vivos: res[1], rej: res[2], confs: res[3] };
+    estado.malotes = { fila: res[0], vivos: res[1], rej: res[2], confs: res[3],
+                       enviados: res[4] ? res[4].env : [], envConfs: res[4] ? res[4].confs : [], envErro: !res[4] };
     estado.malotesErro = "";
     var b = document.getElementById("gv-b-malotes");
     if(b){
@@ -1776,22 +2515,16 @@ function fx4UltConf(mid){
   return null;
 }
 
-/* ── ações ── */
-function fx4Fechar(convId, prestadores){
-  var rot = (convId === 8) ? "Intercâmbio" : "Local";
-  if(!confirm("Assinar o X do MALOTE FECHADO?\n\n" + rot + " · " + prestadores.length +
-      " guia(s).\n\nIsso congela a lista: as guias saem da fila e o malote passa a esperar o XML."))
-    return;
-  fx4Rpc("fx4_marcar_fechado", { p_convenio_id: convId, p_prestadores: prestadores, p_quem: autora() })
-    .then(function(){ loadMalotes(); })
-    .catch(function(e){ alert("Não deu pra fechar o malote:\n" + e.message); });
-}
+/* ── ações ──
+   As gravações são as mesmas de sempre (fx4_marcar_fechado, fx4_conferir_xml, fx4_marcar_enviado,
+   fx4_tratar_rejeicao). As confirmações saíram das caixinhas do navegador e foram para dentro da janela. */
 function fx4Conferir(m, file, observacao){
+  var falhou = function(msg){ estado.malotesUlt[m.id] = { erro: msg }; desenharMalotes(); };
   fx4LerArquivo(file, function(texto){
     var r;
     try { r = fx4ParseXML(texto, file.name); }
-    catch(e){ alert("Problema no arquivo:\n" + e.message); return; }
-    if(!r.linhas.length){ alert("O XML não tem nenhuma linha de procedimento."); return; }
+    catch(e){ falhou("Problema no arquivo: " + e.message); return; }
+    if(!r.linhas.length){ falhou("O XML não tem nenhuma linha de procedimento."); return; }
     estado.malotesUlt[m.id] = { rodando: true };
     desenharMalotes();
     fx4Rpc("fx4_conferir_xml", {
@@ -1804,75 +2537,10 @@ function fx4Conferir(m, file, observacao){
       estado.malotesUlt[m.id] = { erro: e.message };
       desenharMalotes();
     });
-  }, function(e){ alert(e.message); });
-}
-function fx4Correcao(m){
-  var obs = window.prompt(
-    "CORREÇÃO PÓS-SGU\n\nCole aqui O QUE O SGU FALOU (o motivo da rejeição).\n" +
-    "Guia que sumir do XML novo vira rejeição registrada com este motivo — e a linha volta pra conferência (F3) corrigir.", "");
-  if(obs === null) return;
-  if(!obs.trim()){ alert("Sem o motivo do SGU não dá — é ele que vai pra análise do dono."); return; }
-  fx4PedeXML(function(file){ fx4Conferir(m, file, obs.trim()); });
-}
-function fx4Enviado(m){
-  if(!confirm("Confirmar: o SGU ACEITOU o lote " + (m.numero_lote || "?") + "?\n\n" +
-      "Isso carimba a data de envio e é DEFINITIVO — se o SGU acusou qualquer problema, use Correção antes."))
-    return;
-  fx4Rpc("fx4_marcar_enviado", { p_malote_id: m.id, p_quem: autora() })
-    .then(function(){ delete estado.malotesUlt[m.id]; loadMalotes(); })
-    .catch(function(e){ alert("Não deu pra marcar enviado:\n" + e.message); });
-}
-function fx4Tratar(r){
-  var nota = window.prompt("Marcar como tratada. Nota (opcional):", "");
-  if(nota === null) return;
-  fx4Rpc("fx4_tratar_rejeicao", { p_id: r.id, p_quem: autora(), p_nota: nota.trim() || null })
-    .then(function(){ loadMalotes(); })
-    .catch(function(e){ alert(e.message); });
+  }, function(e){ falhou(e.message); });
 }
 
 /* ── desenho ── */
-function fx4RotEstado(e){
-  return { fechado:                 ["Fechado — esperando o XML do lote", "meio"],
-           conferido_ok:            ["Conferido ✔ — pronto pro SGU",      "ok"],
-           conferido_com_problemas: ["Barrado na conferência",            "ruim"],
-           em_correcao:             ["Aguardando XML corrigido",          "ruim"] }[e] || [e, "meio"];
-}
-function fx4BlocoCard(convId, rot, bloco, guias){
-  var card = document.createElement("article");
-  card.className = "fx4-card";
-  var nums = guias.map(function(g){ return g.numero_guia_prestador; });
-  var soma = guias.reduce(function(a,g){ return a + (Number(g.valor_esperado_total)||0); }, 0);
-  var d1 = guias[0].data_mais_antiga, d2 = guias[guias.length-1].data_mais_antiga;
-  card.innerHTML =
-    '<div class="fx4-tit">📦 ' + escapa(rot) + ' · Bloco ' + bloco +
-      '<span class="fx4-badge">' + guias.length + ' guia' + (guias.length>1?'s':'') + '</span></div>' +
-    '<div class="fx4-meta">datas mais antigas ' + fx4Data(d1) + ' → ' + fx4Data(d2) +
-      ' · valor esperado ' + fx4Dinheiro(soma) +
-      ' · <b>ordem de faturamento: a data mais velha primeiro</b></div>';
-  var ta = document.createElement("textarea");
-  ta.className = "fx4-nums"; ta.readOnly = true;
-  ta.rows = Math.min(10, Math.max(4, nums.length));
-  ta.value = nums.join("\n");
-  card.appendChild(ta);
-  var acoes = document.createElement("div"); acoes.className = "fx4-acoes";
-  var bCop = document.createElement("button"); bCop.type="button"; bCop.className="gv-btn";
-  bCop.textContent = "📋 Copiar os números";
-  bCop.onclick = function(){
-    (navigator.clipboard ? navigator.clipboard.writeText(nums.join("\n")) : Promise.reject())
-      .then(function(){ bCop.textContent = "✔ copiados — colar no Feegow"; },
-            function(){ ta.focus(); ta.select(); document.execCommand("copy");
-                        bCop.textContent = "✔ copiados — colar no Feegow"; });
-    setTimeout(function(){ bCop.textContent = "📋 Copiar os números"; }, 2400);
-  };
-  acoes.appendChild(bCop);
-  var bX = document.createElement("button"); bX.type="button"; bX.className="gv-btn";
-  bX.textContent = "✔ Malote fechado no Feegow";
-  bX.title = "Assinar o X: congela esta lista e o malote passa a esperar o XML";
-  bX.onclick = function(){ fx4Fechar(convId, nums); };
-  acoes.appendChild(bX);
-  card.appendChild(acoes);
-  return card;
-}
 function fx4ProbHTML(problemas){
   if(!problemas || !problemas.length) return "";
   var porGuia = {};
@@ -1882,182 +2550,431 @@ function fx4ProbHTML(problemas){
   });
   var h = "";
   Object.keys(porGuia).sort().forEach(function(k){
-    h += "<div style='margin:4px 0'><b>guia " + escapa(k) + "</b>";
+    h += "<div class='mal-prob-g'><b>Guia " + escapa(k) + "</b>";
     porGuia[k].forEach(function(p){
-      h += "<br>&nbsp;&nbsp;• <b>" + escapa(p.problema) + "</b>" +
+      h += "<span><b>" + escapa(p.problema) + "</b>" +
            (p.codigo ? " · " + escapa(p.codigo) : "") +
-           (p.detalhe ? " — " + escapa(p.detalhe) : "");
+           (p.detalhe ? ": " + escapa(p.detalhe) : "") + "</span>";
     });
     h += "</div>";
   });
   return h;
 }
-function fx4MaloteCard(m){
-  var re = fx4RotEstado(m.estado);
-  var card = document.createElement("article");
-  card.className = "fx4-card " + re[1];
-  card.innerHTML =
-    '<div class="fx4-tit">Malote #' + m.id +
-      (m.numero_lote ? ' · lote <b>' + escapa(m.numero_lote) + '</b>' : '') +
-      '<span class="fx4-badge">' + escapa((m.convenio_id === 8) ? "Intercâmbio" : "Local") + '</span>' +
-      '<span class="fx4-badge">' + escapa(re[0]) + '</span></div>' +
-    '<div class="fx4-meta">' + m.qt_guias + ' guia(s) congelada(s)' +
-      (m.arquivo ? ' · último XML: <b>' + escapa(m.arquivo) + '</b>' : '') +
-      (m.criado_por ? ' · fechado por ' + escapa(m.criado_por) : '') +
-      ' · ' + fx4Data(m.criado_em) + '</div>';
-
-  var ult = estado.malotesUlt[m.id];
-  var conf = fx4UltConf(m.id);
-  if(ult && ult.rodando){
-    var lo = document.createElement("div"); lo.className = "fx4-meta";
-    lo.innerHTML = "<b>⏳ conferindo o XML contra a raiz…</b>";
-    card.appendChild(lo);
-  } else if(ult && ult.erro){
-    var er = document.createElement("div"); er.className = "fx4-prob";
-    er.innerHTML = "<b>erro na conferência:</b> " + escapa(ult.erro);
-    card.appendChild(er);
+var IC_MAL = {
+  bloco:  "M3.5 7.5 12 3.5l8.5 4v9L12 20.5l-8.5-4zM3.5 7.5l8.5 4 8.5-4M12 11.5v9",
+  malote: "M5 6h14v12H5zM5 10h14M9 14h6",
+  rej:    "M12 3.5 21.5 20h-19zM12 10v4.5M12 17.2h.01"
+};
+var MAL_EST = {
+  fechado:                 { rot:"Fechado, esperando o XML do lote", cor:"#C93400",
+                             explica:"A lista está congelada. Baixe o XML do lote no Feegow e confira aqui: só malote 100% limpo segue para o SGU." },
+  conferido_ok:            { rot:"Conferido, pronto para o SGU", cor:"#248A3D",
+                             explica:"Suba o lote no SGU. Marque “Enviado” só quando o SGU aceitar." },
+  conferido_com_problemas: { rot:"Barrado na conferência", cor:"#D70015",
+                             explica:"Nada foi gravado. Corrija no Feegow ou no SGU e suba o XML de novo." },
+  em_correcao:             { rot:"Aguardando XML corrigido", cor:"#D70015",
+                             explica:"Suba o XML corrigido para conferir de novo." }
+};
+function malEst(e){ return MAL_EST[e] || { rot: String(e || "—"), cor:"#636366", explica:"" }; }
+function malConv(id){ return id === 8 ? "Unimed Intercâmbio" : "Unimed Local"; }
+function malN(n, um, varios){ n = Number(n) || 0; return n === 1 ? "1 " + um : n + " " + varios; }
+/* data e hora de carimbos (timestamptz) no fuso de quem está olhando; datas puras seguem com fx4Data */
+function malDia(iso){
+  if(!iso) return "—";
+  var d = new Date(iso); if(isNaN(d.getTime())) return fx4Data(iso);
+  return String(d.getDate()).padStart(2,"0") + "/" + String(d.getMonth()+1).padStart(2,"0") + "/" + String(d.getFullYear()).slice(2);
+}
+function malDataHora(iso){ return iso ? malDia(iso) + " às " + horaDe(iso) : "—"; }
+function malBlocos(){
+  var M = estado.malotes; if(!M) return [];
+  var g = {}, out = [];
+  (M.fila || []).forEach(function(x){
+    var k = x.convenio_id + "·" + x.bloco;
+    if(!g[k]){ g[k] = { k: k, chave: "b:" + k, convenio_id: x.convenio_id, bloco: x.bloco, guias: [] }; out.push(g[k]); }
+    g[k].guias.push(x);
+  });
+  out.sort(function(a, b){ return a.k < b.k ? -1 : (a.k > b.k ? 1 : 0); });
+  out.forEach(function(b){
+    b.nums = b.guias.map(function(x){ return x.numero_guia_prestador; });
+    b.soma = b.guias.reduce(function(a, x){ return a + (Number(x.valor_esperado_total) || 0); }, 0);
+    b.d1 = b.guias[0].data_mais_antiga; b.d2 = b.guias[b.guias.length - 1].data_mais_antiga;
+  });
+  return out;
+}
+function malItens(f){
+  var M = estado.malotes || {};
+  if(f === "andamento") return (M.vivos || []).map(function(m){ return { chave: "m:" + m.id, m: m }; });
+  if(f === "rejeicoes") return (M.rej || []).map(function(r){ return { chave: "r:" + r.id, r: r }; });
+  return malBlocos().map(function(b){ return { chave: b.chave, b: b }; });
+}
+function malConfEnv(id){
+  var cs = (estado.malotes && estado.malotes.envConfs) || [];
+  for(var i=0;i<cs.length;i++) if(cs[i].malote_id === id) return cs[i];
+  return null;
+}
+function malLinha(it){
+  var ic, tit, meta, valor = "", rot, cor;
+  if(it.b){
+    var b = it.b;
+    ic = IC_MAL.bloco; tit = malConv(b.convenio_id) + " · Bloco " + b.bloco;
+    meta = malN(b.guias.length, "guia", "guias") + " · datas de " + fx4Data(b.d1) + " a " + fx4Data(b.d2) + " · a mais velha primeiro";
+    valor = fx4Dinheiro(b.soma); rot = "Pronto para fechar"; cor = "#248A3D";
+  } else if(it.m){
+    var m = it.m, E = malEst(m.estado), u = estado.malotesUlt[m.id], c = fx4UltConf(m.id);
+    ic = IC_MAL.malote; tit = "Malote #" + m.id + (m.numero_lote ? " · lote " + m.numero_lote : "");
+    meta = malN(m.qt_guias, "guia congelada", "guias congeladas") + " · " + malConv(m.convenio_id) +
+           (m.criado_por ? " · fechado por " + m.criado_por : "") + " · " + malDia(m.criado_em);
+    if(c && c.valor_total != null) valor = fx4Dinheiro(c.valor_total);
+    if(u && u.rodando){ rot = "Conferindo o XML…"; cor = "#636366"; } else { rot = E.rot; cor = E.cor; }
   } else {
-    var fonte = (ult && ult.veredito) ? ult :
-                (conf ? { veredito: conf.veredito, problemas: conf.problemas || [],
-                          qt_guias: conf.qt_guias, qt_linhas: conf.qt_linhas,
-                          valor_total: conf.valor_total, removidas: (conf.resumo||{}).removidas,
-                          f0_espelhadas: (conf.resumo||{}).f0_espelhadas } : null);
-    if(fonte){
-      if(fonte.veredito === "ok"){
-        var okb = document.createElement("div"); okb.className = "fx4-okbox";
-        okb.innerHTML = "<b>✔ Conferência limpa.</b> " + fonte.qt_guias + " guias · " +
-          fonte.qt_linhas + " sessões · " + fx4Dinheiro(fonte.valor_total) +
-          ((fonte.removidas && fonte.removidas.length)
-            ? "<br>✂️ rejeição registrada: guia(s) " + escapa(fonte.removidas.join(", ")) + " fora do lote."
-            : "") +
-          (((fonte.f0_espelhadas|0) > 0)
-            ? "<br>🪞 " + fonte.f0_espelhadas + " linha(s) do faturamento espelhada(s) no que o malote realmente faturou (código/guia/senha/valor)."
-            : "") +
-          "<br>As sessões já estão <b>em lote</b> no faturamento. Agora é subir no SGU.";
-        card.appendChild(okb);
-      } else {
-        var pr = document.createElement("div"); pr.className = "fx4-prob";
-        pr.innerHTML = "<b>🚫 Barrado.</b> Nada foi gravado — corrigir no Feegow/SGU e subir o XML de novo.<br>" +
-          fx4ProbHTML(fonte.problemas || []);
-        card.appendChild(pr);
-      }
-    }
+    var r = it.r;
+    ic = IC_MAL.rej; tit = "Guia " + r.numero_guia_prestador + (r.numero_lote ? " · lote " + r.numero_lote : "");
+    meta = [r.paciente_nome, malDia(r.criada_em), r.autora ? "por " + r.autora : "", "SGU: " + (r.motivo_sgu || "—")]
+             .filter(Boolean).join(" · ");
+    rot = r.tratada ? "Tratada" : "Pendente, análise do dono"; cor = r.tratada ? "#248A3D" : "#D70015";
   }
-
-  var acoes = document.createElement("div"); acoes.className = "fx4-acoes";
-  if(m.estado !== "conferido_ok"){
-    var bUp = document.createElement("button"); bUp.type="button"; bUp.className="gv-btn";
-    bUp.textContent = "🧾 Conferir o XML do lote";
-    bUp.title = "Baixar o XML no Feegow e subir aqui — a conferência roda na hora, contra a raiz";
-    bUp.onclick = function(){ fx4PedeXML(function(f){ fx4Conferir(m, f, null); }); };
-    acoes.appendChild(bUp);
-  }
-  if(m.estado === "conferido_ok"){
-    var bEnv = document.createElement("button"); bEnv.type="button"; bEnv.className="gv-btn";
-    bEnv.textContent = "📤 Enviado no SGU (aceito)";
-    bEnv.onclick = function(){ fx4Enviado(m); };
-    acoes.appendChild(bEnv);
-  }
-  if(m.estado === "conferido_ok" || m.estado === "em_correcao" || m.estado === "conferido_com_problemas"){
-    var bCor = document.createElement("button"); bCor.type="button"; bCor.className="gv-btn";
-    bCor.textContent = "✂️ Correção (SGU rejeitou guia)";
-    bCor.title = "Sobe o XML corrigido + o motivo do SGU; guia que sumiu vira rejeição registrada";
-    bCor.onclick = function(){ fx4Correcao(m); };
-    acoes.appendChild(bCor);
-  }
-  card.appendChild(acoes);
-  return card;
+  return '<span class="mal-ic">' + ico(ic, 18, 1.7) + '</span>' +
+    '<span class="q"><span class="nm">' + escapa(tit) + '</span><span class="mt">' + escapa(meta) + '</span></span>' +
+    '<span class="dir">' + (valor ? '<span class="valor">' + escapa(valor) + '</span>' : '') +
+      '<span class="tag" style="color:' + cor + '">' + escapa(rot) + '</span></span>';
 }
 function desenharMalotes(){
   var host = document.getElementById("gv-conteudo"); if(!host) return;
+  var M = estado.malotes;
+  var blocos = malBlocos(), vivos = (M && M.vivos) || [], rej = (M && M.rej) || [], env = (M && M.enviados) || [];
+  var nGuias = blocos.reduce(function(a, b){ return a + b.guias.length; }, 0);
+  var semTratar = rej.filter(function(r){ return !r.tratada; }).length;
+
+  /* cabeçalho: resumo e o último envio ao SGU */
+  if(window.moldura){
+    moldura.resumo("malotes", M ? (blocos.length === 1 ? "1 bloco pronto" : blocos.length + " blocos prontos") + " para fechar · " +
+      malN(nGuias, "guia", "guias") + " · " +
+      (vivos.length === 0 ? "nenhum malote em andamento" : malN(vivos.length, "malote em andamento", "malotes em andamento")) : "");
+    var ac = moldura.acoesDe("malotes");
+    if(ac){
+      var box = ac.querySelector(".mal-ult");
+      if(!box){ box = novo("div", "mal-ult"); ac.appendChild(box); }
+      box.innerHTML = '<span>Último envio ao SGU</span><b>' + escapa(env.length ? malDataHora(env[0].enviado_em) : "—") + '</b>';
+      box.hidden = !M || !!M.envErro;
+    }
+  }
+
+  var antes = host.querySelector(".lista-corpo");
+  var rolagem = (antes && !estado._malTopo) ? antes.scrollTop : 0;
+  estado._malTopo = false;
+  var f = estado.malFiltro || "prontos";
   host.innerHTML = "";
-  var topo = document.createElement("div"); topo.className = "gv-explica";
-  topo.innerHTML =
-    "<b>📦 Malotes Unimed</b> — o caminho é sempre o mesmo: " +
-    "<b>1)</b> copiar o bloco e fechar o malote no Feegow · " +
-    "<b>2)</b> assinar o <b>✔ Malote fechado</b> (congela a lista) · " +
-    "<b>3)</b> baixar o XML e <b>conferir aqui</b> — só malote 100% limpo segue · " +
-    "<b>4)</b> subir no SGU e marcar <b>📤 Enviado</b> SÓ quando o SGU aceitar. " +
-    "SGU rejeitou guia? <b>✂️ Correção</b> com o motivo — a guia volta pra fila sozinha quando sanar.";
-  host.appendChild(topo);
+  var wrap = novo("div", "duas-col");
 
-  if(estado.malotesErro){
-    var er = document.createElement("p"); er.className = "gv-vazio";
-    er.textContent = "⚠️ " + estado.malotesErro;
-    host.appendChild(er); return;
-  }
-  if(estado.malotes === null){
-    var lo = document.createElement("p"); lo.className = "gv-vazio";
-    lo.textContent = "Carregando…"; host.appendChild(lo); return;
-  }
-
-  /* 1 · malotes em andamento */
-  var vivos = estado.malotes.vivos || [];
-  if(vivos.length){
-    var s1 = document.createElement("div"); s1.className = "fx4-sec";
-    s1.textContent = "Malotes em andamento";
-    host.appendChild(s1);
-    vivos.forEach(function(m){ host.appendChild(fx4MaloteCard(m)); });
-  }
-
-  /* 2 · blocos prontos pra fechar */
-  var fila = estado.malotes.fila || [];
-  var s2 = document.createElement("div"); s2.className = "fx4-sec";
-  s2.textContent = "Blocos prontos (guias 100% conferidas, da data mais velha pra mais nova)";
-  host.appendChild(s2);
-  if(!fila.length){
-    var vz = document.createElement("p"); vz.className = "gv-vazio";
-    vz.textContent = "Nenhuma guia pronta agora — a fila enche conforme a conferência (F3) aprova.";
-    host.appendChild(vz);
-  } else {
-    var grupos = {};
-    fila.forEach(function(g){
-      var k = g.convenio_id + "·" + g.bloco;
-      (grupos[k] = grupos[k] || []).push(g);
+  /* lista: prontos / em andamento / rejeições */
+  var sec = novo("section", "lista alta"); sec.setAttribute("aria-label", "Malotes");
+  var topo = novo("div", "lista-topo");
+  var seg = novo("div", "seg"); seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "Mostrar");
+  [["prontos", "Prontos para fechar", "#248A3D", blocos.length],
+   ["andamento", "Em andamento", "#C93400", vivos.length],
+   ["rejeicoes", "Rejeições do SGU", "#D70015", rej.length]].forEach(function(d){
+    var on = f === d[0];
+    var b = botao(on ? "on" : "", '<span class="q" style="background:' + d[2] + '"></span>' + d[1] + ' <span class="n">' + d[3] + '</span>', function(){
+      if((estado.malFiltro || "prontos") === d[0]) return;
+      estado.malFiltro = d[0]; estado._malTopo = true; desenharMalotes();
     });
-    Object.keys(grupos).sort().forEach(function(k){
-      var gs = grupos[k];
-      host.appendChild(fx4BlocoCard(gs[0].convenio_id, gs[0].convenio, gs[0].bloco, gs));
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+    seg.appendChild(b);
+  });
+  topo.appendChild(seg);
+  topo.appendChild(novo("span", "mostrando", !M ? "" : f === "prontos" ? malN(nGuias, "guia na fila", "guias na fila") :
+    f === "andamento" ? vivos.length + " em andamento" : semTratar + " sem tratar"));
+  sec.appendChild(topo);
+  var corpo = novo("div", "lista-corpo");
+  if(estado.malotesErro) corpo.appendChild(novo("div", "lista-vazio erro", escapa(estado.malotesErro)));
+  else if(!M) corpo.appendChild(novo("div", "lista-vazio", "Carregando…"));
+  else {
+    var itens = malItens(f);
+    if(!itens.length){
+      var V = { prontos:   ["Nenhuma guia pronta agora", "A fila enche conforme a conferência aprova as guias."],
+                andamento: ["Nenhum malote em andamento", "Feche um bloco pronto no Feegow para começar um malote."],
+                rejeicoes: ["Nenhuma rejeição registrada", "Que continue assim."] }[f];
+      corpo.appendChild(novo("div", "lista-vazio", '<b class="ok">' + V[0] + '</b><br>' + V[1]));
+    }
+    itens.forEach(function(it){
+      var bt = botao("linha mal" + (estado._malAberta === it.chave ? " aberta" : ""), malLinha(it), function(){ abrirMalItem(it.chave); });
+      bt.setAttribute("aria-haspopup", "dialog"); bt.setAttribute("data-mal", it.chave);
+      corpo.appendChild(bt);
     });
   }
+  sec.appendChild(corpo);
+  wrap.appendChild(sec);
 
-  /* 3 · rejeições do SGU */
-  var rej = estado.malotes.rej || [];
-  var s3 = document.createElement("div"); s3.className = "fx4-sec";
-  s3.textContent = "Rejeições do SGU (análise 1 a 1 do dono)";
-  host.appendChild(s3);
-  if(!rej.length){
-    var vz2 = document.createElement("p"); vz2.className = "gv-vazio";
-    vz2.textContent = "Nenhuma rejeição registrada. Que continue assim.";
-    host.appendChild(vz2);
-  } else {
-    rej.forEach(function(r){
-      var c = document.createElement("article");
-      c.className = "fx4-card " + (r.tratada ? "ok" : "ruim");
-      c.innerHTML =
-        '<div class="fx4-tit">guia ' + escapa(r.numero_guia_prestador) +
-          (r.numero_lote ? ' · lote ' + escapa(r.numero_lote) : '') +
-          '<span class="fx4-badge">' + (r.tratada ? "tratada ✔" : "pendente") + '</span></div>' +
-        '<div class="fx4-meta">' +
-          (r.paciente_nome ? escapa(r.paciente_nome) + ' · ' : '') +
-          fx4Data(r.criada_em) + (r.autora ? ' · por ' + escapa(r.autora) : '') + '</div>' +
-        '<div class="fx4-meta"><b>SGU:</b> ' + escapa(r.motivo_sgu || "—") +
-          (r.nota_dono ? '<br><b>nota do dono:</b> ' + escapa(r.nota_dono) : '') + '</div>';
-      if(!r.tratada && ehDono()){
-        var a = document.createElement("div"); a.className = "fx4-acoes";
-        var b = document.createElement("button"); b.type="button"; b.className="gv-btn";
-        b.textContent = "✔ Marcar tratada";
-        b.onclick = function(){ fx4Tratar(r); };
-        a.appendChild(b); c.appendChild(a);
+  /* lado: o caminho e os enviados ao SGU */
+  var lado = novo("div", "lado");
+  var cam = novo("section", "painel"); cam.setAttribute("aria-label", "O caminho, sempre o mesmo");
+  cam.appendChild(novo("div", "painel-cab", "<h2>O caminho, sempre o mesmo</h2>"));
+  [["1", "Copiar o bloco e fechar no Feegow", "Copie os números das guias e feche o malote no Feegow."],
+   ["2", "Assinar “Malote fechado”", "Congela a lista: as guias saem da fila e o malote passa a esperar o XML."],
+   ["3", "Baixar o XML e conferir aqui", "Só malote 100% limpo segue."],
+   ["4", "Subir no SGU e marcar “Enviado”", "Só quando o SGU aceitar. Isso é definitivo."]].forEach(function(p){
+    cam.appendChild(novo("div", "mal-passo", '<span class="n">' + p[0] + '</span><span class="t"><b>' + p[1] + '</b><small>' + p[2] + '</small></span>'));
+  });
+  cam.appendChild(novo("p", "mal-passo-nota", "SGU rejeitou guia? Use <b>Correção</b> com o motivo: a guia volta para a fila sozinha quando sanar."));
+  lado.appendChild(cam);
+  var en = novo("section", "painel"); en.setAttribute("aria-label", "Enviados ao SGU");
+  var mostra = env.slice(0, 10);
+  en.appendChild(novo("div", "painel-cab", "<h2>Enviados ao SGU</h2><span>" +
+    (!M || M.envErro ? "" : env.length > 10 ? "últimos 10" : malN(env.length, "malote", "malotes")) + "</span>"));
+  if(M && M.envErro) en.appendChild(novo("div", "lista-vazio erro", "Não consegui carregar os envios agora."));
+  else if(M && !mostra.length) en.appendChild(novo("div", "lista-vazio", "Nenhum malote enviado ainda."));
+  mostra.forEach(function(m){
+    var c = malConfEnv(m.id);
+    en.appendChild(novo("div", "mal-env", '<span class="q"></span><span class="t"><b>Malote #' + m.id + '</b><small>' +
+      escapa(malN(m.qt_guias, "guia", "guias") + (c && c.qt_linhas != null ? " · " + malN(c.qt_linhas, "sessão", "sessões") : "") +
+             " · " + malDataHora(m.enviado_em)) + '</small></span>' +
+      (c && c.valor_total != null ? '<span class="v">' + fx4Dinheiro(c.valor_total) + '</span>' : '')));
+  });
+  lado.appendChild(en);
+  wrap.appendChild(lado);
+  host.appendChild(wrap);
+  ajustaAltura();
+  var c2 = host.querySelector(".lista-corpo"); if(c2) c2.scrollTop = rolagem;
+  if(estado._malPinta) estado._malPinta();
+}
+
+/* janela do item: bloco pronto, malote em andamento ou rejeição do SGU */
+function abrirMalItem(chave){
+  if(!window.moldura) return;
+  var atual = chave, modo = null, texto = "", erroTxt = false, aviso = null, copiado = false, ocupado = false, focar = false, esperando = false;
+  var P = moldura.pop({ largura: "660px", aoFechar: function(){ estado._malAberta = null; estado._malPinta = null; marca(); } });
+  P.rodape.classList.add("fim"); P.rodape.hidden = false;
+  P.rodape.appendChild(botao("btn btn-s", "Fechar", function(){ P.fechar(); }));
+  function marca(){
+    document.querySelectorAll("#gv-conteudo .linha.mal.aberta").forEach(function(x){ x.classList.remove("aberta"); });
+    if(estado._malAberta){
+      var r = document.querySelector('#gv-conteudo .linha.mal[data-mal="' + CSS.escape(estado._malAberta) + '"]');
+      if(r) r.classList.add("aberta");
+    }
+  }
+  function achar(){
+    var todos = malItens("prontos").concat(malItens("andamento"), malItens("rejeicoes"));
+    for(var i=0;i<todos.length;i++) if(todos[i].chave === atual) return todos[i];
+    return null;
+  }
+  function falha(e){ ocupado = false; aviso = (e && e.message) ? e.message : String(e); if(P.aberto) pinta(); }
+  function caixaConfirma(titHtml, txtHtml, rotSim, acao){
+    var c = novo("div", "mal-conf");
+    c.appendChild(novo("b", "", titHtml));
+    c.appendChild(novo("span", "pp-txt", txtHtml));
+    var l = novo("div", "mal-conf-bt");
+    l.appendChild(botao("btn btn-s", "Cancelar", function(){ if(ocupado) return; modo = null; aviso = null; pinta(); }));
+    var s = botao("btn btn-p", rotSim, function(){
+      if(ocupado) return;
+      ocupado = true; s.disabled = true; s.textContent = "Salvando…";
+      acao();
+    });
+    l.appendChild(s);
+    c.appendChild(l);
+    return c;
+  }
+  function copiar(txt, bt){
+    var feito = function(){
+      copiado = true; bt.textContent = "Copiados: colar no Feegow";
+      setTimeout(function(){ copiado = false; if(document.body.contains(bt)) bt.textContent = "Copiar os números"; }, 2400);
+    };
+    var reserva = function(){
+      var ta = document.createElement("textarea");
+      ta.value = txt; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0"; ta.style.left = "-9999px";
+      document.body.appendChild(ta); ta.select();
+      try{ document.execCommand("copy"); }catch(e){}
+      ta.remove(); bt.focus(); feito();
+    };
+    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(feito, reserva);
+    else reserva();
+  }
+  function acoes(titulo, bts){
+    var ac = novo("div", "pp-bloco mal-acoes");
+    ac.appendChild(novo("span", "pp-rot", titulo));
+    var l = novo("div", "pp-adm-bt");
+    bts.forEach(function(d){ var bb = botao("btn btn-g " + (d.p ? "btn-p" : "btn-s"), d.rot, d.fn); if(d.dica) bb.title = d.dica; l.appendChild(bb); });
+    ac.appendChild(l);
+    return ac;
+  }
+  function pintaBloco(b){
+    P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-quando">Guias 100% conferidas · ordem de faturamento: a data mais velha primeiro</span>' +
+      '<h2>' + escapa(malConv(b.convenio_id) + " · Bloco " + b.bloco) + '</h2>' +
+      '<span class="pp-l1">' + escapa(malN(b.guias.length, "guia", "guias") + " · datas de " + fx4Data(b.d1) + " a " + fx4Data(b.d2) +
+        " · valor esperado " + fx4Dinheiro(b.soma)) + '</span>'));
+    P.corpo.appendChild(novo("div", "pp-caixa", '<span class="pp-tag" style="color:#248A3D">Pronto para fechar</span>' +
+      '<span class="pp-txt">Copie os números, feche o malote no Feegow com essas guias e assine aqui.</span>'));
+    var gb = novo("div", "pp-bloco mal-guias");
+    var cab = novo("div", "mal-guias-cab", '<span class="pp-rot">Guias do bloco, da data mais velha para a mais nova</span>');
+    var bc = botao("btn btn-s", copiado ? "Copiados: colar no Feegow" : "Copiar os números", function(){ copiar(b.nums.join("\n"), bc); });
+    cab.appendChild(bc);
+    gb.appendChild(cab);
+    var tab = novo("div", "mal-tab");
+    b.guias.forEach(function(g, j){
+      tab.appendChild(novo("div", "mal-tab-l", '<span class="p">' + (j + 1) + '</span><b>' + escapa(g.numero_guia_prestador) + '</b>' +
+        '<span class="nm">' + escapa(g.paciente_nome || "") + '</span><span class="d">' + fx4Data(g.data_mais_antiga) + '</span>' +
+        '<span class="v">' + fx4Dinheiro(g.valor_esperado_total) + '</span>'));
+    });
+    gb.appendChild(tab);
+    P.corpo.appendChild(gb);
+    if(modo === "fechar"){
+      P.corpo.appendChild(caixaConfirma("Assinar o malote fechado?",
+        escapa((b.convenio_id === 8 ? "Intercâmbio" : "Local") + " · " + malN(b.nums.length, "guia", "guias")) +
+        ". Isso congela a lista: as guias saem da fila e o malote passa a esperar o XML.", "Assinar", function(){
+          fx4Rpc("fx4_marcar_fechado", { p_convenio_id: b.convenio_id, p_prestadores: b.nums, p_quem: autora() })
+            .then(function(res){
+              ocupado = false; modo = null; aviso = null;
+              if(res && res.malote_id){ atual = "m:" + res.malote_id; estado.malFiltro = "andamento"; estado._malTopo = true; }
+              esperando = true;      /* até o malote novo chegar na lista, a janela fica como está */
+              loadMalotes().then(function(){ esperando = false; if(P.aberto && !modo) pinta(); });
+            })
+            .catch(falha);
+        }));
+    } else {
+      P.corpo.appendChild(acoes("Fechou o malote no Feegow?", [
+        { rot: "Malote fechado no Feegow", p: true, dica: "Assinar: congela esta lista e o malote passa a esperar o XML",
+          fn: function(){ modo = "fechar"; aviso = null; pinta(); } }
+      ]));
+    }
+  }
+  function pintaMalote(m){
+    var E = malEst(m.estado), u = estado.malotesUlt[m.id], c = fx4UltConf(m.id);
+    var valor = (c && c.valor_total != null) ? fx4Dinheiro(c.valor_total) : "";
+    P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-quando">' +
+      escapa((m.criado_por ? "Fechado por " + m.criado_por + " · " : "Fechado em ") + malDia(m.criado_em)) + '</span>' +
+      '<h2>' + escapa("Malote #" + m.id + (m.numero_lote ? " · lote " + m.numero_lote : "")) + '</h2>' +
+      '<span class="pp-l1">' + escapa(malConv(m.convenio_id) + " · " + malN(m.qt_guias, "guia congelada", "guias congeladas") + (valor ? " · " + valor : "")) + '</span>' +
+      (m.arquivo ? '<span class="pp-l2">Último XML: ' + escapa(m.arquivo) + '</span>' : '')));
+    var cx = novo("div", "pp-caixa");
+    var tg = novo("span", "pp-tag", escapa(E.rot)); tg.style.color = E.cor; cx.appendChild(tg);
+    if(E.explica) cx.appendChild(novo("span", "pp-txt", escapa(E.explica)));
+    if(u && u.erro) cx.appendChild(novo("span", "pp-txt mal-erro", "<b>Erro na conferência:</b> " + escapa(u.erro)));
+    else if(!(u && u.rodando)){
+      var fonte = (u && u.veredito) ? u : (c ? { veredito: c.veredito, problemas: c.problemas || [], qt_guias: c.qt_guias, qt_linhas: c.qt_linhas,
+        valor_total: c.valor_total, removidas: (c.resumo || {}).removidas, f0_espelhadas: (c.resumo || {}).f0_espelhadas } : null);
+      if(fonte && fonte.veredito === "ok"){
+        cx.appendChild(novo("span", "pp-txt mal-ok", "<b>Conferência limpa.</b> " +
+          escapa(malN(fonte.qt_guias, "guia", "guias") + " · " + malN(fonte.qt_linhas, "sessão", "sessões") + " · " + fx4Dinheiro(fonte.valor_total))));
+        if(fonte.removidas && fonte.removidas.length)
+          cx.appendChild(novo("span", "pp-txt", "Rejeição registrada: guia " + escapa(fonte.removidas.join(", ")) + " fora do lote. Ela volta para a conferência corrigir."));
+        if((fonte.f0_espelhadas | 0) > 0)
+          cx.appendChild(novo("span", "pp-txt", escapa(malN(fonte.f0_espelhadas, "linha do faturamento espelhada", "linhas do faturamento espelhadas")) +
+            " no que o malote realmente faturou (código, guia, senha e valor)."));
+        cx.appendChild(novo("span", "pp-txt", "As sessões já estão <b>em lote</b> no faturamento. Agora é subir no SGU."));
+      } else if(fonte){
+        var pb = fx4ProbHTML(fonte.problemas || []);
+        if(m.estado === "conferido_com_problemas"){ if(pb) cx.appendChild(novo("span", "pp-rot", "O que barrou")); }
+        else cx.appendChild(novo("span", "pp-txt mal-erro", "<b>A última conferência barrou.</b> Nada foi gravado."));
+        if(pb) cx.appendChild(novo("div", "mal-prob", pb));
       }
-      host.appendChild(c);
-    });
+    }
+    P.corpo.appendChild(cx);
+    if(u && u.rodando){
+      P.corpo.appendChild(novo("div", "mal-rodando", "Conferindo o XML contra a raiz…"));
+    } else if(modo === "enviado"){
+      P.corpo.appendChild(caixaConfirma("Confirmar: o SGU aceitou o lote " + escapa(m.numero_lote || "?") + "?",
+        "Isso carimba a data de envio e é definitivo. Se o SGU acusou qualquer problema, use Correção antes.", "Confirmar envio", function(){
+          fx4Rpc("fx4_marcar_enviado", { p_malote_id: m.id, p_quem: autora() })
+            .then(function(){
+              delete estado.malotesUlt[m.id];
+              ocupado = false; modo = null;
+              estado.malFiltro = "prontos"; estado._malTopo = true;
+              P.fechar();
+              if(typeof toast === "function") toast("Malote #" + m.id + " registrado como enviado ao SGU.", "ok");
+              loadMalotes();
+            })
+            .catch(falha);
+        }));
+    } else if(modo === "correcao"){
+      var cc = novo("div", "mal-conf");
+      cc.appendChild(novo("b", "", "Correção pós-SGU"));
+      cc.appendChild(novo("span", "pp-l2", "Cole o que o SGU falou (o motivo da rejeição). Guia que sumir do XML novo vira rejeição registrada com este motivo, e a linha volta para a conferência corrigir."));
+      var tm = novo("textarea", "pp-nota"); tm.rows = 2; tm.placeholder = "O que o SGU falou"; tm.setAttribute("aria-label", "Motivo do SGU"); tm.value = texto;
+      tm.addEventListener("input", function(){
+        texto = tm.value;
+        if(erroTxt && texto.trim()){ erroTxt = false; var e1 = cc.querySelector(".mal-erro-txt"); if(e1) e1.remove(); }
+      });
+      cc.appendChild(tm);
+      if(erroTxt) cc.appendChild(novo("span", "mal-erro-txt", "Sem o motivo do SGU não dá: é ele que vai para a análise do dono."));
+      var lc = novo("div", "mal-conf-bt");
+      lc.appendChild(botao("btn btn-s", "Cancelar", function(){ modo = null; texto = ""; erroTxt = false; pinta(); }));
+      lc.appendChild(botao("btn btn-p", "Escolher o XML corrigido", function(){
+        var obs = texto.trim();
+        if(!obs){ erroTxt = true; focar = true; pinta(); return; }
+        fx4PedeXML(function(file){ modo = null; texto = ""; erroTxt = false; aviso = null; fx4Conferir(m, file, obs); pinta(); });
+      }));
+      cc.appendChild(lc);
+      P.corpo.appendChild(cc);
+      if(focar){ focar = false; setTimeout(function(){ if(document.body.contains(tm)) tm.focus(); }, 0); }
+    } else {
+      var bts = [];
+      if(m.estado !== "conferido_ok") bts.push({ rot: "Conferir o XML do lote", p: true,
+        dica: "Baixar o XML no Feegow e subir aqui: a conferência roda na hora, contra a raiz",
+        fn: function(){ aviso = null; fx4PedeXML(function(file){ fx4Conferir(m, file, null); pinta(); }); } });
+      if(m.estado === "conferido_ok") bts.push({ rot: "Enviado no SGU (aceito)", p: true, dica: "Carimba a data de envio. É definitivo.",
+        fn: function(){ modo = "enviado"; aviso = null; pinta(); } });
+      if(m.estado === "conferido_ok" || m.estado === "em_correcao" || m.estado === "conferido_com_problemas")
+        bts.push({ rot: "Correção (SGU rejeitou guia)", p: false, dica: "Sobe o XML corrigido e o motivo do SGU",
+          fn: function(){ modo = "correcao"; texto = ""; erroTxt = false; aviso = null; focar = true; pinta(); } });
+      if(bts.length) P.corpo.appendChild(acoes(m.estado === "conferido_ok" ? "O SGU aceitou o lote?" : "Próximo passo", bts));
+    }
   }
+  function pintaRej(r){
+    P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-quando">' +
+      escapa([malDia(r.criada_em), r.autora ? "registrada por " + r.autora : ""].filter(Boolean).join(" · ")) + '</span>' +
+      '<h2>' + escapa("Guia " + r.numero_guia_prestador + (r.numero_lote ? " · lote " + r.numero_lote : "")) + '</h2>' +
+      (r.paciente_nome ? '<span class="pp-l1">' + escapa(r.paciente_nome) + '</span>' : '') +
+      (r.numero_guia_operadora ? '<span class="pp-l2">Guia na operadora: ' + escapa(r.numero_guia_operadora) + '</span>' : '')));
+    var cx = novo("div", "pp-caixa");
+    var tg = novo("span", "pp-tag", r.tratada ? "Tratada" : "Pendente, análise do dono"); tg.style.color = r.tratada ? "#248A3D" : "#D70015"; cx.appendChild(tg);
+    cx.appendChild(novo("span", "pp-txt", "<b>O que o SGU falou:</b> " + escapa(r.motivo_sgu || "—")));
+    if(r.tratada){
+      var quem = ["Tratada", r.tratada_por ? "por " + r.tratada_por : "", r.tratada_em ? "em " + malDia(r.tratada_em) : ""].filter(Boolean).join(" ");
+      cx.appendChild(novo("span", "pp-txt", escapa(quem) + "." + (r.nota_dono ? " <b>Nota do dono:</b> " + escapa(r.nota_dono) : "")));
+    }
+    P.corpo.appendChild(cx);
+    if(r.tratada || !ehDono()) return;
+    if(modo === "tratar"){
+      var ct = novo("div", "mal-conf");
+      ct.appendChild(novo("b", "", "Marcar como tratada"));
+      var tn = novo("textarea", "pp-nota"); tn.rows = 2; tn.placeholder = "Nota (opcional)"; tn.setAttribute("aria-label", "Nota do dono"); tn.value = texto;
+      tn.addEventListener("input", function(){ texto = tn.value; });
+      ct.appendChild(tn);
+      var lt = novo("div", "mal-conf-bt");
+      lt.appendChild(botao("btn btn-s", "Cancelar", function(){ if(ocupado) return; modo = null; texto = ""; aviso = null; pinta(); }));
+      var st = botao("btn btn-p", "Marcar tratada", function(){
+        if(ocupado) return;
+        ocupado = true; st.disabled = true; st.textContent = "Salvando…";
+        fx4Rpc("fx4_tratar_rejeicao", { p_id: r.id, p_quem: autora(), p_nota: texto.trim() || null })
+          .then(function(){ ocupado = false; modo = null; texto = ""; aviso = null; loadMalotes(); })
+          .catch(falha);
+      });
+      lt.appendChild(st);
+      ct.appendChild(lt);
+      P.corpo.appendChild(ct);
+      if(focar){ focar = false; setTimeout(function(){ if(document.body.contains(tn)) tn.focus(); }, 0); }
+    } else {
+      P.corpo.appendChild(acoes("Análise do dono", [
+        { rot: "Marcar tratada", p: true, fn: function(){ modo = "tratar"; texto = ""; aviso = null; focar = true; pinta(); } }
+      ]));
+    }
+  }
+  function pinta(){
+    var it = achar();
+    if(!it){ if(!esperando) P.fechar(); return; }
+    estado._malAberta = it.chave; marca();
+    P.topo.innerHTML = '<span class="pop-titulo-topo">' + (it.b ? "Bloco pronto para fechar" : it.m ? "Malote em andamento" : "Rejeição do SGU") + '</span>';
+    P.corpo.innerHTML = "";
+    if(it.b) pintaBloco(it.b); else if(it.m) pintaMalote(it.m); else pintaRej(it.r);
+    if(aviso) P.corpo.appendChild(novo("div", "pp-salvo erro", ico(IC_ALERTA, 14, 2.2) + '<span>' + escapa(aviso) + '</span>'));
+  }
+  estado._malPinta = function(){ if(P.aberto && !modo) pinta(); };
+  pinta();
 }
 
 function trocaTela(t){
   if(t === "dono" && !ehDono()) t = "agenda";
   estado.tela = t;
+  if(window.moldura) moldura.aoTrocarTela(t);      /* cabeçalho primeiro: a tela pode pôr controles nele */
   var abas = document.querySelectorAll("#s-guias .gv-aba");
   for(var i=0;i<abas.length;i++){
     abas[i].classList.toggle("on", abas[i].getAttribute("data-tela") === t);
@@ -2076,7 +2993,6 @@ function trocaTela(t){
   else if(t === "malotes"){ desenharMalotes(); loadMalotes(); }
   else if(t === "prof"){ PF.secretaria(); }
   else if(t === "dono"){ desenharAdmin(); }
-  if(window.moldura) moldura.aoTrocarTela(t);
 }
 function refreshDonoAba(){
   var el = document.getElementById("gv-aba-dono");
