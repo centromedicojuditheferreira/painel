@@ -216,10 +216,13 @@ function porPaciente(grupos, notas){
     var gente = pacientesDoTexto(g.paciente);
     if(!gente.length && g.paciente_ids && g.paciente_ids.length)
       gente = g.paciente_ids.map(function(i){ return { id: String(i), nome: "(#" + i + ")" }; });
+    /* v2.1: guia puxada no SGU sem ficha no Feegow — não há paciente_id; a "ficha" é a própria carteirinha (oc_ref sgu:…) */
+    var semFicha = g.tipo === "guia_sem_ficha";
+    if(!gente.length && semFicha) gente = [{ id: String(g.oc_ref), nome: g.paciente || "(sem nome no SGU)" }];
     var lixo = chaveLixo(g.oc_ref);
     gente.forEach(function(p){
-      if(!mapa[p.id]) mapa[p.id] = { paciente_id: p.id, paciente: p.nome, oc_ref: "pac:" + p.id,
-                                     problemas: [], futuras: 0, lixo: false };
+      if(!mapa[p.id]) mapa[p.id] = { paciente_id: p.id, paciente: p.nome, oc_ref: semFicha ? String(g.oc_ref) : "pac:" + p.id,
+                                     problemas: [], futuras: 0, lixo: false, sem_ficha: semFicha };
       var f = mapa[p.id];
       if(p.nome && p.nome.indexOf("(#") !== 0) f.paciente = p.nome;
       f.futuras = Math.max(f.futuras, g.consultas_futuras || 0);
@@ -243,6 +246,7 @@ function porPaciente(grupos, notas){
   });
   lista.sort(function(a, b){
     if(b.futuras !== a.futuras) return b.futuras - a.futuras;
+    if(!!a.sem_ficha !== !!b.sem_ficha) return a.sem_ficha ? -1 : 1;   /* v2.1: guia viva sem ficha vem antes dentro do grupo */
     if(b.problemas.length !== a.problemas.length) return b.problemas.length - a.problemas.length;
     return (a.paciente || "").localeCompare(b.paciente || "");
   });
@@ -1058,13 +1062,18 @@ var CAD_TXT = {
   paciente_duplicado:   { curto:"Paciente duplicado", titulo:"Paciente duplicado", sub:"Conferir e juntar as fichas",
     acao:"O mesmo CPF aparece em mais de uma ficha. Conferir e juntar os cadastros: se os nomes forem diferentes, o CPF é que está errado em uma delas. CPF inválido (de zeros) nunca se junta." },
   carteirinha_repetida: { curto:"Carteirinha repetida", titulo:"Carteirinha repetida", sub:"Juntar, ou corrigir o número",
-    acao:"A mesma carteirinha está em mais de uma ficha e a guia vai cair no paciente errado. Juntar os cadastros, ou corrigir o número se forem pessoas diferentes." }
+    acao:"A mesma carteirinha está em mais de uma ficha e a guia vai cair no paciente errado. Juntar os cadastros, ou corrigir o número se forem pessoas diferentes." },
+  /* v2.1 */
+  guia_sem_ficha:       { curto:"Guia sem ficha", titulo:"Guia puxada no SGU sem ficha no Feegow", sub:"Criar ou completar a ficha com a carteirinha",
+    acao:"A Unimed autorizou a guia, mas a carteirinha dela não está em nenhuma ficha do Feegow — o sistema não sabe de quem é a guia e não fatura as sessões. Procurar o paciente por CPF ou telefone (pode estar com outro nome); se não existir, criar a ficha com a carteirinha e o convênio indicados. Carteirinha que começa com 0178 é Unimed Local; qualquer outra, Intercâmbio." }
 };
 var CAD_LIXO = { titulo:"Dado inválido: nunca juntar", sub:"CPF de zeros ou carteirinha 0 e 01 agrupam gente diferente",
   acao:"CPF de zeros ou carteirinha “0” e “01” agrupam gente que não tem nada a ver uma com a outra. Aqui o conserto é buscar o número certo e preencher. Nunca junte essas fichas." };
 var TRAT_CAD_ROT = { pendente:"Pendente", corrigido:"Corrigido", estava_certo:"Estava certo", sem_solucao:"Sem solução" };
 var IC_ALERTA = "M12 3.5 21.5 20h-19zM12 10v4.5M12 17.2h.01";
 function cadTxt(t){ return CAD_TXT[t] || { curto:t, titulo:t, sub:"", acao:"" }; }
+var CAD_TIPOS_LISTA = ["convenio_invertido","paciente_duplicado","carteirinha_repetida","guia_sem_ficha"];   /* v2.1: ordem dos filtros e do painel "Problemas" */
+function cadFichaTxt(c){ return c.sem_ficha ? "Sem ficha no Feegow" : "Ficha #" + escapa(c.paciente_id); }
 function cadTipos(c){ var v = {}, out = []; c.problemas.forEach(function(p){ if(!v[p.tipo]){ v[p.tipo] = 1; out.push(p.tipo); } }); return out; }
 function futTxt(n){ return !n ? "sem consulta marcada" : (n === 1 ? "1 consulta marcada" : n + " consultas marcadas"); }
 function campoBusca(dest, id, ph, valor, aoDigitar){
@@ -1095,6 +1104,11 @@ function textoProblema2(p){
     if(String(p.oc_ref || "").indexOf("nn:") === 0) return 'Mesmo nome e nascimento de: ' + lista + '. <b>Conferir e juntar</b>: o agendamento e a guia podem estar caindo em fichas diferentes.';
     return 'Mesmo CPF de: ' + lista + '. <b>Conferir e juntar</b>: se os nomes forem diferentes, o CPF é que está errado em uma delas.';
   }
+  if(p.tipo === "guia_sem_ficha"){
+    var ds = escapa(p.detalhe || "");
+    return ds.replace("Procurar o paciente por CPF ou telefone; se não existir, criar a ficha com essa carteirinha e esse convênio.",
+                      "<b>Procurar o paciente por CPF ou telefone; se não existir, criar a ficha com essa carteirinha e esse convênio.</b>");
+  }
   return escapa(p.detalhe || "");
 }
 function cadVisiveis(){
@@ -1121,7 +1135,7 @@ function desenharCad(){
     (abertos === 1 ? "1 ficha com problema sem resposta" : abertos + " fichas com problema sem resposta") + " · " + comFut + " com consulta marcada · o robô recompara a cada 15 minutos");
   var q = semAcento(estado.cadBusca || "").trim();
   var base = todas.filter(function(c){ return !q || semAcento(c.paciente + " " + c.paciente_id).indexOf(q) >= 0; });
-  var cont = { todos: base.length, convenio_invertido:0, paciente_duplicado:0, carteirinha_repetida:0 };
+  var cont = { todos: base.length, convenio_invertido:0, paciente_duplicado:0, carteirinha_repetida:0, guia_sem_ficha:0 };
   base.forEach(function(c){ cadTipos(c).forEach(function(t){ cont[t] = (cont[t] || 0) + 1; }); });
   var vis = cadVisiveis();
   var filtro = estado.cadFiltro || "todos";
@@ -1130,7 +1144,7 @@ function desenharCad(){
   var sec = novo("section", "lista alta"); sec.setAttribute("aria-label", "Fichas com problema");
   var topo = novo("div", "lista-topo"), esq = novo("div", "lista-topo-esq");
   var seg = novo("div", "seg"); seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "Mostrar");
-  [["todos","Todos"],["convenio_invertido",CAD_TXT.convenio_invertido.curto],["paciente_duplicado",CAD_TXT.paciente_duplicado.curto],["carteirinha_repetida",CAD_TXT.carteirinha_repetida.curto]].forEach(function(d){
+  [["todos","Todos"]].concat(CAD_TIPOS_LISTA.map(function(k){ return [k, CAD_TXT[k].curto]; })).forEach(function(d){
     var on = filtro === d[0];
     var b = botao(on ? "on" : "", escapa(d[1]) + ' <span class="n">' + (cont[d[0]] || 0) + '</span>', function(){ estado.cadFiltro = d[0]; estado.cadLimite = 150; estado._cadTopo = true; desenharCad(); });
     b.setAttribute("aria-pressed", on ? "true" : "false");
@@ -1145,7 +1159,7 @@ function desenharCad(){
   if(estado.cad === null) corpo.appendChild(novo("div", "lista-vazio", "Buscando os alertas de cadastro…"));
   else if(estado.cadErro) corpo.appendChild(novo("div", "lista-vazio erro", "Não consegui ler os alertas de cadastro. " + escapa(estado.cadErro)));
   else if(!vis.length) corpo.appendChild(novo("div", "lista-vazio", q ? "Nenhuma ficha com esse nome." :
-    '<b class="ok">Nenhum problema de cadastro</b><br>Carteirinhas, convênios e duplicidades estão batendo com o espelho da Unimed.'));
+    '<b class="ok">Nenhum problema de cadastro</b><br>Carteirinhas, convênios e duplicidades estão batendo com o espelho da Unimed, e toda guia viva do SGU tem ficha.'));
   var lim = estado.cadLimite || 150;
   var mostra = vis.slice(0, lim);
   var nCom = vis.filter(function(c){ return c.futuras > 0; }).length, nSem = vis.length - nCom;
@@ -1162,7 +1176,7 @@ function desenharCad(){
     var sub = t !== "pendente" ? (TRAT_CAD_ROT[t] || t) : (c.reincidente ? "Reincidente" : (c.lixo ? "Não juntar" : ""));
     var subCor = t === "corrigido" ? "#248A3D" : (t !== "pendente" ? "#636366" : "#D70015");
     var b = botao("linha" + (estado._cadAberta === c.paciente_id ? " aberta" : ""),
-      '<span class="q"><span class="nm">' + escapa(c.paciente || "—") + '</span><span class="mt">Ficha #' + escapa(c.paciente_id) + " · " + futTxt(c.futuras) + '</span></span>' +
+      '<span class="q"><span class="nm">' + escapa(c.paciente || "—") + '</span><span class="mt">' + cadFichaTxt(c) + " · " + futTxt(c.futuras) + '</span></span>' +
       '<span class="dir"><span class="tag" style="color:' + (t === "pendente" ? "#D70015" : "#AEAEB2") + '">' + escapa(rot) + '</span>' +
       (sub ? '<span class="tr" style="color:' + subCor + ';font-weight:600">' + escapa(sub) + '</span>' : '') + '</span>',
       function(){ abrirCadItem(c.paciente_id); });
@@ -1180,11 +1194,11 @@ function desenharCad(){
   var lado = novo("div", "lado");
   var pr = novo("section", "painel"); pr.setAttribute("aria-labelledby", "cad-prob");
   pr.appendChild(novo("div", "painel-cab", '<h2 id="cad-prob">Problemas</h2><span>' + (todas.length === 1 ? "1 ficha" : todas.length + " fichas") + '</span>'));
-  var contT = { convenio_invertido:0, paciente_duplicado:0, carteirinha_repetida:0 };
+  var contT = { convenio_invertido:0, paciente_duplicado:0, carteirinha_repetida:0, guia_sem_ficha:0 };
   todas.forEach(function(c){ cadTipos(c).forEach(function(t){ contT[t] = (contT[t] || 0) + 1; }); });
-  ["convenio_invertido","paciente_duplicado","carteirinha_repetida"].forEach(function(k){
+  CAD_TIPOS_LISTA.forEach(function(k){
     var T = cadTxt(k);
-    var b = botao("cat", '<span class="q" style="background:#D70015"></span><span class="t"><b>' + escapa(T.titulo) + '</b><small>' + escapa(T.sub) + '</small></span><span class="n">' + contT[k] + '</span>' + ico(IC.dir, 16, 2),
+    var b = botao("cat", '<span class="q" style="background:#D70015"></span><span class="t"><b>' + escapa(T.titulo) + '</b><small>' + escapa(T.sub) + '</small></span><span class="n">' + (contT[k] || 0) + '</span>' + ico(IC.dir, 16, 2),
       function(){ abrirCadCat(k); });
     b.setAttribute("aria-haspopup", "dialog");
     pr.appendChild(b);
@@ -1199,6 +1213,7 @@ function desenharCad(){
   lado.appendChild(pr);
   lado.appendChild(novo("section", "painel nota-lado",
     '<h2>Como funciona</h2><p>Uma linha por <b>paciente</b>: abra a ficha no Feegow e resolva o que está listado.</p>' +
+    '<p><b>Guia sem ficha</b> é guia viva no SGU cuja carteirinha não está em ficha nenhuma: procure o paciente e crie ou complete a ficha. Sem isso a guia não fatura.</p>' +
     '<p>O robô recompara com o espelho da Unimed a cada 15 minutos. <b>Corrigiu? A linha some sozinha na próxima rodada.</b></p>' +
     '<p class="cinza">Marque o que você fez, para ninguém conferir a mesma coisa duas vezes.</p>'));
   wrap.appendChild(lado);
@@ -1216,7 +1231,7 @@ function abrirCadCat(k){
   P.corpo.appendChild(novo("div", "pp-caixa", '<span class="pp-rot">O que fazer</span><span class="pp-txt">' + escapa(T.acao) + '</span>'));
   var ul = novo("div", "pp-lista");
   lista.slice(0, 300).forEach(function(c){
-    ul.appendChild(botao("pp-linha", '<span class="q"><b>' + escapa(c.paciente || "—") + '</b><small>Ficha #' + escapa(c.paciente_id) + " · " + futTxt(c.futuras) + '</small></span>' + ico(IC.dir, 14, 2),
+    ul.appendChild(botao("pp-linha", '<span class="q"><b>' + escapa(c.paciente || "—") + '</b><small>' + cadFichaTxt(c) + " · " + futTxt(c.futuras) + '</small></span>' + ico(IC.dir, 14, 2),
       function(){
         estado.cadFiltro = ehLixo ? "todos" : k; estado.cadLixo = ehLixo; estado.cadBusca = "";
         var inp = document.getElementById("cadBusca"); if(inp) inp.value = "";
@@ -1256,7 +1271,7 @@ function abrirCadItem(id){
     if(c.problemas.length > 1) tags += '<span class="etq">' + c.problemas.length + ' problemas</span>';
     if(c.lixo) tags += '<span class="etq vermelho">Não juntar</span>';
     if(c.reincidente) tags += '<span class="etq vermelho" title="Marcou corrigido faz tempo e o problema continua no espelho">Reincidente</span>';
-    P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-quando">Ficha #' + escapa(c.paciente_id) + '</span><h2>' + escapa(c.paciente || "—") + '</h2>' +
+    P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-quando">' + cadFichaTxt(c) + '</span><h2>' + escapa(c.paciente || "—") + '</h2>' +
       (tags ? '<span class="etqs">' + tags + '</span>' : '')));
     c.problemas.forEach(function(p){
       P.corpo.appendChild(novo("div", "pp-caixa", '<span class="pp-tag" style="color:#D70015">' + escapa(cadTxt(p.tipo).titulo) + '</span><span class="pp-txt">' + textoProblema2(p) + '</span>'));
