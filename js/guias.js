@@ -31,8 +31,6 @@ var SIT = {
 var SIT_ORDEM = ["sem_guia","guia_de_outra_terapia","psico_com_guia_aba","guia_vencida","saldo_esgotado","procedimento_errado","aba_intercambio","sem_carteirinha"];
 var TRATAMENTOS = [["pendente","Pendente"],["guia_solicitada","Guia solicitada"],["resolvido","Resolvido"],["sem_solucao","Sem solução"],["desmarcado","Desmarcado"]];
 var TRAT_CAD  = [["pendente","Pendente"],["corrigido","Corrigido"],["estava_certo","Estava certo"],["sem_solucao","Sem solução"]];
-var TRAT_EXCL = [["pendente","Pendente"],["restaurei","Restaurei no Feegow"],["estava_certo","Estava certo apagar"],["sem_solucao","Sem solução"]];
-var QUEM_FEZ  = [["","— quem apagou? —"],["fui_eu","Fui eu"],["outra_pessoa","Outra pessoa"],["nao_sei","Não sei"]];
 var CAD_TIT = { carteirinha_repetida:"Carteirinha repetida", convenio_invertido:"Convênio × carteirinha invertidos", paciente_duplicado:"Paciente duplicado" };
 
 var SIT_FILA = {
@@ -253,62 +251,11 @@ function porPaciente(grupos, notas){
   return lista;
 }
 function loadExcl(){
-  var qFam = fetch(GCFG.url + "/rest/v1/oc_exclusoes?select=*&order=protegido_em.desc", { headers: cab() })
-    .then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status+" — o 10_SQL_PAINEL_V2.sql já rodou?"); return r.json(); });
-  var qDisp = fetch(GCFG.url + "/rest/v1/oc_notas?tipo=eq.exclusao_dispensada&select=referencia,autora,atualizado_em", { headers: cab() })
-    .then(function(r){ return r.ok ? r.json() : []; })
-    .catch(function(){ return []; });
-  return Promise.all([qFam, qDisp])
-    .then(function(res){
-      var disp = {};
-      (res[1] || []).forEach(function(n){ disp[n.referencia] = n; });
-      var linhas = (res[0] || []).map(function(x){
-        var d = disp[x.oc_ref];
-        if(d){ x.dispensada_em = d.atualizado_em || true; x.dispensada_por = d.autora; }
-        return x;
-      }).filter(exclVisivel);
-      estado.excl = linhas; estado.exclErro = ""; badgesTopo();
-      if(estado.tela==="excl") desenharExcl();
-    })
+  /* EXCL v2: a view oc_exclusoes já vem filtrada (sem histórico, sem aprovadas) e traz situacao/cobranca/datas_status */
+  return fetch(GCFG.url + "/rest/v1/oc_exclusoes?select=*&order=protegido_em.desc", { headers: cab() })
+    .then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status+" — o EXCL_v2_0.sql já rodou?"); return r.json(); })
+    .then(function(dados){ estado.excl = dados; estado.exclErro = ""; badgesTopo(); if(estado.tela==="excl") desenharExcl(); })
     .catch(function(e){ estado.exclErro = e.message; if(estado.excl===null) estado.excl = []; badgesTopo(); if(estado.tela==="excl") desenharExcl(); });
-}
-/* ✕ do dono: some com o card SEM soltar a proteção do faturamento */
-function dispensarExclusao(l, btn){
-  if(!ehDono()) return;
-  if(!confirm("Tirar da tela a exclusão de " + (l.paciente || "—") + "?\n\n" +
-              "Atenção: os " + l.n_sessoes + " agendamentos CONTINUAM protegidos no faturamento. " +
-              "Isto só esconde o card. Pra soltar de verdade, use 👑 Aprovar e liberar.")) return;
-  if(btn){ btn.disabled = true; btn.textContent = "…"; }
-  fetch(GCFG.url + "/rest/v1/oc_notas?on_conflict=tipo,referencia", {
-    method: "POST",
-    headers: cab({ "Content-Type": "application/json",
-                   "Prefer": "resolution=merge-duplicates,return=minimal" }),
-    body: JSON.stringify([{ tipo: "exclusao_dispensada", referencia: l.oc_ref, autora: autora() || null }])
-  }).then(function(r){
-    if(!r.ok) throw new Error("HTTP " + r.status);
-    return loadExcl();
-  }).catch(function(e){
-    alert("Não consegui dispensar: " + e.message);
-    if(btn){ btn.disabled = false; btn.textContent = "✕"; }
-  });
-}
-function aprovarExclusao(l, btn){
-  if(!ehDono()) return;
-  if(btn){ btn.disabled = true; btn.textContent = "liberando…"; }
-  fetch(GCFG.url + "/rest/v1/rpc/oc_liberar_protecao", {
-    method: "POST",
-    headers: cab({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ p_ids: l.agendamento_ids, p_quem: autora() || null })
-  }).then(function(r){
-    if(!r.ok) throw new Error("HTTP " + r.status);
-    return fetch(GCFG.url + "/rest/v1/oc_notas?tipo=eq.exclusao&referencia=eq." + encodeURIComponent(l.oc_ref), {
-      method: "PATCH",
-      headers: cab({ "Content-Type": "application/json", "Prefer": "return=minimal" }),
-      body: JSON.stringify({ aprovada_em: new Date().toISOString(), aprovada_por: autora() || null })
-    });
-  }).then(function(){ return loadExcl(); })
-    .then(function(){ if(estado.tela==="dono") desenharAdmin(); })
-    .catch(function(e){ alert("Não consegui aprovar: " + e.message); if(btn){ btn.disabled=false; btn.textContent="👑 Aprovar e liberar"; } });
 }
 
 /* ═══ utilidades ═══ */
@@ -350,20 +297,8 @@ function tratada(l){ return l.tratamento === "resolvido" || l.tratamento === "de
 function ehPendencia(l){ return (l.gravidade === 0 || l.corte_hoje === true) && !tratada(l); } /* v2: só o VERMELHO · v2.1: + o amarelo do DIA do corte */
 function ehAviso(l){ return l.situacao !== "coberto" && l.gravidade !== 0 && !tratada(l); }
 function cadAberto(c){ return !c.tratamento || c.tratamento === "pendente"; }
-function exclAberta(x){ return (!x.tratamento || x.tratamento === "pendente") || x.aguardando_dono === true; }
-/* ═══ 🗑️ Exclusões — marco fixo ═══
-   Nada anterior ao marco aparece (limpeza do legado, decisão do dono em 17/08).
-   Do marco em diante a família FICA na tela até ser resolvida:
-     · restaurada no Feegow  → a conferência da madrugada vê e a linha sai sozinha
-     · aprovada pelo dono    → oc_liberar_protecao solta a proteção e a linha sai
-     · dispensada pelo dono  → o ✕ some com o card sem soltar a proteção
-   Secretária nenhuma tira card daqui — só o administrador. */
-var MARCO_EXCLUSOES = "2026-08-17";
-function depoisDoMarco(x){
-  if(!x.protegido_em) return false;
-  return String(x.protegido_em).slice(0, 10) >= MARCO_EXCLUSOES;
-}
-function exclVisivel(x){ return depoisDoMarco(x) && !x.dispensada_em; }
+function exclAberta(x){ return true; } /* EXCL v2: toda linha da view é pendência (sem resposta, aguardando o dono ou negada) */
+/* EXCL v2: sem marco — a view só devolve o que ainda espera resposta; aprovada/recriada/voltou some sozinha */
 function primeiroCelular(cel, tel){
   var campos = [cel, tel];
   for (var i=0;i<campos.length;i++){
@@ -691,7 +626,7 @@ function agPainel(){
   var cadN  = (estado.cad  || []).filter(cadAberto).length;
   var exclN = (estado.excl || []).filter(exclAberta).length;
   if(cadN)  sec.appendChild(cat("Cadastros", "Fichas com problema de cadastro, na tela de Cadastros", cadN, TOM.r, function(){ irParaTela("cad"); }));
-  if(exclN) sec.appendChild(cat("Exclusões", "Séries apagadas inteiras no Feegow, na tela de Exclusões", exclN, TOM.r, function(){ irParaTela("excl"); }));
+  if(exclN) sec.appendChild(cat("Exclusões", "Sessões já realizadas que sumiram do Feegow — resolver na tela de Exclusões", exclN, TOM.r, function(){ irParaTela("excl"); }));
   if(!cats.length && !cadN && !exclN) sec.appendChild(novo("div", "lista-vazio", estado._carregouEm ? "Nada para resolver agora." : "Buscando…"));
   return sec;
 }
@@ -1335,20 +1270,26 @@ function abrirCadItem(id){
   pinta();
 }
 
-/* ═══ 🗑️ Exclusões — design novo: séries apagadas inteiras + "Situação" ═══
-   Gravação igual à de antes: salvarOcNota("exclusao", ref, {quem_fez, tratamento, nota}) → oc_notas;
-   o dono continua com aprovarExclusao (libera a proteção) e dispensarExclusao (tira da tela). */
+/* ═══ 🗑️ Exclusões — EXCL v2 (21/10/2026): "o passado não se apaga" ═══
+   Sessão PASSADA que some do Feegow fica guardada aqui até a recepção resolver:
+     · foi engano → remarca (aba "Agendamentos cancelados") ou cria de novo no Feegow;
+                    o robô vê a sessão viva e a linha some sozinha (até 30 min)
+     · foi certo  → botão "Excluído certo" → o dono aprova ou nega pelo Telegram
+   Gravação: salvarOcNota("exclusao", ref, {tratamento, nota}) → oc_notas; o pedido ao
+   dono sai por gatilho no banco. Nenhum botão de administrador aqui: a decisão é no Telegram. */
 var EXCL_SIT = {
-  aberta:     { label:"Sem resposta", cor:"#D70015", sub:"Restaurar no Feegow ou confirmar que era para apagar",
-                acao:"Abrir o Feegow e conferir. Apagou sem querer? Restaure os agendamentos e marque “Restaurei”. Era para apagar mesmo? Marque “Estava certo apagar”." },
-  aguardando: { label:"Aguardando o dono", cor:"#C93400", sub:"A secretária disse que era para apagar",
-                acao:"A secretária marcou “Estava certo apagar”. O administrador confere e aprova: aí a proteção é solta e a linha sai sozinha na próxima rodada." },
-  resolvida:  { label:"Resolvidas", cor:"#248A3D", sub:"Restauradas ou sem solução, esperando a conferência",
-                acao:"Restaurou no Feegow? A conferência da madrugada vê que as sessões voltaram e a linha some sozinha." }
+  aberta:     { label:"Sem resposta", cor:"#D70015", sub:"Corrigir no Feegow ou marcar “Excluído certo”",
+                acao:"Foi engano? Remarque a sessão no Feegow (aba “Agendamentos cancelados”, no rodapé da agenda) ou crie de novo: a linha some sozinha em até 30 minutos. Era para excluir mesmo? Marque “Excluído certo” — o dono decide pelo Telegram." },
+  aguardando: { label:"Aguardando o dono", cor:"#C93400", sub:"A recepção marcou “Excluído certo”",
+                acao:"O pedido já está no Telegram do administrador. Aprovado: a sessão sai do sistema e a cobrança é cancelada. Negado: a linha volta para “Sem resposta”." },
+  negada:     { label:"Negada pelo dono", cor:"#8E44AD", sub:"O dono não aceitou a exclusão",
+                acao:"O administrador negou: a sessão aconteceu ou precisa continuar no sistema. Remarque no Feegow (ou crie de novo) para a linha sair." }
 };
-var TRAT_EXCL_ROT = { pendente:"Pendente", restaurei:"Restaurei no Feegow", estava_certo:"Estava certo apagar", sem_solucao:"Sem solução" };
-var QUEM_ROT = { fui_eu:"Fui eu", outra_pessoa:"Outra pessoa", nao_sei:"Não sei" };
-function exclSit(x){ return x.aguardando_dono ? "aguardando" : ((!x.tratamento || x.tratamento === "pendente") ? "aberta" : "resolvida"); }
+function exclSit(x){
+  if(x.situacao === "aguardando" || x.situacao === "negada") return x.situacao;
+  if(x.aguardando_dono) return "aguardando";
+  return "aberta";
+}
 function exclVisiveis(){
   var q = semAcento(estado.exclBusca || "").trim();
   var f = estado.exclFiltro || "aberta";
@@ -1357,8 +1298,9 @@ function exclVisiveis(){
     return f === "todas" || exclSit(x) === f;
   });
 }
-function protegidasRot(iso){ var d = diaRotulo(iso); return "Protegidas " + (d === "Hoje" ? "hoje" : d === "Ontem" ? "ontem" : "em " + d.charAt(0).toLowerCase() + d.slice(1)); }
-function sessoesTxt(n){ return n === 1 ? "1 sessão apagada" : n + " sessões apagadas"; }
+function protegidasRot(iso){ var d = diaRotulo(iso); return "Apagadas " + (d === "Hoje" ? "hoje" : d === "Ontem" ? "ontem" : "em " + d.charAt(0).toLowerCase() + d.slice(1)); }
+function sessoesTxt(n){ return n === 1 ? "1 sessão" : n + " sessões"; }
+function exclLinha2(x){ return (x.profissional || "—") + " · " + (x.dia_semana || "?") + " às " + (x.horario || "?") + " · " + (x.datas_status || x.datas_fmt || "—"); }
 function desenharExcl(){
   var main = document.getElementById("gv-conteudo");
   campoBusca("exclusoes", "exclBusca", "Buscar paciente ou profissional", estado.exclBusca, function(v){ estado.exclBusca = v; estado._exclTopo = true; desenharExcl(); });
@@ -1367,23 +1309,23 @@ function desenharExcl(){
   estado._exclTopo = false;
   main.innerHTML = "";
   var todas = estado.excl || [];
-  var abertas = todas.filter(function(x){ return exclSit(x) !== "resolvida"; }).length;
+  var abertas = todas.filter(function(x){ return exclSit(x) !== "aguardando"; }).length;
   var agu = todas.filter(function(x){ return exclSit(x) === "aguardando"; }).length;
   if(window.moldura) moldura.resumo("exclusoes", estado.excl === null ? "" :
-    (abertas === 1 ? "1 série apagada esperando conserto" : abertas + " séries apagadas esperando conserto") + " · " +
+    (abertas === 1 ? "1 sessão apagada esperando resposta" : abertas + " sessões apagadas esperando resposta") + " · " +
     (agu === 0 ? "nenhuma aguardando o dono" : (agu === 1 ? "1 aguardando o dono" : agu + " aguardando o dono")));
   var q = semAcento(estado.exclBusca || "").trim();
   var base = todas.filter(function(x){ return !q || semAcento((x.paciente || "") + " " + (x.profissional || "")).indexOf(q) >= 0; });
-  var cont = { aberta:0, aguardando:0, resolvida:0, todas: base.length };
+  var cont = { aberta:0, aguardando:0, negada:0, todas: base.length };
   base.forEach(function(x){ cont[exclSit(x)]++; });
   var filtro = estado.exclFiltro || "aberta";
   var vis = exclVisiveis();
 
   var wrap = novo("div", "duas-col");
-  var sec = novo("section", "lista alta"); sec.setAttribute("aria-label", "Séries apagadas");
+  var sec = novo("section", "lista alta"); sec.setAttribute("aria-label", "Sessões apagadas");
   var topo = novo("div", "lista-topo");
   var seg = novo("div", "seg"); seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "Mostrar");
-  [["aberta","Sem resposta",EXCL_SIT.aberta.cor],["aguardando","Aguardando o dono",EXCL_SIT.aguardando.cor],["resolvida","Resolvidas",EXCL_SIT.resolvida.cor],["todas","Todas","#AEAEB2"]].forEach(function(d){
+  [["aberta","Sem resposta",EXCL_SIT.aberta.cor],["aguardando","Aguardando o dono",EXCL_SIT.aguardando.cor],["negada","Negadas",EXCL_SIT.negada.cor],["todas","Todas","#AEAEB2"]].forEach(function(d){
     var on = filtro === d[0];
     var b = botao(on ? "on" : "", '<span class="q" style="background:' + d[2] + '"></span>' + d[1] + ' <span class="n">' + cont[d[0]] + '</span>',
       function(){ estado.exclFiltro = d[0]; estado._exclTopo = true; desenharExcl(); });
@@ -1391,25 +1333,25 @@ function desenharExcl(){
     seg.appendChild(b);
   });
   topo.appendChild(seg);
-  topo.appendChild(novo("span", "mostrando", vis.length === 1 ? "1 série" : vis.length + " séries"));
+  topo.appendChild(novo("span", "mostrando", vis.length === 1 ? "1 linha" : vis.length + " linhas"));
   sec.appendChild(topo);
   var corpo = novo("div", "lista-corpo");
-  if(estado.excl === null) corpo.appendChild(novo("div", "lista-vazio", "Buscando as séries protegidas…"));
+  if(estado.excl === null) corpo.appendChild(novo("div", "lista-vazio", "Buscando as sessões guardadas…"));
   else if(estado.exclErro) corpo.appendChild(novo("div", "lista-vazio erro", "Não consegui ler as exclusões. " + escapa(estado.exclErro)));
-  else if(!vis.length) corpo.appendChild(novo("div", "lista-vazio", q ? "<b>Ninguém com esse nome</b><br>Confira a grafia ou limpe a busca." : '<b class="ok">Nada pendente</b><br>Nenhuma série apagada nesta situação.'));
+  else if(!vis.length) corpo.appendChild(novo("div", "lista-vazio", q ? "<b>Ninguém com esse nome</b><br>Confira a grafia ou limpe a busca." : '<b class="ok">Nada pendente</b><br>Nenhuma sessão apagada nesta situação.'));
   var dia = null, porDia = {};
   vis.forEach(function(x){ var k = protegidasRot(x.protegido_em); porDia[k] = (porDia[k] || 0) + 1; });
   vis.forEach(function(x){
     var k = protegidasRot(x.protegido_em);
-    if(dia !== k){ dia = k; corpo.appendChild(novo("div", "dia-cab", '<b>' + escapa(k) + '</b><span>' + (porDia[k] === 1 ? "1 série" : porDia[k] + " séries") + '</span>')); }
+    if(dia !== k){ dia = k; corpo.appendChild(novo("div", "dia-cab", '<b>' + escapa(k) + '</b><span>' + (porDia[k] === 1 ? "1 linha" : porDia[k] + " linhas") + '</span>')); }
     var s = exclSit(x), S = EXCL_SIT[s];
-    var rot = s === "resolvida" ? (TRAT_EXCL_ROT[x.tratamento] || x.tratamento) : S.label;
-    var sub = x.reincidente ? '<span class="tr" style="color:#D70015;font-weight:600">Restaurei, e não voltou</span>' :
-      (x.quem_fez ? '<span class="tr">Quem apagou: ' + escapa((QUEM_ROT[x.quem_fez] || x.quem_fez).toLowerCase()) + '</span>' : '');
+    var sub = s === "negada" ? '<span class="tr" style="color:' + EXCL_SIT.negada.cor + ';font-weight:600">Corrija no Feegow</span>' :
+              s === "aguardando" && x.pedido_em ? '<span class="tr">Pedido às ' + escapa(horaDe(x.pedido_em)) + '</span>' :
+              (x.cobranca ? '<span class="tr">Cobrança: ' + escapa(x.cobranca) + '</span>' : '');
     var b = botao("linha" + (estado._exclAberta === x.oc_ref ? " aberta" : ""),
       '<span class="h">' + escapa(horaDe(x.protegido_em)) + '</span>' +
-      '<span class="q"><span class="nm">' + escapa(x.paciente || "—") + '</span><span class="mt">' + escapa((x.profissional || "—") + " · " + (x.dia_semana || "?") + " às " + (x.horario || "?") + " · " + sessoesTxt(x.n_sessoes)) + '</span></span>' +
-      '<span class="dir"><span class="tag" style="color:' + S.cor + '">' + escapa(rot) + '</span>' + sub + '</span>',
+      '<span class="q"><span class="nm">' + escapa(x.paciente || "—") + '</span><span class="mt">' + escapa(exclLinha2(x)) + '</span></span>' +
+      '<span class="dir"><span class="tag" style="color:' + S.cor + '">' + escapa(S.label) + '</span>' + sub + '</span>',
       function(){ abrirExclItem(x.oc_ref, filtro); });
     b.setAttribute("aria-haspopup", "dialog"); b.setAttribute("data-excl", x.oc_ref);
     corpo.appendChild(b);
@@ -1419,10 +1361,10 @@ function desenharExcl(){
 
   var lado = novo("div", "lado");
   var pn = novo("section", "painel"); pn.setAttribute("aria-labelledby", "excl-sit");
-  pn.appendChild(novo("div", "painel-cab", '<h2 id="excl-sit">Situação</h2><span>' + (todas.length === 1 ? "1 série" : todas.length + " séries") + '</span>'));
-  var contT = { aberta:0, aguardando:0, resolvida:0 };
+  pn.appendChild(novo("div", "painel-cab", '<h2 id="excl-sit">Situação</h2><span>' + (todas.length === 1 ? "1 linha" : todas.length + " linhas") + '</span>'));
+  var contT = { aberta:0, aguardando:0, negada:0 };
   todas.forEach(function(x){ contT[exclSit(x)]++; });
-  ["aberta","aguardando","resolvida"].forEach(function(k){
+  ["aberta","aguardando","negada"].forEach(function(k){
     var S = EXCL_SIT[k];
     var b = botao("cat", '<span class="q" style="background:' + S.cor + '"></span><span class="t"><b>' + S.label + '</b><small>' + escapa(S.sub) + '</small></span><span class="n">' + contT[k] + '</span>' + ico(IC.dir, 16, 2),
       function(){ abrirExclCat(k); });
@@ -1431,9 +1373,9 @@ function desenharExcl(){
   });
   lado.appendChild(pn);
   lado.appendChild(novo("section", "painel nota-lado",
-    '<h2>Regra da casa</h2><p>Nunca use “excluir <b>todas</b> as sessões” no Feegow. Sempre <b>“somente este”</b> ou <b>“deste dia em diante”</b>.</p>' +
-    '<p>Quando a série inteira é apagada, o robô <b>protege</b> os agendamentos (eles não somem do faturamento) e a série aparece aqui.</p>' +
-    '<p class="cinza">A linha fica até ser resolvida: não some na virada do dia. Só o administrador pode tirá-la da tela.</p>'));
+    '<h2>Regra da casa</h2><p>Para excluir uma série no Feegow, <b>clique na PRÓXIMA sessão</b> (uma que ainda vai acontecer) antes de escolher “excluir os posteriores”. Nunca comece por uma sessão que já passou.</p>' +
+    '<p>Sessão que já aconteceu e some do Feegow <b>não se apaga</b>: o robô guarda e ela aparece aqui. Enquanto estiver aqui, fica fora do recibo do profissional e a cobrança fica presa.</p>' +
+    '<p class="cinza">Foi engano: remarque ou crie de novo no Feegow, e a linha some sozinha. Foi certo: marque “Excluído certo” — só o administrador aprova, pelo Telegram.</p>'));
   wrap.appendChild(lado);
   main.appendChild(wrap);
   ajustaAltura();
@@ -1444,16 +1386,16 @@ function abrirExclCat(k){
   if(!window.moldura) return;
   var S = EXCL_SIT[k];
   var lista = (estado.excl || []).filter(function(x){ return exclSit(x) === k; });
-  var P = moldura.pop({ largura:"640px", titulo:"Séries apagadas" });
-  P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-alerta" style="color:' + S.cor + '">' + (lista.length === 1 ? "1 série" : lista.length + " séries") + '</span><h2>' + S.label + '</h2>'));
+  var P = moldura.pop({ largura:"640px", titulo:"Sessões apagadas" });
+  P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-alerta" style="color:' + S.cor + '">' + (lista.length === 1 ? "1 linha" : lista.length + " linhas") + '</span><h2>' + S.label + '</h2>'));
   P.corpo.appendChild(novo("div", "pp-caixa", '<span class="pp-rot">O que fazer</span><span class="pp-txt">' + escapa(S.acao) + '</span>'));
   var ul = novo("div", "pp-lista");
   lista.forEach(function(x){
     ul.appendChild(botao("pp-linha", '<span class="w">' + escapa(fmtQuando(x.protegido_em)) + '</span><span class="q"><b>' + escapa(x.paciente || "—") + '</b><small>' +
-      escapa((x.profissional || "—") + " · " + (x.dia_semana || "?") + " às " + (x.horario || "?")) + '</small></span>' + ico(IC.dir, 14, 2),
+      escapa(exclLinha2(x)) + '</small></span>' + ico(IC.dir, 14, 2),
       function(){ estado.exclFiltro = k; estado.exclBusca = ""; var i = document.getElementById("exclBusca"); if(i) i.value = ""; desenharExcl(); abrirExclItem(x.oc_ref, k); }));
   });
-  if(!lista.length) ul.appendChild(novo("div", "lista-vazio", "Nenhuma série nesta situação agora."));
+  if(!lista.length) ul.appendChild(novo("div", "lista-vazio", "Nenhuma linha nesta situação agora."));
   P.corpo.appendChild(ul);
   P.rodape.hidden = false; P.rodape.classList.add("fim");
   P.rodape.appendChild(botao("btn btn-s", "Fechar", function(){ P.fechar(); }));
@@ -1465,7 +1407,7 @@ function abrirExclCat(k){
 function abrirExclItem(ref, filtro){
   if(!window.moldura) return;
   var atual = ref, msg = null, msgId = null, notaTimer = null;
-  var P = moldura.pop({ largura:"640px", titulo:"Série apagada inteira", aoFechar:function(){ estado._exclAberta = null; estado._exclPinta = null; marca(); } });
+  var P = moldura.pop({ largura:"640px", titulo:"Sessão apagada no Feegow", aoFechar:function(){ estado._exclAberta = null; estado._exclPinta = null; marca(); } });
   function marca(){
     document.querySelectorAll("#gv-conteudo .linha.aberta").forEach(function(x){ x.classList.remove("aberta"); });
     if(estado._exclAberta){ var r = document.querySelector('#gv-conteudo .linha[data-excl="' + CSS.escape(estado._exclAberta) + '"]'); if(r) r.classList.add("aberta"); }
@@ -1476,72 +1418,52 @@ function abrirExclItem(ref, filtro){
     var x = i >= 0 ? L[i] : (estado.excl || []).find(function(y){ return y.oc_ref === atual; });
     if(!x){ P.fechar(); return; }
     estado._exclAberta = x.oc_ref; marca();
-    var s = exclSit(x), S = EXCL_SIT[s], t = x.tratamento || "pendente";
+    var s = exclSit(x), S = EXCL_SIT[s];
+    var tratAtual = s === "aguardando" ? "estava_certo" : "pendente";
     P.corpo.innerHTML = "";
-    var tags = x.reincidente ? '<span class="etqs"><span class="etq vermelho" title="Marcou restaurei faz tempo e a proteção continua de pé: o Feegow ainda não mostrou as sessões de volta">Restaurei, e não voltou</span></span>' : "";
-    P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-quando">Protegida em ' + escapa(fmtQuando(x.protegido_em).replace(" ", " às ")) + '</span>' +
-      '<h2>' + escapa(x.paciente || "—") + '</h2><span class="pp-l1">' + escapa((x.profissional || "—") + " · toda " + (x.dia_semana || "?") + " às " + (x.horario || "?")) + '</span>' + tags));
+    var tags = s === "negada" ? '<span class="etqs"><span class="etq vermelho" title="O administrador negou a exclusão pelo Telegram">O dono negou — corrija no Feegow' + (x.negada_em ? ' (' + escapa(fmtQuando(x.negada_em)) + ')' : '') + '</span></span>' : "";
+    P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-quando">Apagada do Feegow · vista em ' + escapa(fmtQuando(x.protegido_em).replace(" ", " às ")) + '</span>' +
+      '<h2>' + escapa(x.paciente || "—") + '</h2><span class="pp-l1">' + escapa((x.profissional || "—") + " · toda " + (x.dia_semana || "?") + " às " + (x.horario || "?") + (x.procedimento ? " · " + x.procedimento : "") + (x.convenio ? " · " + x.convenio : "")) + '</span>' + tags));
     P.corpo.appendChild(novo("div", "pp-caixa",
-      '<span class="pp-tag" style="color:' + S.cor + '">' + escapa(s === "resolvida" ? (TRAT_EXCL_ROT[t] || t) : S.label) + '</span>' +
-      '<span class="pp-txt"><b>' + sessoesTxt(x.n_sessoes) + '</b> · datas: ' + escapa(x.datas_fmt || "—") + '</span>' +
-      '<span class="pp-txt cinza">Protegidos pelo robô: não somem do faturamento enquanto a linha estiver aqui.</span>'));
-    P.corpo.appendChild(novo("div", "pp-bloco", '<span class="pp-rot">O que fazer</span><span class="pp-txt">Apagou sem querer? <b>Restaure os agendamentos no Feegow</b> e marque “Restaurei”: a conferência da madrugada vê que voltou e a linha some sozinha. Era para apagar mesmo (alta, desistência)? Marque <b>“Estava certo apagar”</b>: o dono aprova e o sistema libera.</span>'));
+      '<span class="pp-tag" style="color:' + S.cor + '">' + escapa(S.label) + '</span>' +
+      '<span class="pp-txt"><b>' + escapa(sessoesTxt(x.n_sessoes)) + '</b> · ' + escapa(x.datas_status || x.datas_fmt || "—") + '</span>' +
+      '<span class="pp-txt">Cobrança: ' + escapa(x.cobranca || "—") + '</span>' +
+      '<span class="pp-txt cinza">Guardada pelo robô: continua no sistema até a recepção resolver. Enquanto estiver aqui, fica fora do recibo do profissional.</span>'));
+    P.corpo.appendChild(novo("div", "pp-bloco", '<span class="pp-rot">O que fazer</span><span class="pp-txt">' + escapa(S.acao) + '</span>'));
     var notaEl = novo("textarea", "pp-nota");
-    var bq = novo("div", "pp-bloco", '<span class="pp-rot">Quem apagou?</span>');
-    var segQ = novo("div", "seg"); segQ.setAttribute("role", "group"); segQ.setAttribute("aria-label", "Quem apagou?");
-    QUEM_FEZ.filter(function(w){ return w[0]; }).forEach(function(w){
-      var on = w[0] === (x.quem_fez || "");
-      var b = botao(on ? "on" : "", escapa(w[1]), function(){ clearTimeout(notaTimer); if(on) return; salva(x, { quem_fez: w[0], tratamento: t, nota: notaEl.value.trim() }); });
-      b.setAttribute("aria-pressed", on ? "true" : "false");
-      segQ.appendChild(b);
-    });
-    bq.appendChild(segQ);
-    P.corpo.appendChild(bq);
-    var bt = novo("div", "pp-bloco", '<span class="pp-rot">O que você fez?</span>');
-    var ops = novo("div", "pp-opcoes"); ops.setAttribute("role", "group"); ops.setAttribute("aria-label", "O que você fez?");
-    TRAT_EXCL.forEach(function(tt){
-      var on = tt[0] === t;
-      var b = botao("pp-op" + (on ? " on" : ""), '<span class="cx">' + (on ? ico(IC.ok, 12, 3, "#FFFFFF") : "") + '</span>' + escapa(tt[1]), function(){
-        clearTimeout(notaTimer);
-        if(tt[0] === t && notaEl.value.trim() === (x.nota || "")) return;
-        salva(x, { quem_fez: x.quem_fez || null, tratamento: tt[0], nota: notaEl.value.trim() });
-      });
-      b.setAttribute("aria-pressed", on ? "true" : "false");
-      ops.appendChild(b);
-    });
-    bt.appendChild(ops);
-    P.corpo.appendChild(bt);
-    if(s === "aguardando") P.corpo.appendChild(novo("div", "pp-caixa aviso", '<span class="pp-txt">Aguardando o dono aprovar. Só o administrador libera a proteção ou tira a linha da tela.</span>'));
     var bn = novo("div", "pp-bloco", '<label class="pp-rot" for="nota-excl">Anotação</label>');
-    notaEl.id = "nota-excl"; notaEl.rows = 2; notaEl.placeholder = "Por que apagou, com quem confirmou…"; notaEl.value = x.nota || "";
+    notaEl.id = "nota-excl"; notaEl.rows = 2; notaEl.placeholder = "Por que foi excluída, com quem confirmou…"; notaEl.value = x.nota || "";
     notaEl.addEventListener("change", function(){
       var v = notaEl.value.trim(); if(v === (x.nota || "")) return;
-      clearTimeout(notaTimer); notaTimer = setTimeout(function(){ salva(x, { quem_fez: x.quem_fez || null, tratamento: t, nota: v }); }, 220);
+      clearTimeout(notaTimer); notaTimer = setTimeout(function(){ salva(x, { tratamento: tratAtual, nota: v }); }, 220);
     });
     bn.appendChild(notaEl);
     P.corpo.appendChild(bn);
+    var bt = novo("div", "pp-bloco", '<span class="pp-rot">Foi excluída de propósito?</span>');
+    var linhaB = novo("div", "pp-adm-bt");
+    if(s === "aguardando"){
+      var bEsp = botao("btn btn-s", "Pedido enviado ao dono" + (x.pedido_em ? " · " + escapa(fmtQuando(x.pedido_em)) : ""), null);
+      bEsp.disabled = true;
+      linhaB.appendChild(bEsp);
+    } else {
+      var bOk = botao("btn btn-p", "Excluído certo", function(){
+        clearTimeout(notaTimer);
+        if(!confirm("Confirmar: a sessão de " + (x.paciente || "—") + " (" + (x.datas_fmt || "") + ") foi excluída de propósito?\n\nO administrador vai receber o pedido no Telegram e decidir. Até lá a linha fica em “Aguardando o dono”.")) return;
+        salva(x, { tratamento: "estava_certo", nota: notaEl.value.trim() });
+      });
+      bOk.title = "Manda o pedido de aprovação para o Telegram do administrador";
+      linhaB.appendChild(bOk);
+    }
+    bt.appendChild(linhaB);
+    P.corpo.appendChild(bt);
     var est = msgId === x.oc_ref ? msg : null, txt, cor;
     if(est === "salvando"){ txt = "Salvando…"; cor = "#AEAEB2"; }
     else if(est === "ok"){ txt = "Salvo agora · por " + (autora() || "você"); cor = "#248A3D"; }
     else if(est === "erro"){ txt = "Não consegui salvar. Confira a internet e tente de novo."; cor = "#D70015"; }
-    else { txt = (t !== "pendente" || x.quem_fez) ? "Marcado antes" + (x.autora ? " por " + x.autora : "") + "." : "Marque quem apagou e o que fez: salva sozinho"; cor = "#AEAEB2"; }
+    else { txt = (s === "aguardando" || x.nota) ? "Registrado antes" + (x.autora ? " por " + x.autora : "") + "." : "A anotação salva sozinha ao sair do campo"; cor = "#AEAEB2"; }
     var sv = novo("div", "pp-salvo", ico(IC.ok, 14, 2.2, cor) + '<span' + (est === "erro" ? ' style="color:#D70015"' : '') + '>' + escapa(txt) + '</span>');
     sv.setAttribute("aria-live", "polite");
     P.corpo.appendChild(sv);
-    if(ehDono()){
-      var adm = novo("div", "pp-adm", '<span class="pp-rot">Administrador</span>');
-      var linhaB = novo("div", "pp-adm-bt");
-      if(x.aguardando_dono){
-        var ba = botao("btn btn-p", "Aprovar e liberar", function(){ aprovarExclusao(x, ba); });
-        ba.title = "Confirma que era para apagar mesmo: a reconciliação libera na próxima rodada";
-        linhaB.appendChild(ba);
-      }
-      var bx = botao("btn btn-s", "Tirar da tela", function(){ dispensarExclusao(x, bx); });
-      bx.title = "Só esconde a linha: NÃO solta a proteção do faturamento";
-      linhaB.appendChild(bx);
-      adm.appendChild(linhaB);
-      P.corpo.appendChild(adm);
-    }
     P.rodape.hidden = false; P.rodape.innerHTML = "";
     var V = vizinhos(L, estado.excl || [], function(y){ return y.oc_ref; }, x.oc_ref), ant = V.ant, prox = V.prox;
     var bA = botao("btn btn-s", ico(IC.esq, 16, 2.2) + "Anterior", function(){ if(ant){ atual = ant.oc_ref; pinta(); } }); bA.disabled = !ant;
@@ -1555,8 +1477,11 @@ function abrirExclItem(ref, filtro){
     msgId = id; msg = "salvando"; if(P.aberto) pinta();
     salvarOcNota("exclusao", x.oc_ref, campos, function(ok){
       if(ok){
-        x.quem_fez = campos.quem_fez || null; x.tratamento = campos.tratamento; x.nota = campos.nota; x.autora = autora();
-        x.aguardando_dono = (campos.tratamento === "estava_certo" && !x.aprovada_em);
+        x.tratamento = campos.tratamento; x.nota = campos.nota; x.autora = autora();
+        if(campos.tratamento === "estava_certo"){
+          x.aguardando_dono = true; x.situacao = "aguardando";
+          x.pedido_em = x.pedido_em || new Date().toISOString(); x.pedido_por = autora();
+        }
         badgesTopo(); if(estado.tela === "excl") desenharExcl();
       }
       if(msgId === id) msg = ok ? "ok" : "erro";
@@ -1566,7 +1491,6 @@ function abrirExclItem(ref, filtro){
   estado._exclPinta = function(){ if(P.aberto) pinta(); };
   pinta();
 }
-
 /* ═══ 👑 visão do dono · v2 ═══ */
 function qAdm(rota){
   return fetch(GCFG.url + rota, { headers: cab() })
@@ -1589,11 +1513,6 @@ function rankTxt(obj){
 function rankQuemCriouObj(){
   var o = {};
   estado.linhas.forEach(function(l){ if(ehPendencia(l)) o[l.quem_criou || "?"] = (o[l.quem_criou || "?"]||0)+1; });
-  return o;
-}
-function rankFuiEuObj(){
-  var o = {};
-  (estado.excl||[]).forEach(function(x){ if(x.quem_fez === "fui_eu") o[x.autora || "?"] = (o[x.autora || "?"]||0)+1; });
   return o;
 }
 function respostas7Obj(notas7){
@@ -1621,9 +1540,8 @@ function resumoTexto(P, reinc, atend, notas7){
   l.push("🔁 Reincidências (disse que resolveu, não resolveu): " + reinc.length +
          (reinc.length ? " → " + reinc.slice(0,5).map(function(r){ return r.paciente.split(" ")[0] + " (" + (r.autora_nota||"?") + ")"; }).join(", ") + (reinc.length>5?"…":"") : ""));
   l.push("🧾 Cadastros com problema: " + cadT + " (" + cadA + " sem resposta · " + cadR + " reincidentes)");
-  l.push("🗑️ Apagar-todas: " + exT + " famílias (" + exA + " abertas · " + exG + " aguardando sua aprovação)");
+  l.push("🗑️ Exclusões: " + exT + " (" + (exT - exG) + " sem resposta · " + exG + " aguardando sua aprovação no Telegram)");
   var rc = rankTxt(rankQuemCriouObj()); if(rc) l.push("👤 Vermelhas por quem marcou: " + rc);
-  var rf = rankTxt(rankFuiEuObj());    if(rf) l.push("🙋 \"Fui eu\" nas exclusões: " + rf);
   l.push("✍️ Respostas da equipe (7d): " + (rankTxt(respostas7Obj(notas7)) || "nenhuma"));
   return l.join("\n");
 }
@@ -1666,20 +1584,20 @@ function desenharAdmin(){
         '<div class="adm-card '+(atend.length?'vermelho':'verde')+'"><div class="num">'+atend.length+'</div><div class="rot">consultaram sem guia · 30d</div></div>'+
         '<div class="adm-card '+(reinc.length?'ambar':'verde')+'"><div class="num">'+reinc.length+'</div><div class="rot">reincidências</div></div>'+
         '<div class="adm-card '+(cadA?'vermelho':'verde')+'"><div class="num">'+cadA+'</div><div class="rot">cadastros abertos</div></div>'+
-        '<div class="adm-card '+(exA?'vermelho':'verde')+'"><div class="num">'+exA+'</div><div class="rot">apagar-todas abertas</div></div>'+
+        '<div class="adm-card '+(exA?'vermelho':'verde')+'"><div class="num">'+exA+'</div><div class="rot">exclusões sem resposta</div></div>'+
         '<div class="adm-card '+(aguard.length?'ambar':'verde')+'"><div class="num">'+aguard.length+'</div><div class="rot">aguardando aprovação</div></div>'+
         '<div class="adm-card"><div class="num">'+(P.porEsp.psicologia||0)+'·'+(P.porEsp.aba||0)+'·'+(P.porEsp.nutricao||0)+'</div><div class="rot">psico · aba · nutrição</div></div>'+
       '</div>';
 
       if(aguard.length){
-        h += '<div class="adm-sec">👑 Aguardando a sua aprovação <small>(a secretária marcou "estava certo apagar")</small></div>';
-        h += '<table class="adm"><tr><th>Paciente</th><th>Profissional</th><th>Quando</th><th>Sessões</th><th>Quem respondeu</th><th>Ação</th></tr>';
-        aguard.forEach(function(x, i){
+        h += '<div class="adm-sec">👑 Aguardando a sua aprovação <small>(a recepção marcou "Excluído certo" · aprove ou negue pelo Telegram)</small></div>';
+        h += '<table class="adm"><tr><th>Paciente</th><th>Profissional</th><th>Quando</th><th>Sessões</th><th>Cobrança</th><th>Quem marcou</th></tr>';
+        aguard.forEach(function(x){
           h += '<tr><td><b>'+escapa(x.paciente)+'</b></td><td>'+escapa(x.profissional||"—")+'</td>'+
                '<td>'+escapa(x.dia_semana||"?")+' às '+escapa(x.horario||"?")+'</td>'+
-               '<td>'+x.n_sessoes+'<br><small>'+escapa(x.datas_fmt||"")+'</small></td>'+
-               '<td>'+escapa(x.autora||"—")+(x.nota?'<br><small>'+escapa(x.nota)+'</small>':'')+'</td>'+
-               '<td><button class="gv-btn verde mini adm-aprova" data-i="'+i+'">👑 Aprovar</button></td></tr>';
+               '<td>'+x.n_sessoes+'<br><small>'+escapa(x.datas_status||x.datas_fmt||"")+'</small></td>'+
+               '<td><small>'+escapa(x.cobranca||"—")+'</small></td>'+
+               '<td>'+escapa(x.autora||"—")+(x.nota?'<br><small>'+escapa(x.nota)+'</small>':'')+'</td></tr>';
         });
         h += '</table>';
       }
@@ -1721,14 +1639,6 @@ function desenharAdmin(){
         h += '</table>';
       }
 
-      var rkF = rankFuiEuObj(), rkFk = Object.keys(rkF).sort(function(a,b){ return rkF[b]-rkF[a]; });
-      if(rkFk.length){
-        h += '<div class="adm-sec">🙋 Apagar-todas: quem assumiu "fui eu"</div>';
-        h += '<table class="adm"><tr><th>Pessoa</th><th>Exclusões</th></tr>';
-        rkFk.forEach(function(k){ h += '<tr><td><b>'+escapa(k)+'</b></td><td>'+rkF[k]+'</td></tr>'; });
-        h += '</table>';
-      }
-
       var rk7 = respostas7Obj(notas7), rk7k = Object.keys(rk7).sort(function(a,b){ return rk7[b]-rk7[a]; });
       h += '<div class="adm-sec">✍️ Respostas registradas <small>(últimos 7 dias · agenda + cadastros + exclusões, por pessoa)</small></div>';
       if(!rk7k.length){ h += '<div class="adm-vazio" style="background:var(--info-fundo);color:var(--info)">Ninguém registrou resposta nos últimos 7 dias.</div>'; }
@@ -1738,12 +1648,6 @@ function desenharAdmin(){
         h += '</table>';
       }
       main.innerHTML = h;
-      var aps = main.querySelectorAll(".adm-aprova");
-      for(var i=0;i<aps.length;i++){
-        (function(btn){
-          btn.addEventListener("click", function(){ aprovarExclusao(aguard[parseInt(btn.getAttribute("data-i"),10)], btn); });
-        })(aps[i]);
-      }
     }
     document.getElementById("admModoR").onclick = function(){ estado.donoModo = "resumo"; desenharAdmin(); };
     document.getElementById("admModoC").onclick = function(){ estado.donoModo = "completo"; desenharAdmin(); };
