@@ -16,6 +16,7 @@ var SIT = {
   guia_vencida:          {rot:"Guia vencida",         cls:"s0", g:"g0", acao:"🚫 Guia vencida sai da agenda. Falar com a Unimed pra ATUALIZAR A VALIDADE (ou guia nova) AGORA — ou desmarcar."},
   saldo_esgotado:        {rot:"Saldo esgotado",       cls:"s0", g:"g0", acao:"🚫 Sem sessão sobrando = sem guia. Solicitar renovação AGORA — ou desmarcar."},
   sem_carteirinha:       {rot:"Sem carteirinha",      cls:"s0", g:"g0", acao:"Completar o cadastro do paciente HOJE — sem carteirinha nem dá pra casar guia."},
+  convenio_errado:       {rot:"Convênio errado",      cls:"s0", g:"g0", acao:"🚫 A guia viva do paciente é do OUTRO convênio (carteirinha que começa com 0178 = Unimed Local; qualquer outra = Intercâmbio). Trocar o convênio do agendamento no Feegow — desse jeito a sessão não fatura."},
   guia_de_outra_terapia: {rot:"Guia de OUTRA terapia",cls:"s0", g:"g0", acao:"🚫 A guia viva do paciente é de outra terapia. Conferir se o erro é o procedimento marcado ou a guia pedida — corrigir AGORA ou desmarcar."},
   procedimento_errado:   {rot:"Procedimento errado",  cls:"s0", g:"g0", acao:"🚫 O procedimento do agendamento não é nenhum dos 4 códigos Unimed. Corrigir no Feegow — desse jeito não fatura e o painel fica cego."},
   aba_intercambio:       {rot:"ABA no Intercâmbio",   cls:"s0", g:"g0", acao:"🚫 ABA não é coberto no convênio Intercâmbio. Corrigir o convênio ou o procedimento ANTES da sessão."},
@@ -28,7 +29,7 @@ var SIT = {
   ultima_viavel_validade:{rot:"Última viável (validade)", cls:"s1", g:"g1", acao:"A guia ainda tem saldo, mas a VALIDADE morre antes da próxima consulta — esta é a última que a cobertura alcança. Solicitar renovação já."},
   coberto:               {rot:"Coberta",              cls:"s2", g:"g2", acao:""}
 };
-var SIT_ORDEM = ["sem_guia","guia_de_outra_terapia","psico_com_guia_aba","guia_vencida","saldo_esgotado","procedimento_errado","aba_intercambio","sem_carteirinha"];
+var SIT_ORDEM = ["sem_guia","guia_de_outra_terapia","psico_com_guia_aba","guia_vencida","saldo_esgotado","procedimento_errado","convenio_errado","aba_intercambio","sem_carteirinha"];
 var TRATAMENTOS = [["pendente","Pendente"],["guia_solicitada","Guia solicitada"],["resolvido","Resolvido"],["sem_solucao","Sem solução"],["desmarcado","Desmarcado"]];
 var TRAT_CAD  = [["pendente","Pendente"],["corrigido","Corrigido"],["estava_certo","Estava certo"],["sem_solucao","Sem solução"]];
 var TRAT_EXCL = [["pendente","Pendente"],["restaurei","Restaurei no Feegow"],["estava_certo","Estava certo apagar"],["sem_solucao","Sem solução"]];
@@ -429,6 +430,7 @@ var SIT_TXT = {
   guia_vencida:           { rot:"Guia vencida", tom:"r", sub:"Atualizar a validade com a Unimed ou desmarcar", acao:"Guia vencida sai da agenda. Falar com a Unimed para atualizar a validade (ou pedir guia nova) agora, ou desmarcar." },
   saldo_esgotado:         { rot:"Saldo esgotado", tom:"r", sub:"Solicitar a renovação agora ou desmarcar", acao:"Sem sessão sobrando é o mesmo que sem guia. Solicitar a renovação agora ou desmarcar." },
   sem_carteirinha:        { rot:"Sem carteirinha", tom:"r", sub:"Completar o cadastro do paciente hoje", acao:"Completar o cadastro do paciente hoje: sem carteirinha não dá para casar a guia." },
+  convenio_errado:        { rot:"Convênio errado", tom:"r", sub:"Trocar o convênio do agendamento no Feegow", acao:"A guia viva do paciente é do outro convênio: carteirinha que começa com 0178 é Unimed Local; qualquer outra é Intercâmbio. Trocar o convênio do agendamento no Feegow. Do jeito que está, a sessão não fatura." },
   guia_de_outra_terapia:  { rot:"Guia de outra terapia", tom:"r", sub:"Conferir procedimento ou guia e corrigir", acao:"A guia viva do paciente é de outra terapia. Conferir se o erro é o procedimento marcado ou a guia pedida e corrigir agora, ou desmarcar." },
   procedimento_errado:    { rot:"Procedimento errado", tom:"r", sub:"Corrigir o procedimento no Feegow", acao:"O procedimento do agendamento não é nenhum dos 4 códigos Unimed. Corrigir no Feegow: assim não fatura e o painel fica cego." },
   aba_intercambio:        { rot:"ABA no Intercâmbio", tom:"r", sub:"Corrigir convênio ou procedimento", acao:"ABA não é coberto no Intercâmbio. Corrigir o convênio ou o procedimento antes da sessão." },
