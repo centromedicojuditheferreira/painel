@@ -1098,12 +1098,12 @@ function textoProblema2(p){
     return d.replace("Corrigir o convênio no cadastro do Feegow.", "<b>Corrigir o convênio no cadastro do Feegow.</b>");
   }
   if(p.tipo === "carteirinha_repetida"){
-    if(p.lixo) return '<b>Carteirinha inválida</b> “' + escapa(p.carteirinha || "—") + '”: está assim em ' + p.no_grupo + ' fichas diferentes. <b>Buscar o número real na Unimed e preencher.</b> Não juntar com: ' + lista + '.';
+    if(p.lixo) return '<b>Carteirinha inválida</b> “' + escapa(p.carteirinha || "—") + '”. <b>Buscar o número real na Unimed e preencher.</b> Não juntar com outras fichas que tenham esse mesmo número: são pessoas diferentes.';   /* v2.4: sem contagem — o lixo já conhecido fica escondido */
     return 'Mesma carteirinha <b>' + escapa(p.carteirinha || "—") + '</b> em ' + (outros.length === 1 ? 'outra ficha' : 'outras ' + outros.length + ' fichas') + ': ' + lista +
            '. <b>Juntar os cadastros</b>, ou corrigir o número se forem pessoas diferentes.';
   }
   if(p.tipo === "paciente_duplicado"){
-    if(p.lixo) return '<b>CPF inválido</b> no cadastro: o mesmo número está em ' + p.no_grupo + ' fichas. <b>Corrigir o CPF do paciente.</b> Não juntar com as outras fichas: são pessoas diferentes.';
+    if(p.lixo) return '<b>CPF inválido</b> no cadastro. <b>Corrigir o CPF do paciente.</b> Não juntar com outras fichas que tenham esse mesmo número: são pessoas diferentes.';   /* v2.4: sem contagem */
     if(String(p.oc_ref || "").indexOf("nn:") === 0) return 'Mesmo nome e nascimento de: ' + lista + '. <b>Conferir e juntar</b>: o agendamento e a guia podem estar caindo em fichas diferentes.';
     return 'Mesmo CPF de: ' + lista + '. <b>Conferir e juntar</b>: se os nomes forem diferentes, o CPF é que está errado em uma delas.';
   }
