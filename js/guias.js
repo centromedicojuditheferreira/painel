@@ -2106,20 +2106,43 @@ function abrirCorteCat(k){
 function abrirCorteItem(ref){
   if(!window.moldura) return;
   var atual = ref, modo = "acoes", dias = 3, motivo = "", aviso = null;
+  /* v3.6: Anterior/Próxima andam na ordem da lista do momento em que a janela abriu. Assinar muda o estado do
+     paciente (e o lugar dele na lista); antes disso o Próxima perdia a referência e travava. Quem chegar
+     numa recarga entra no fim. "ultimo" segura o paciente na tela se ele sair da fila com a janela aberta. */
+  var seq = corteVisiveis().map(function(x){ return x.oc_ref; }), ultimo = null;
   var P = moldura.pop({ largura:"640px", titulo:"Tesoura do dia", aoFechar:function(){ estado._corteAberta = null; estado._cortePinta = null; marca(); } });
   function marca(){
     document.querySelectorAll("#gv-conteudo .linha.aberta").forEach(function(x){ x.classList.remove("aberta"); });
     if(estado._corteAberta){ var r = document.querySelector('#gv-conteudo .linha[data-corte="' + CSS.escape(estado._corteAberta) + '"]'); if(r) r.classList.add("aberta"); }
   }
   function ateIso(d){ var a = new Date(); a.setDate(a.getDate() + d); return a.getFullYear() + "-" + String(a.getMonth()+1).padStart(2,"0") + "-" + String(a.getDate()).padStart(2,"0"); }
+  /* vizinhos pela ordem guardada: o mais próximo antes/depois que ainda está na lista; i = lugar na lista (-1 = saiu) */
+  function vizSeq(L, r){
+    var k = seq.indexOf(r);
+    if(k < 0) return vizinhos(L, corteOrdenada(), function(y){ return y.oc_ref; }, r);
+    var naL = {}, ant = null, prox = null, pos = -1, n = 0;
+    L.forEach(function(x){ naL[x.oc_ref] = x; });
+    for(var j = 0; j < seq.length; j++){
+      if(!naL[seq[j]]) continue;
+      if(j < k) ant = naL[seq[j]];
+      else if(j === k) pos = n;
+      else if(!prox) prox = naL[seq[j]];
+      n++;
+    }
+    return { i: pos, ant: ant, prox: prox };
+  }
   function pinta(){
     var L = corteVisiveis();
+    L.forEach(function(x){ if(seq.indexOf(x.oc_ref) < 0) seq.push(x.oc_ref); });
     var i = L.findIndex(function(x){ return x.oc_ref === atual; });
-    var c = i >= 0 ? L[i] : (estado.corte || []).find(function(x){ return x.oc_ref === atual; });
+    var vivo = i >= 0 ? L[i] : (estado.corte || []).find(function(x){ return x.oc_ref === atual; });
+    var c = vivo || (ultimo && ultimo.oc_ref === atual ? ultimo : null), sumiu = !vivo;
     if(!c){ P.fechar(); return; }
+    ultimo = c;
     estado._corteAberta = c.oc_ref; marca();
-    var e = corteEst(c), S = corteTxt(e), ativo = corteAtivo(c);
-    var quando = e === "cortar_hoje" ? "Prazo: " + (c.prazo ? fmtPrazo(c.prazo) : "hoje às 21h") :
+    var e = corteEst(c), S = corteTxt(e), ativo = corteAtivo(c) && !sumiu;
+    var quando = sumiu ? "Saiu da fila do corte" :
+                 e === "cortar_hoje" ? "Prazo: " + (c.prazo ? fmtPrazo(c.prazo) : "hoje às 21h") :
                  e === "prazo_vencido" ? "Prazo vencido" + (c.prazo ? ": " + fmtPrazo(c.prazo) : "") :
                  e === "incompleto" ? "Assinou, mas os futuros continuam no Feegow" :
                  e === "cortar_agora" ? "Sem cobertura: cortar agora" : S.sub;
@@ -2134,7 +2157,7 @@ function abrirCorteItem(ref){
     var ass = corteAssinatura(c);
     if(ass) cx.appendChild(novo("span", "pp-txt cinza", escapa(ass)));
     P.corpo.appendChild(cx);
-    if(c.alvo_agendamento_id){
+    if(c.alvo_agendamento_id && !sumiu){
       var a = novo("a", "btn-claro", "Abrir o próximo no Feegow " + ico(IC.fora, 14, 2));
       a.href = "https://app.feegow.com/main/?P=Agenda-1&Pers=1&AgendamentoID=" + c.alvo_agendamento_id;
       a.target = "_blank"; a.rel = "noopener"; a.title = "Abre direto no agendamento a apagar: dele em diante";
@@ -2153,7 +2176,9 @@ function abrirCorteItem(ref){
     } else fone.innerHTML = '<span><small>Celular</small><b>Sem celular no cadastro</b></span>';
     P.corpo.appendChild(fone);
     var ac = novo("div", "pp-bloco");
-    if(modo === "acoes"){
+    if(sumiu){
+      ac.appendChild(novo("span", "pp-txt cinza", "Saiu da fila do corte: o espelho confirmou a exclusão ou a guia entrou no sistema. Nada a fazer aqui."));
+    } else if(modo === "acoes"){
       ac.appendChild(novo("span", "pp-rot", "Depois de apagar no Feegow"));
       var lb = novo("div", "pp-adm-bt");
       lb.appendChild(botao("btn btn-p", "Excluí no Feegow", function(){
@@ -2209,7 +2234,7 @@ function abrirCorteItem(ref){
       P.corpo.appendChild(novo("div", "pp-salvo", ico(ok ? IC.ok : IC_ALERTA, 14, 2.2, ok ? "#248A3D" : "#D70015") + '<span style="color:' + (ok ? "#248A3D" : "#D70015") + '">' + escapa(ok ? aviso.slice(3) : aviso) + '</span>'));
     }
     P.rodape.hidden = false; P.rodape.innerHTML = "";
-    var V = vizinhos(L, corteOrdenada(), function(y){ return y.oc_ref; }, c.oc_ref);
+    var V = vizSeq(L, c.oc_ref);
     var bA = botao("btn btn-s", ico(IC.esq, 16, 2.2) + "Anterior", function(){ if(V.ant){ atual = V.ant.oc_ref; modo = "acoes"; aviso = null; pinta(); } }); bA.disabled = !V.ant;
     var bP = botao("btn btn-p", "Próxima" + ico(IC.dir, 16, 2.2), function(){ if(V.prox){ atual = V.prox.oc_ref; modo = "acoes"; aviso = null; pinta(); } }); bP.disabled = !V.prox;
     P.rodape.appendChild(bA);
