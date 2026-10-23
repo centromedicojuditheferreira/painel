@@ -177,8 +177,17 @@ var moldura = (function () {
       if (on) it.setAttribute('aria-current', 'page'); else it.removeAttribute('aria-current');
     });
     document.getElementById('fab').hidden = !!x.semFab;
+    var ola = d === 'agenda';                     /* v3.3: na Agenda, "Bom dia / Boa tarde / Boa noite, <nome>" no lugar do título */
+    document.querySelector('.pg-tit').classList.toggle('ola', ola);
+    if (ola) document.getElementById('pg-titulo').textContent = saudacao();
     desenharAlertas();
     if (mudou) window.scrollTo(0, 0);
+  }
+  function saudacao() {
+    var h = new Date().getHours();
+    var s = h < 12 ? 'Bom dia' : (h < 18 ? 'Boa tarde' : 'Boa noite');
+    var nome = (typeof CU !== 'undefined' && CU && CU.nome) ? CU.nome : '';
+    return nome ? s + ', ' + nome : s;
   }
   function acoesDe(d) { return d === atual ? document.getElementById('pg-acoes') : null; }
   function resumo(d, txt) { resumos[d] = txt || ''; if (d === atual) document.getElementById('pg-resumo').textContent = resumos[d]; }

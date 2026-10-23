@@ -570,41 +570,28 @@ function resumoAgenda(){
 function diasUnicos(){
   var m = {};
   estado.linhas.forEach(function(l){
-    if(!m[l.data]) m[l.data] = { data:l.data, dia_semana:l.dia_semana, data_fmt:l.data_fmt, pend:0, feriado:false, hoje:l.dias_ate === 0 };
+    if(!m[l.data]) m[l.data] = { data:l.data, dia_semana:l.dia_semana, data_fmt:l.data_fmt, pend:0, resolver:0, feriado:false, hoje:l.dias_ate === 0 };
     if(ehPendencia(l)) m[l.data].pend++;
+    if(paraResolver(l)) m[l.data].resolver++;
     if(l.em_feriado) m[l.data].feriado = true;
   });
   return Object.keys(m).sort().map(function(k){ return m[k]; });
 }
+/* v3.3: a lista da Agenda mostra sempre tudo que tem para resolver — vermelho (hoje) + amarelo (antes da data).
+   Cobertas, já tratadas (Resolvido/Desmarcado) e "Depois da última" não entram. */
+function paraResolver(l){ return ehPendencia(l) || ehAviso(l); }
 function passaFiltro(l){
   if(estado.filtroDia && l.data !== estado.filtroDia) return false;
   if(estado.busca && semAcento(l.paciente).indexOf(semAcento(estado.busca)) < 0) return false;
   if(estado.filtroTipo === "__aba__") return ehProblemaAba(l);
-  if(estado.filtroSit==="pendencias"){
-    if(!ehPendencia(l)) return false;
-    if(estado.filtroTipo && l.situacao !== estado.filtroTipo) return false;
-    return true;
-  }
-  if(estado.filtroSit==="avisos")   return ehAviso(l);
-  if(estado.filtroSit==="tratadas") return l.situacao!=="coberto" && (tratada(l) || (l.tratamento && l.tratamento!=="pendente"));
-  if(estado.filtroSit==="cobertas") return l.situacao==="coberto";
-  return true;
+  if(estado.filtroTipo) return ehPendencia(l) && l.situacao === estado.filtroTipo;   /* veio de um quadrado do Resolver agora */
+  return paraResolver(l);
 }
 function agLista(){
   var cont = contagens();
   var sec = novo("section", "lista alta"); sec.setAttribute("aria-label", "Consultas");
   var topo = novo("div", "lista-topo"), esq = novo("div", "lista-topo-esq");
-  var seg = novo("div", "seg"); seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "Mostrar");
-  [["pendencias","Pendências",TOM.r,cont.pendencias],["avisos","Avisos",TOM.o,cont.avisos],["tratadas","Já tratadas","#AEAEB2",cont.tratadas],
-   ["cobertas","Cobertas",TOM.v,cont.cobertas],["tudo","Tudo","#D2D2D7",estado.linhas.length]].forEach(function(f){
-    var on = estado.filtroSit === f[0];
-    var b = botao(on ? "on" : "", '<span class="q" style="background:'+f[2]+'"></span>' + f[1] + ' <span class="n">' + f[3] + '</span>', function(){
-      estado.filtroSit = f[0]; if(f[0] !== "pendencias") estado.filtroTipo = null; agMudou();
-    });
-    b.setAttribute("aria-pressed", on ? "true" : "false");
-    seg.appendChild(b);
-  });
-  esq.appendChild(seg);
+  esq.appendChild(novo("span", "lista-tit", "Para resolver"));   /* v3.3: sem os botões Pendências/Avisos/Já tratadas/Cobertas/Tudo */
   if(estado.filtroTipo){
     var so = botao("so-tipo", "Só " + escapa(rotTipo(estado.filtroTipo)) + " " + ico(IC.x, 12, 2.6), function(){ estado.filtroTipo = null; agMudou(); });
     so.title = "Tirar este filtro";
@@ -620,9 +607,9 @@ function agLista(){
   if(!estado.linhas.length){
     corpo.appendChild(novo("div", "lista-vazio", estado._carregouEm ? "Nenhuma consulta na agenda." : "Buscando a agenda no banco…"));
   } else if(!vis.length){
-    corpo.appendChild(novo("div", "lista-vazio", estado.filtroSit === "pendencias" && !estado.filtroTipo && !estado.busca
-      ? "Nenhuma pendência vermelha. Tudo coberto ou já tratado: os avisos ficam no filtro ao lado."
-      : "Nada aqui com esses filtros."));
+    corpo.appendChild(novo("div", "lista-vazio", !estado.filtroTipo && !estado.busca && !estado.filtroDia
+      ? "Nada para resolver: está tudo coberto ou já tratado."
+      : "Nada para resolver com esses filtros."));
   }
   var infoDia = {}; diasUnicos().forEach(function(d){ infoDia[d.data] = d; });
   var porDia = {}; vis.forEach(function(l){ porDia[l.data] = (porDia[l.data]||0)+1; });
@@ -669,16 +656,23 @@ function agDias(cont){
   var a = botao("dias-seta", ico(IC.esq, 18, 2.2), function(){ estado.agOff = Math.max(0, off - VIS); desenharAgenda(); });
   a.setAttribute("aria-label", "Dias anteriores"); a.disabled = off <= 0;
   var grade = novo("div", "dias-grade");
+  /* v3.3: quadrado mais baixo (dia e data na mesma linha); o número = tudo que tem para resolver no dia
+     (vermelho se tem algo para hoje, laranja se só amarelos) */
   function cel(sem, data, rod, cls, on, fn){
-    var b = botao("dia2" + (on ? " on" : ""), '<span class="s">' + sem + '</span><span class="d">' + data + '</span><span class="r ' + cls + '">' + rod + '</span>', fn);
+    var b = botao("dia2" + (on ? " on" : ""), '<span class="sd"><span class="s">' + sem + '</span>' + (data ? '<span class="d">' + data + '</span>' : '') + '</span>' +
+      '<span class="r ' + cls + '">' + rod + '</span>', fn);
     b.setAttribute("aria-pressed", on ? "true" : "false");
     return b;
   }
-  grade.appendChild(cel("Todos", N + " dias", String(cont.pendencias), cont.pendencias ? "p" : "", estado.filtroDia === null,
-    function(){ estado.filtroDia = null; agMudou(); }));
+  var totRes = 0, totPend = 0;
+  dias.forEach(function(d){ totRes += d.resolver; totPend += d.pend; });
+  var tTodos = cel("Todos", "", String(totRes), totPend ? "p" : (totRes ? "a" : ""), estado.filtroDia === null,
+    function(){ estado.filtroDia = null; agMudou(); });
+  tTodos.title = N + " dias";
+  grade.appendChild(tTodos);
   dias.slice(off, off + VIS).forEach(function(d){
     grade.appendChild(cel(d.hoje ? "hoje" : escapa(String(d.dia_semana).slice(0,3)), escapa(d.data_fmt),
-      d.feriado && !d.pend ? "feriado" : String(d.pend), d.pend ? "p" : (d.feriado ? "f" : ""), estado.filtroDia === d.data,
+      d.feriado && !d.resolver ? "feriado" : String(d.resolver), d.pend ? "p" : (d.resolver ? "a" : (d.feriado ? "f" : "")), estado.filtroDia === d.data,
       function(){ estado.filtroDia = (estado.filtroDia === d.data ? null : d.data); agMudou(); }));
   });
   var p = botao("dias-seta dir", ico(IC.dir, 18, 2.2), function(){ estado.agOff = Math.min(maxOff, off + VIS); desenharAgenda(); });
