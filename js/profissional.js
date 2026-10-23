@@ -148,7 +148,7 @@ function convite(token){
   rpc('prof_convite_info', { p_token: token }).then(function(r){
     m.fecha();
     var mm = modal('Primeiro acesso — ' + esc(r.nome),
-      '<p style="font-size:15px;margin-bottom:10px">Bem-vindo(a) ao painel de conferência do Centro Médico Judithe Ferreira. Escolha uma senha — é com ela que você entra nas próximas vezes, com o seu nome.</p>' +
+      '<p style="font-size:15px;margin-bottom:10px">Bem-vindo(a) ao Cortex, o sistema de conferência do Centro Médico Judithe Ferreira. Escolha uma senha — é com ela que você entra nas próximas vezes, com o seu nome.</p>' +
       '<div class="fg"><label class="fl">Senha (pelo menos 4 caracteres)</label><input type="password" class="fc" id="pf-cv-s1" autocomplete="new-password"></div>' +
       '<div class="fg"><label class="fl">Repita a senha</label><input type="password" class="fc" id="pf-cv-s2" autocomplete="new-password"></div>' +
       '<div class="fg"><label class="fl">Celular com WhatsApp (DDD + número) — para os avisos da conferência' + (r.tem_telefone ? '. Já temos um número; preencha só se quiser trocar' : '') + '</label><input type="tel" class="fc" id="pf-cv-tel" inputmode="numeric" placeholder="62999990000"></div>' +
@@ -888,8 +888,8 @@ function abrirProf(id, ids){
     tg.style.color = conf ? (p.confirmado_fora_do_prazo ? '#C93400' : '#248A3D') : '#D70015';
     cx.appendChild(tg);
     cx.appendChild(el('span', 'pp-txt', esc(conf ? (p.confirmado_fora_do_prazo ? 'Confirmou depois do prazo.' : 'Dentro do prazo.') + (p.foto ? ' A confirmação tem foto.' : '')
-      : (p.ultimo_acesso_em ? 'Já entrou no painel (último acesso ' + fmtTs(p.ultimo_acesso_em) + '). Prazo: ' + fmtDiaHora(d.prazo).replace('-feira', '') + '.'
-                            : 'Ainda não entrou no painel. Se não tem o link de acesso, o administrador gera um em Acessos e configurações.'))));
+      : (p.ultimo_acesso_em ? 'Já entrou no Cortex (último acesso ' + fmtTs(p.ultimo_acesso_em) + '). Prazo: ' + fmtDiaHora(d.prazo).replace('-feira', '') + '.'
+                            : 'Ainda não entrou no Cortex. Se não tem o link de acesso, o administrador gera um em Acessos e configurações.'))));
     if(conf && p.foto){
       var fb = bt('btn-claro', svgI('M4 7.5h3l1.5-2h7l1.5 2h3v11H4zM9 13a3 3 0 1 0 6 0 3 3 0 1 0-6 0', 14, 2) +
         (foto ? 'Esconder a foto' : (fotoCarregando ? 'Carregando a foto…' : 'Ver a foto')), function(){
@@ -1074,7 +1074,7 @@ function admin(){
   rpc('prof_admin_existe').then(function(r){
     if(!r.existe) return bootstrapAdmin();
     var m = modal('Senha de administração',
-      '<p class="sub" style="margin-bottom:8px">É a senha do módulo dos profissionais (não é o PIN do painel). Pedida uma vez por sessão.</p>' +
+      '<p class="sub" style="margin-bottom:8px">É a senha do módulo dos profissionais (não é o PIN do Cortex). Pedida uma vez por sessão.</p>' +
       '<div class="fg"><input type="password" class="fc" id="pf-adm-senha" autocomplete="off"></div><p class="pf-erro" id="pf-adm-erro" style="display:none"></p>',
       '<button type="button" class="pf-btn" data-volta>Voltar</button><button type="button" class="pf-btn pf-pri" id="pf-adm-ok">Entrar</button>');
     $('[data-volta]', m.el).onclick = m.fecha;
@@ -1136,7 +1136,7 @@ function desenhaAdmin(){
   var grid = document.createElement('div'); grid.className = 'pf-adm-grid';
   grid.innerHTML =
     '<div class="pf-adm-card"><h3>Configurações do módulo</h3>' +
-      campo('pf-c-url', 'Link da página (vai nos avisos)', 'text', urlSugerida, 'placeholder="https://…/painel.html?conferir=1"') +
+      campo('pf-c-url', 'Link da página (vai nos avisos)', 'text', urlSugerida, 'placeholder="https://…/?conferir=1"') +
       '<div class="linha2"><div>' + campo('pf-c-prazo', 'Prazo dos profissionais (segunda)', 'time', P.prazo_profissional_hora) + '</div>' +
       '<div>' + campo('pf-c-fech', 'Fechamento real (terça)', 'time', P.fechamento_hora) + '</div></div>' +
       '<label for="pf-c-abdia">Aviso de abertura sai no</label>' +
@@ -1269,20 +1269,20 @@ function msgConvite(primeiro, link, expira){
   var passos = function(confirmar, extra2, extra4){
     return '1️⃣ *Crie sua senha* — abra o link abaixo pelo celular e escolha uma senha. Nas próximas vezes, é só abrir o mesmo link e entrar com o seu nome e essa senha.\n\n' +
       '2️⃣ *Confira consulta por consulta* — cada uma aparece como *Atendido* ou *Não compareceu*.' + extra2 + '\n\n' +
-      '3️⃣ *Achou algo errado?* Avise a recepção por aqui e *não confirme ainda*. A correção aparece no painel até a manhã seguinte — aí é só conferir de novo.\n\n' +
+      '3️⃣ *Achou algo errado?* Avise a recepção por aqui e *não confirme ainda*. A correção aparece no Cortex até a manhã seguinte — aí é só conferir de novo.\n\n' +
       '4️⃣ *Tudo 100% certo?* Toque em *"' + confirmar + '"*, marque a declaração e tire uma selfie.' + extra4 + ' ✅\n\n' +
       '⚠️ Depois de confirmado, não dá mais para alterar — por isso, só confirme quando estiver tudo certinho.\n\n';
   };
   var corpo;
   if(mesInteiro){
     var mes = mesNome(pe.fim);
-    corpo = 'Novidade boa: a partir de agora, a conferência da agenda e o seu recibo de repasse ficam no *painel da clínica*. Chega de recibo indo e voltando pelo WhatsApp.\n\n' +
+    corpo = 'Novidade boa: a partir de agora, a conferência da agenda e o seu recibo de repasse ficam no *Cortex*, o sistema da clínica. Chega de recibo indo e voltando pelo WhatsApp.\n\n' +
       'Nesta primeira vez, *' + mes + ' inteiro* está aberto para você conferir. É assim:\n\n' +
       passos('Está tudo certo — confirmar o mês', ' Na mesma tela você já vê a prévia do seu repasse de ' + mes + ', com o valor e a % de agenda.',
              ' Pronto: seu recibo de ' + mes + ' sai na hora, na tela e em PDF.') +
       'A partir da próxima semana, a conferência passa a ser semanal, toda segunda-feira, e no fim do mês o recibo sai do mesmo jeito.\n\n';
   } else {
-    corpo = 'A conferência da sua agenda e o seu recibo de repasse ficam no *painel da clínica*.\n\n' +
+    corpo = 'A conferência da sua agenda e o seu recibo de repasse ficam no *Cortex*, o sistema da clínica.\n\n' +
       'Toda semana você confere a agenda da semana anterior, até segunda-feira às ' + hora + '. É assim:\n\n' +
       passos('Está tudo certo — confirmar', '', '') +
       'No fim do mês, ao confirmar os últimos dias, o seu recibo de repasse sai na hora, na tela e em PDF — e antes de confirmar você já vê a prévia do valor.\n\n';

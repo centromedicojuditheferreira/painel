@@ -17,7 +17,7 @@ var SIT = {
   saldo_esgotado:        {rot:"Saldo esgotado",       cls:"s0", g:"g0", acao:"🚫 Sem sessão sobrando = sem guia. Solicitar renovação AGORA — ou desmarcar."},
   sem_carteirinha:       {rot:"Sem carteirinha",      cls:"s0", g:"g0", acao:"Completar o cadastro do paciente HOJE — sem carteirinha nem dá pra casar guia."},
   guia_de_outra_terapia: {rot:"Guia de OUTRA terapia",cls:"s0", g:"g0", acao:"🚫 A guia viva do paciente é de outra terapia. Conferir se o erro é o procedimento marcado ou a guia pedida — corrigir AGORA ou desmarcar."},
-  procedimento_errado:   {rot:"Procedimento errado",  cls:"s0", g:"g0", acao:"🚫 O procedimento do agendamento não é nenhum dos 4 códigos Unimed. Corrigir no Feegow — desse jeito não fatura e o painel fica cego."},
+  procedimento_errado:   {rot:"Procedimento errado",  cls:"s0", g:"g0", acao:"🚫 O procedimento do agendamento não é nenhum dos 4 códigos Unimed. Corrigir no Feegow — desse jeito não fatura e o Cortex fica cego."},
   aba_intercambio:       {rot:"ABA no Intercâmbio",   cls:"s0", g:"g0", acao:"🚫 ABA não é coberto no convênio Intercâmbio. Corrigir o convênio ou o procedimento ANTES da sessão."},
   psico_com_guia_aba:    {rot:"Psico com guia de ABA", cls:"s0", g:"g0", acao:"🚫 O paciente tem guia de ABA viva — não é pra ter sessão de psicologia acontecendo. Corrigir o procedimento do agendamento no Feegow AGORA."},
   ultima_sessao:         {rot:"Última sessão (saldo)", cls:"s1", g:"g1", acao:"É a última sessão do saldo — solicitar guia nova já, pra agenda seguinte não furar."},
@@ -457,7 +457,7 @@ var SIT_TXT = {
   saldo_esgotado:         { rot:"Saldo esgotado", tom:"r", sub:"Solicitar a renovação agora ou desmarcar", acao:"Sem sessão sobrando é o mesmo que sem guia. Solicitar a renovação agora ou desmarcar." },
   sem_carteirinha:        { rot:"Sem carteirinha", tom:"r", sub:"Completar o cadastro do paciente hoje", acao:"Completar o cadastro do paciente hoje: sem carteirinha não dá para casar a guia." },
   guia_de_outra_terapia:  { rot:"Guia de outra terapia", tom:"r", sub:"Conferir procedimento ou guia e corrigir", acao:"A guia viva do paciente é de outra terapia. Conferir se o erro é o procedimento marcado ou a guia pedida e corrigir agora, ou desmarcar." },
-  procedimento_errado:    { rot:"Procedimento errado", tom:"r", sub:"Corrigir o procedimento no Feegow", acao:"O procedimento do agendamento não é nenhum dos 4 códigos Unimed. Corrigir no Feegow: assim não fatura e o painel fica cego." },
+  procedimento_errado:    { rot:"Procedimento errado", tom:"r", sub:"Corrigir o procedimento no Feegow", acao:"O procedimento do agendamento não é nenhum dos 4 códigos Unimed. Corrigir no Feegow: assim não fatura e o Cortex fica cego." },
   aba_intercambio:        { rot:"ABA no Intercâmbio", tom:"r", sub:"Corrigir convênio ou procedimento", acao:"ABA não é coberto no Intercâmbio. Corrigir o convênio ou o procedimento antes da sessão." },
   psico_com_guia_aba:     { rot:"Psicologia com guia de ABA", tom:"r", sub:"Corrigir o procedimento no Feegow", acao:"O paciente tem guia de ABA viva: não deveria haver sessão de psicologia. Corrigir o procedimento do agendamento no Feegow agora." },
   ultima_sessao:          { rot:"Última sessão (saldo)", tom:"o", sub:"Última do saldo: pedir guia nova já", acao:"É a última sessão do saldo. Solicitar guia nova já, para a agenda seguinte não furar." },
@@ -912,7 +912,7 @@ var FILA_TXT = {
   aguardando:    { rot:"Na fila do robô", curto:"Na fila do robô", cor:"#636366", sub:"O robô ainda vai olhar", acao:"O robô abre a guia no SGU e confere as duas datas (senha e carteirinha). O resultado aparece na lista em instantes." },
   conferindo:    { rot:"Robô no SGU agora…", curto:"Na fila do robô", cor:"#636366", sub:"O robô ainda vai olhar", acao:"O robô abre a guia no SGU e confere as duas datas (senha e carteirinha). O resultado aparece na lista em instantes." },
   espera:        { rot:"Vai conferir de novo", curto:"Vai conferir de novo", cor:"#2C2D6E", sub:"O robô confere de novo sozinho", acao:"O SGU ainda mostrava a data antiga. O robô confere de novo sozinho depois de 20 minutos, de 1 hora e de 4 horas. Não precisa mandar o número de novo." },
-  renovada:      { rot:"Validade atualizada", curto:"Atualizadas", cor:"#248A3D", sub:"Já atualizada no sistema: é só ler", acao:"O robô atualizou a validade no sistema. A Agenda do painel atualiza em poucos minutos. É só ler e tirar da tela." },
+  renovada:      { rot:"Validade atualizada", curto:"Atualizadas", cor:"#248A3D", sub:"Já atualizada no sistema: é só ler", acao:"O robô atualizou a validade no sistema. A Agenda do Cortex atualiza em poucos minutos. É só ler e tirar da tela." },
   nao_renovou:   { rot:"Não renovou no SGU", curto:"Não renovou", cor:"#D70015", sub:"O Gabriel é avisado pelo Telegram", acao:"O robô conferiu várias vezes, ao longo de umas 5 horas, e o SGU continua com a data antiga. O Gabriel é avisado pelo Telegram. Leu, tire da tela." },
   sem_mudanca:   { rot:"SGU ainda com a data velha", curto:"Data velha no SGU", cor:"#C93400", sub:"Esperar uns minutos e mandar de novo", acao:"O SGU ainda mostra a data antiga. Se a Unimed confirmou a renovação, aguarde alguns minutos e mande o número de novo." },
   fora_do_banco: { rot:"Guia fora do nosso banco", curto:"Fora do banco", cor:"#636366", sub:"Conferir se o número foi digitado certo", acao:"Essa guia não está no nosso banco. Se for guia nova da Unimed, o coletor captura sozinho. Se for renovação de guia antiga, confira se o número foi digitado certo." },
@@ -990,7 +990,7 @@ function filaDetalhe(l){
   if(k === "renovada"){
     var f = function(a, b){ return a === b ? "sem mudança (" + dataBr(b) + ")" : dataBr(a) + " → " + dataBr(b); };
     return "Renovou! Senha: " + f(l.senha_antes, l.senha_depois) + " · carteirinha: " + f(l.cart_antes, l.cart_depois) + "." +
-      (n > 1 ? " Apareceu na " + n + "ª conferência." : "") + " A Agenda do painel atualiza em poucos minutos.";
+      (n > 1 ? " Apareceu na " + n + "ª conferência." : "") + " A Agenda do Cortex atualiza em poucos minutos.";
   }
   return "";
 }
