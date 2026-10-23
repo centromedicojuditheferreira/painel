@@ -759,3 +759,14 @@ textarea.lj-mono{width:100%;resize:vertical;padding:12px;border:1px solid var(--
 .btn.nv-ok{height:44px;padding:0 20px;font-size:15px}
 @media (max-width:560px){.nv{right:16px}.lj-g2{grid-template-columns:1fr}.lj-kpis{grid-template-columns:1fr}.lj-kpis>div{border-right:0;border-bottom:1px solid var(--linha)}.busca.busca-p{width:100%}}
 .lj-per-datas input.fc{width:auto;flex:none}
+
+/* ═══ v3.5 · Falhas: motivo, CORRIGIR e o link do WhatsApp Web ═══ */
+.falha-corr{font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--vermelho)}
+.falha-corrigir{display:flex;align-items:baseline;gap:10px;padding:10px 12px;background:var(--vermelho-suave);box-shadow:inset 3px 0 0 var(--vermelho);font-size:15px;line-height:1.45}
+.falha-corrigir b{flex:none;font-size:13px;font-weight:800;letter-spacing:.06em;color:var(--vermelho)}
+.falha-corrigir.ok{background:var(--verde-suave);box-shadow:inset 3px 0 0 var(--verde)}
+.falha-corrigir.ok b{color:var(--verde)}
+.falha-acoes{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+a.btn.falha-wpp{text-decoration:none;color:#fff}
+.falha-semcel{color:var(--vermelho)}
+.falha-corr.ok{color:var(--verde)}
