@@ -38,8 +38,7 @@ var moldura = (function () {
 
   /* destino → onde fica no painel antigo (s = seção de nav(), t = tela do GV) */
   var DEST = {
-    agenda:        { s: 'guias', t: 'agenda',  secao: 'Faturamento', titulo: 'Agenda', busca: true },
-    renovacoes:    { s: 'guias', t: 'fila',    secao: 'Faturamento', titulo: 'Renovações' },
+    agenda:        { s: 'guias', t: 'agenda',  secao: 'Faturamento', titulo: 'Agenda', busca: true },   /* busca: lupa + Renovação de validade Unimed no topo */
     cadastros:     { s: 'guias', t: 'cad',     secao: 'Faturamento', titulo: 'Cadastros' },
     exclusoes:     { s: 'guias', t: 'excl',    secao: 'Faturamento', titulo: 'Exclusões' },
     corte:         { s: 'guias', t: 'corte',   secao: 'Faturamento', titulo: 'Corte' },
@@ -68,7 +67,7 @@ var moldura = (function () {
 
   /* itens do menu: [destino, rótulo, id do contador, contador em vermelho?] */
   var MENU = [
-    ['Faturamento', [['agenda', 'Agenda', 'gv-b-agenda', true], ['renovacoes', 'Renovações', 'gv-b-fila'], ['cadastros', 'Cadastros', 'gv-b-cad', true],
+    ['Faturamento', [['agenda', 'Agenda', 'gv-b-agenda', true], ['cadastros', 'Cadastros', 'gv-b-cad', true],
       ['exclusoes', 'Exclusões', 'gv-b-excl', true], ['corte', 'Corte', 'gv-b-corte', true], ['falhas', 'Falhas', 'gv-b-falhas', true],
       ['malotes', 'Malotes', 'gv-b-malotes']]],
     ['Lojinha', [['notinhas', 'Notinhas'], ['caixa', 'Caixa'], ['estoque', 'Estoque'], ['historico', 'Histórico']]],
@@ -152,14 +151,14 @@ var moldura = (function () {
   function definir(d) {
     var x = DEST[d]; if (!x) return;
     var mudou = d !== atual;
-    if (mudou && popAtual) popAtual.fechar(true);   /* trocou de tela: a janela aberta era da tela anterior */
+    if (mudou) fecharPops();                      /* trocou de tela: as janelas abertas eram da tela anterior */
     atual = d;
     document.getElementById('pg-secao').textContent = x.secao;
     document.getElementById('pg-titulo').textContent = x.titulo;
     document.title = x.titulo + ' · Lev Soul';
     document.getElementById('pg-resumo').textContent = resumos[d] || '';
     var ehGV = x.s === 'guias';
-    document.getElementById('pg-busca').hidden = !x.busca;
+    ['gv-renov', 'gv-lupa'].forEach(function (id) { var el = document.getElementById(id); if (el) el.hidden = !x.busca; });
     document.getElementById('gv-recarregar').hidden = !ehGV;
     var at = document.getElementById('gv-atualizado'); if (at) at.hidden = !ehGV || d === 'conferencia';   /* a hora é dos dados do faturamento */
     var ac = document.getElementById('pg-acoes');
@@ -192,14 +191,15 @@ var moldura = (function () {
   function acoesDe(d) { return d === atual ? document.getElementById('pg-acoes') : null; }
   function resumo(d, txt) { resumos[d] = txt || ''; if (d === atual) document.getElementById('pg-resumo').textContent = resumos[d]; }
 
-  /* ── barra "Resolver agora" (os chips vêm do GV; aparece em todas as telas) ── */
+  /* ── barra dos quadrados de alerta (os chips vêm do GV; aparece em todas as telas) ──
+     v3.4: sem o rótulo "Resolver agora"; os quadrados começam na margem esquerda. */
   var ra = document.getElementById('ra');
   function alertas(lista) { chipsGV = lista || []; desenharAlertas(); }
   function desenharAlertas() {
     if (!chipsGV.length) { ra.hidden = true; ra.innerHTML = ''; return; }
     var filtro = (window.GV && GV.filtroTipo) ? GV.filtroTipo() : null;
     ra.hidden = false;
-    ra.innerHTML = '<span class="ra-tit">' + svg(I.alerta, 16, 2) + 'Resolver agora</span>' +
+    ra.innerHTML =
       '<button type="button" class="ra-seta some" data-l="-1" aria-label="Ver alertas anteriores">' + svg(I.esq, 16, 2.2) + '</button>' +
       '<div class="ra-trilho"></div>' +
       '<button type="button" class="ra-seta some" data-l="1" aria-label="Ver mais alertas">' + svg(I.dir, 16, 2.2) + '</button>';
@@ -208,11 +208,14 @@ var moldura = (function () {
     chipsGV.forEach(function (c) {
       if (c.sep) { var s = document.createElement('span'); s.className = 'ra-sep'; s.setAttribute('aria-hidden', 'true'); tr.appendChild(s); return; }
       var aqui = c.chave === atual;
+      var on = atual === 'agenda' && filtro === c.chave;   /* v3.4: o filtro "Só X" da lista mora no próprio quadrado */
       var b = document.createElement('button'); b.type = 'button';
-      b.className = 'ra-chip' + (aqui ? ' aqui' : '') + (atual === 'agenda' && filtro === c.chave ? ' on' : '');
-      b.innerHTML = esc(c.rot) + ' <b>' + c.n + '</b>';
-      b.title = aqui ? 'Você está nesta tela' : (c.dica || '');
-      if (aqui) b.setAttribute('aria-current', 'page'); else b.addEventListener('click', c.acao);
+      b.className = 'ra-chip' + (aqui ? ' aqui' : '') + (on ? ' on' : '');
+      b.innerHTML = esc(c.rot) + ' <b>' + c.n + '</b>' + (on ? svg('M6 6l12 12M18 6 6 18', 12, 2.6) : '');
+      b.title = aqui ? 'Você está nesta tela' : (on ? 'A lista mostra só estes. Clique para tirar o filtro' : (c.dica || ''));
+      if (on) b.setAttribute('aria-pressed', 'true');
+      if (aqui) b.setAttribute('aria-current', 'page');
+      else b.addEventListener('click', on ? function () { if (window.GV && GV.limparFiltroTipo) GV.limparFiltroTipo(); } : c.acao);
       b.style.animationDelay = (j++ * 120) + 'ms';
       tr.appendChild(b);
     });
@@ -234,36 +237,44 @@ var moldura = (function () {
   window.addEventListener('resize', setas);
   function esc(t) { var d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; }
 
-  /* ── janela de detalhe (pop): uma por vez, Esc e clique fora fecham ── */
-  var popAtual = null;
+  /* ── janela de detalhe (pop): uma por vez, Esc e clique fora fecham ──
+     v3.4: {sobre:true} abre por cima da janela que já está aberta (ex.: o detalhe de uma guia dentro
+     da Renovação de validade Unimed); Esc e o clique fora fecham só a de cima. {classe} = classe extra. */
+  var pilha = [];
+  function fecharPops() { while (pilha.length) pilha[pilha.length - 1].fechar(true); }
   function pop(o) {
     o = o || {};
-    if (popAtual) popAtual.fechar(true);
+    if (!o.sobre) fecharPops();
+    var nivel = pilha.length;
     var anterior = document.activeElement;
     var fundo = document.createElement('div'); fundo.className = 'pop-fundo';
     var el = document.createElement('section');
-    el.className = 'pop'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true');
+    el.className = 'pop' + (o.classe ? ' ' + o.classe : ''); el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true');
     el.style.width = o.largura || '620px';
+    if (nivel) { fundo.style.zIndex = 200 + nivel * 2; el.style.zIndex = 201 + nivel * 2; }
     el.innerHTML = '<div class="pop-topo"><div class="pop-esq"></div><button type="button" class="pop-x" aria-label="Fechar">' +
       svg('M6 6l12 12M18 6 6 18', 18, 2) + '</button></div><div class="pop-corpo"></div><div class="pop-rodape" hidden></div>';
     document.body.appendChild(fundo); document.body.appendChild(el);
     var api = { el: el, topo: el.querySelector('.pop-esq'), corpo: el.querySelector('.pop-corpo'), rodape: el.querySelector('.pop-rodape'), aberto: true };
     if (o.titulo) api.topo.innerHTML = '<span class="pop-titulo-topo">' + esc(o.titulo) + '</span>';
     api.fechar = function (trocando) {
-      if (!api.aberto) return; api.aberto = false;
-      fundo.remove(); el.remove(); document.removeEventListener('keydown', tecla, true);
-      if (popAtual === api) popAtual = null;
+      if (!api.aberto) return;
+      while (pilha.length && pilha[pilha.length - 1] !== api) pilha[pilha.length - 1].fechar(true);   /* fecha antes as que estão por cima */
+      api.aberto = false;
+      fundo.remove(); el.remove();
+      var i = pilha.indexOf(api); if (i >= 0) pilha.splice(i, 1);
       if (o.aoFechar) o.aoFechar(!!trocando);
       if (!trocando && anterior && anterior.focus) { try { anterior.focus({ preventScroll: true }); } catch (e) {} }
     };
-    function tecla(ev) { if (ev.key === 'Escape') { ev.stopPropagation(); api.fechar(); } }
     fundo.addEventListener('click', function () { api.fechar(); });
     el.querySelector('.pop-x').addEventListener('click', function () { api.fechar(); });
-    document.addEventListener('keydown', tecla, true);
-    popAtual = api;
+    pilha.push(api);
     setTimeout(function () { var f = el.querySelector('.pop-x'); if (f && api.aberto) f.focus({ preventScroll: true }); }, 0);
     return api;
   }
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && pilha.length) { ev.stopPropagation(); pilha[pilha.length - 1].fechar(); }
+  }, true);
 
   /* ── botão Nova venda ── */
   function montarFab() {

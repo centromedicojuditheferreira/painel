@@ -111,15 +111,24 @@ a{color:var(--tint)}
 .btn-ic[hidden]{display:none}
 .btn-ic:hover{background:var(--preenche2)}
 .btn-ic.girando svg{animation:gira .8s linear infinite}
+/* v3.4: botão "Renovação de validade Unimed" no topo da Agenda (abre o popup grande) */
+.btn-renov{flex:none;display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 10px 0 11px;border:0;background:var(--tint-suave);color:var(--tint);font:600 14px var(--fn);white-space:nowrap;cursor:pointer}
+.btn-renov:hover{background:rgba(44,45,110,.17)}
+.btn-renov[hidden]{display:none}
+.renov-n{min-width:22px;height:20px;padding:0 6px;display:inline-flex;align-items:center;justify-content:center;background:var(--branco);color:var(--cinza);font:600 12px var(--fn);font-variant-numeric:tabular-nums}
+.renov-n[hidden]{display:none}
+@media (max-width:560px){.btn-renov .rv-s{display:none}}   /* celular: "Renovação Unimed", para a lupa caber na mesma linha */
 @keyframes gira{to{transform:rotate(360deg)}}
 
 /* ── barra "Resolver agora" ── */
-.ra{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+/* v3.4: sem o rótulo; os quadrados encostam na margem esquerda e as setas só aparecem (por cima) quando não cabe tudo */
+.ra{position:relative;display:flex;align-items:center;margin-bottom:14px}
 .ra[hidden]{display:none}
-.ra-tit{flex:none;display:inline-flex;align-items:center;gap:6px;margin-right:4px;font-size:13px;font-weight:700;color:var(--vermelho);white-space:nowrap}
-.ra-seta{flex:none;width:30px;height:30px;border:1px solid var(--linha2);background:var(--branco);color:var(--tint);cursor:pointer;display:flex;align-items:center;justify-content:center}
-.ra-seta.some{visibility:hidden}
-.ra-trilho{flex:1;min-width:0;display:flex;align-items:center;gap:6px;overflow-x:auto;overflow-y:hidden;padding:8px 2px 4px;scroll-behavior:smooth;scrollbar-width:none}
+.ra-seta{position:absolute;top:50%;z-index:1;transform:translateY(-50%);width:30px;height:30px;border:1px solid var(--linha2);background:var(--branco);color:var(--tint);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.ra-seta[data-l="-1"]{left:0}
+.ra-seta[data-l="1"]{right:0}
+.ra-seta.some{display:none}
+.ra-trilho{flex:1;min-width:0;display:flex;align-items:center;gap:6px;overflow-x:auto;overflow-y:hidden;margin:0 -4px;padding:8px 4px 6px;scroll-behavior:smooth;scrollbar-width:none}
 .ra-trilho::-webkit-scrollbar{display:none}
 .ra-chip{flex:none;display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 10px;border:0;background:var(--vermelho);color:#fff;
   font:500 13px var(--fn);white-space:nowrap;cursor:pointer;animation:pula 3.2s ease-in-out infinite}
@@ -127,6 +136,7 @@ a{color:var(--tint)}
 .ra-chip:hover{filter:brightness(.88);animation-play-state:paused}
 .ra-chip.aqui{background:var(--branco);color:var(--vermelho);box-shadow:inset 0 0 0 1px var(--vermelho);animation:none;cursor:default;filter:none}
 .ra-chip.on{box-shadow:0 0 0 2px var(--branco),0 0 0 4px var(--vermelho);animation:none}
+.ra-chip.on svg{margin-left:2px;opacity:.9}
 .ra-sep{flex:none;width:1px;height:20px;margin:0 6px;background:var(--linha2)}
 @keyframes pula{0%,100%{transform:translateY(0)}5%{transform:translateY(-6px)}10%{transform:translateY(0)}14%{transform:translateY(-3px)}18%{transform:translateY(0)}}
 @media (prefers-reduced-motion:reduce){.ra-chip{animation:none}}
@@ -382,6 +392,46 @@ textarea.pp-nota:focus{border-color:var(--cinza)}
 .pp-datas>b{font-weight:600}
 .pp-datas .c{color:var(--cinza)}
 .pp-datas .mudou{color:var(--verde);font-weight:600}
+
+/* ═══ v3.4 · Renovação de validade Unimed — popup de quase a tela toda ═══ */
+.pop.pop-grande{height:calc(100vh - 48px);max-height:calc(100vh - 48px)}
+.pop-corpo.renov{overflow:hidden;gap:14px;padding:18px 24px 20px}
+.renov-aviso{display:flex;align-items:center;gap:16px;padding:16px 20px;background:var(--vermelho-suave);color:var(--vermelho);box-shadow:inset 4px 0 0 var(--vermelho)}
+.renov-aviso>svg{flex:none}
+.renov-aviso strong{display:block;font-size:30px;line-height:1.1;font-weight:800;letter-spacing:.01em}
+.renov-aviso span{display:block;margin-top:5px;font-size:15px;color:var(--tinta)}
+.renov-envio{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.busca.renov-num{width:340px;height:44px;background:var(--preenche)}
+.busca.renov-num input{font-size:17px;font-variant-numeric:tabular-nums}
+.renov-envio .btn{height:44px;padding:0 18px;font-size:15px}
+.renov-envio .fila-aviso2{flex:1 1 280px;font-size:14px;line-height:1.35}
+.pop-corpo.renov>.renov-area{flex:1 1 auto;min-height:0;display:flex}
+.renov-area>.duas-col{flex:1;min-height:0;flex-wrap:nowrap;align-items:stretch}
+.renov-area .lista{min-height:0}
+.renov-area .lado{min-height:0;overflow-y:auto}
+@media (max-width:900px){
+  .pop.pop-grande{width:100vw!important;max-width:100vw;height:100vh;max-height:100vh}
+  .pop-corpo.renov{overflow-y:auto;padding:14px 16px 18px}
+  .pop-corpo.renov>.renov-area{display:block;flex:none}
+  .renov-area>.duas-col{flex-wrap:wrap}
+  .renov-area .lista{height:62vh}
+  .renov-aviso{padding:12px 14px;gap:12px}
+  .renov-aviso strong{font-size:21px}
+  .busca.renov-num{width:100%}
+  .renov-envio .btn{flex:1}
+}
+
+/* ═══ v3.4 · Buscar paciente — janela no alto, como o Spotlight ═══ */
+.pop.pop-busca{top:10vh;transform:translateX(-50%);max-height:80vh}
+.pop-busca .pop-corpo{gap:10px}
+.busca.busca-grande{width:100%;height:48px;padding:0 14px}
+.busca.busca-grande input{font-size:18px}
+.busca-info{min-height:18px;font-size:13px;color:var(--cinza)}
+.busca-res[hidden]{display:none}
+.busca-res .pp-linha .w{width:118px}
+.pp-linha .st{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:1px;font-size:13px;font-weight:600;text-align:right;white-space:nowrap}
+.pp-linha .st small{font-size:12px;font-weight:400;color:var(--cinza)}
+.lista-vazio .vz-tudo{margin-top:10px}
 .nota-lado{padding:16px;display:flex;flex-direction:column;gap:8px}
 .nota-lado h2{font-size:17px;font-weight:600}
 .nota-lado p{font-size:15px;line-height:1.5}
