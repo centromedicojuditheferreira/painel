@@ -99,6 +99,7 @@ a{color:var(--tint)}
 .pg-resumo:has(#pg-resumo:empty):has(.pg-atual:empty){display:none}
 #pg-resumo:not(:empty)+.pg-atual:not(:empty)::before{content:" · "}
 .pg-atual[hidden]{display:none}
+.pg-tit.ola .pg-secao,.pg-tit.ola .pg-resumo{display:none}   /* v3.3: na Agenda, só a saudação */
 .pg-dir{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .pg-acoes{display:contents}
 .busca{display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;width:280px;max-width:100%;background:var(--preenche);color:var(--cinza);cursor:text}
@@ -252,23 +253,25 @@ tr.err-row td:not(:last-child){opacity:.4;text-decoration:line-through}
 .seg>button.on{background:var(--branco);box-shadow:0 1px 3px rgba(0,0,0,.12);font-weight:600}
 .seg .q{flex:none;width:8px;height:8px}
 .seg .n{color:var(--cinza);font-weight:500;font-variant-numeric:tabular-nums}
+.lista-tit{font-size:13px;font-weight:600;color:var(--tinta)}   /* v3.3 */
 .so-tipo{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:1px solid var(--tint);background:var(--tint-suave);color:var(--tint);font:600 13px var(--fn);cursor:pointer}
 .dias{flex:none;display:flex;align-items:stretch;border-bottom:1px solid var(--linha)}
 .dias-seta{flex:none;width:38px;border:0;border-right:1px solid var(--linha);background:var(--branco);color:var(--tint);display:flex;align-items:center;justify-content:center;cursor:pointer}
 .dias-seta.dir{border-right:0;border-left:1px solid var(--linha)}
 .dias-seta:disabled{color:var(--linha2);cursor:default}
 .dias-grade{flex:1;min-width:0;display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
-.dia2{padding:8px 0 7px;border:0;border-right:1px solid var(--linha);background:var(--branco);display:flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer;font:inherit;color:var(--tinta);min-width:0}
+.dia2{padding:5px 0 4px;border:0;border-right:1px solid var(--linha);background:var(--branco);display:flex;flex-direction:column;align-items:center;gap:0;cursor:pointer;font:inherit;color:var(--tinta);min-width:0}
 .dia2:last-child{border-right:0}
 .dia2:hover{background:var(--sobre)}
+.dia2 .sd{display:flex;align-items:baseline;gap:4px;white-space:nowrap}   /* v3.3: dia e data na mesma linha */
 .dia2 .s{font-size:12px;color:var(--cinza)}
-.dia2 .d{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.dia2 .d{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
 .dia2 .r{font-size:12px;font-weight:600;color:var(--cinza3);font-variant-numeric:tabular-nums}
-.dia2 .r.p{color:var(--vermelho)}.dia2 .r.f{color:var(--laranja)}
+.dia2 .r.p{color:var(--vermelho)}.dia2 .r.f,.dia2 .r.a{color:var(--laranja)}
 .dia2.on,.dia2.on:hover{background:var(--tint)}
 .dia2.on .s,.dia2.on .d,.dia2.on .r{color:#fff}
 @media (max-width:560px){   /* celular: a faixa de dias rola de lado em vez de espremer */
-  .dias-grade{grid-template-columns:repeat(7,minmax(58px,1fr));overflow-x:auto;scrollbar-width:none}
+  .dias-grade{grid-template-columns:repeat(7,minmax(76px,1fr));overflow-x:auto;scrollbar-width:none}
   .dias-grade::-webkit-scrollbar{display:none}
 }
 .lista-corpo{flex:1;min-height:0;overflow-y:auto}
