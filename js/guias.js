@@ -411,6 +411,14 @@ function badgesTopo(){
   b("gv-b-corte", corteN); b("gv-b-falhas", falhasN);
   b("gv-sbb", pend + cadN + exclN + corteN + falhasN);
   desenharFaixa();
+  if(estado.tela === "agenda") atualizaLadoAgenda();
+}
+/* v3.5: o "Resolver agora" da direita mostra Corte, Falhas, Cadastros e Exclusões assim que cada carga chega
+   (antes só aparecia no próximo redesenho da Agenda) */
+function atualizaLadoAgenda(){
+  var lado = document.querySelector("#gv-conteudo .duas-col > .lado");
+  if(!lado || !estado.linhas.length) return;
+  lado.innerHTML = ""; lado.appendChild(agPainel());
 }
 function desenharFaixa(){
   var f = document.getElementById("gv-faixa");
@@ -419,13 +427,15 @@ function desenharFaixa(){
   var cadN  = (estado.cad  || []).filter(cadAberto).length;
   var exclN = (estado.excl || []).filter(exclAberta).length;
   var corteN = (estado.corte || []).filter(corteAtivo).length;   /* v3.2: o Corte também entra aqui (mesmo número do menu) */
+  var falhasN = (estado.falhas || []).length;                     /* v3.5: Falhas também ganha o quadrado, ao lado do Corte */
   var chips = [];
   categorias().forEach(function(c){
     chips.push({ chave:c.chave, rot:c.rot, n:c.n, dica:c.sub,
       acao:function(){ irParaTela("agenda"); abrirCatAgenda(c.chave); } });
   });
-  if(chips.length && (corteN || cadN || exclN)) chips.push({ sep:true });
+  if(chips.length && (corteN || falhasN || cadN || exclN)) chips.push({ sep:true });
   if(corteN) chips.push({ chave:"corte", rot:"Corte", n:corteN, dica:"Abrir Corte: consultas para apagar no Feegow", acao:function(){ irParaTela("corte"); } });
+  if(falhasN) chips.push({ chave:"falhas", rot:"Falhas", n:falhasN, dica:"Abrir Falhas: mensagens de WhatsApp que não saíram", acao:function(){ irParaTela("falhas"); } });
   if(cadN) chips.push({ chave:"cadastros", rot:"Cadastros", n:cadN, dica:"Abrir Cadastros", acao:function(){ irParaTela("cad"); } });
   if(exclN) chips.push({ chave:"exclusoes", rot:"Exclusões", n:exclN, dica:"Abrir Exclusões", acao:function(){ irParaTela("excl"); } });
   moldura.alertas(chips);
@@ -702,10 +712,12 @@ function agPainel(){
   var cadN  = (estado.cad  || []).filter(cadAberto).length;
   var exclN = (estado.excl || []).filter(exclAberta).length;
   var corteN = (estado.corte || []).filter(corteAtivo).length;   /* v3.2 */
+  var falhasN = (estado.falhas || []).length;                     /* v3.5 */
   if(corteN) sec.appendChild(cat("Corte", "Consultas para apagar no Feegow, na tela de Corte", corteN, TOM.r, function(){ irParaTela("corte"); }));
+  if(falhasN) sec.appendChild(cat("Falhas", "Mensagens de WhatsApp que não saíram, na tela de Falhas", falhasN, TOM.r, function(){ irParaTela("falhas"); }));
   if(cadN)  sec.appendChild(cat("Cadastros", "Fichas com problema de cadastro, na tela de Cadastros", cadN, TOM.r, function(){ irParaTela("cad"); }));
   if(exclN) sec.appendChild(cat("Exclusões", "Séries apagadas inteiras no Feegow, na tela de Exclusões", exclN, TOM.r, function(){ irParaTela("excl"); }));
-  if(!cats.length && !corteN && !cadN && !exclN) sec.appendChild(novo("div", "lista-vazio", estado._carregouEm ? "Nada para resolver agora." : "Buscando…"));
+  if(!cats.length && !corteN && !falhasN && !cadN && !exclN) sec.appendChild(novo("div", "lista-vazio", estado._carregouEm ? "Nada para resolver agora." : "Buscando…"));
   return sec;
 }
 /* janela de uma categoria: lista as consultas e leva para a lista filtrada */
@@ -2208,14 +2220,28 @@ function abrirCorteItem(ref){
   pinta();
 }
 
-/* ── 📵 dados ── */
+/* ── 📵 dados ──
+   v3.5: junta as mensagens dos pacientes (conf_falhas: confirmação, lembrete e aviso de guia) com os avisos aos
+   profissionais que não saíram (prof_avisos_falhas, FALHAS v2.0). Sem o SQL novo, a segunda volta vazia e a tela segue. */
 function loadFalhas(){
-  fetch(GCFG.url + "/rest/v1/conf_falhas?select=*", { headers: cab() })
-    .then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
-    .then(function(rows){ estado.falhas = rows || []; estado.falhasErro = "";
-                          if(estado.tela === "falhas") desenharFalhas(); badgesTopo(); })
+  var qPac = fetch(GCFG.url + "/rest/v1/conf_falhas?select=*", { headers: cab() })
+    .then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); });
+  var qProf = fetch(GCFG.url + "/rest/v1/prof_avisos_falhas?select=*", { headers: cab() })
+    .then(function(r){ return r.ok ? r.json() : []; })
+    .catch(function(){ return []; });
+  Promise.all([qPac, qProf])
+    .then(function(res){
+      estado.falhas = (res[0] || []).map(falhaDePaciente).concat((res[1] || []).map(falhaDeProf));
+      estado.falhasErro = "";
+      if(estado.tela === "falhas") desenharFalhas(); badgesTopo();
+    })
     .catch(function(e){ estado.falhasErro = String(e.message||e);
                         if(estado.tela === "falhas") desenharFalhas(); });
+}
+function falhaDePaciente(f){ var x = Object.assign({}, f); x.origem = "paciente"; x.chave = "pac:" + f.agendamento_id + ":" + f.tipo; return x; }
+function falhaDeProf(p){
+  return { origem:"profissional", chave:"prof:" + p.id, tipo:"prof", prof_tipo:p.tipo, nome_paciente:p.nome, telefone:p.telefone,
+           texto:p.texto, erro_detalhe:p.erro, status_envio:"ERRO", ultima_tentativa:p.agendado_para, semana_inicio:p.semana_inicio };
 }
 
 /* ── 📵 textos (espelho do kit v1.7 / robô v1.9 — mudou lá, muda aqui) ── */
@@ -2230,9 +2256,13 @@ var TPL_AVISOS = {
   "GUIA VENCIDA": "Sua guia está *vencida* — e guia vencida sai da agenda. Fale com a Unimed pra atualizar a validade ou solicite guia nova com seu médico. Dúvidas, é só responder aqui."
 };
 function linkConfirmacao(id){ return "https://api.feegow.com.br/confirmation/" + id + ":1005416"; }
+function abreMsg(f){ return "Oi, " + (f.nome_paciente || "paciente") + "! Aqui é do Centro Médico JF / Lev Soul 🤍\n\n"; }
 function textoFalha(f){
-  var nome = f.nome_paciente || "paciente";
-  var abre = "Oi, " + nome + "! Aqui é do Centro Médico JF / Lev Soul 🤍\n\n";
+  var m = falhaMotivo(f);
+  if(f.origem === "profissional") return f.texto || "";
+  if(m === "guia_vencida" || m === "sem_guia") return textoSemConsulta(f, m);   /* v3.5: decisão do dono (23/10) */
+  if(f.tipo === "aviso_guia") return textoAvisoGuia(f);
+  var abre = abreMsg(f);
   if(f.tipo === "lembrete"){
     return abre +
       "Lembrete do seu atendimento de *hoje, " + (f.data_fmt||"") + "*, às *" + (f.horario||"") + "*, com *" +
@@ -2255,17 +2285,81 @@ function textoFalha(f){
     "\n\nQualquer imprevisto, responda esta mensagem que a gente encontra junto o melhor caminho.";
   return corpo;
 }
+/* v3.5: guia vencida ou sem guia → avisar que a consulta não vai acontecer */
+function textoSemConsulta(f, m){
+  var porque = m === "guia_vencida" ? "a sua guia Unimed venceu" : "não há guia Unimed autorizada para ela";
+  var pedir  = m === "guia_vencida" ? "solicite a renovação da guia (ou a atualização da validade)" : "solicite a guia";
+  return abreMsg(f) +
+    "Sua consulta de *" + diaConsulta(f.data_atendimento) + "*, às *" + (f.horario||"") + "*, com *" + (f.profissional||"—") +
+    "*, *não vai acontecer*: " + porque + ".\n\n" +
+    "Para voltar a marcar, " + pedir + " com seu médico ou diretamente na Unimed. Quando estiver tudo certo, é só responder esta mensagem que a gente encontra um novo horário.";
+}
+/* v3.5: o mesmo texto do template "Guia Perto do Fim – Aviso Antecipado" (CONF v2.0) */
+function textoAvisoGuia(f){
+  var sab = f.data_atendimento && new Date(String(f.data_atendimento).slice(0,10) + "T12:00:00").getDay() === 6;
+  return "Oi, " + (f.nome_paciente || "paciente") + "! Aqui é do Centro Médico JF / Lev Soul.\n\n" +
+    "Aviso sobre sua guia Unimed: ela cobre seus atendimentos de " + String(f.especialidade || "terapia").toLowerCase() +
+    " somente até a consulta de *" + diaConsulta(f.data_atendimento) + "*.\n\n" +
+    "Para manter os próximos horários, a guia nova precisa entrar no sistema até as *" + (sab ? "11h" : "21h") +
+    "* desse dia. Solicite a renovação (ou a atualização da validade) com seu médico ou diretamente na Unimed.\n\n" +
+    "Já solicitou? Responda esta mensagem que a gente confere junto.";
+}
 
-/* ── 📵 tela — design novo: mensagens que o robô não entregou ──
-   Não grava nada: copia o número e a mensagem pronta (textoFalha, igual antes). */
+/* ── 📵 tela — mensagens de WhatsApp que não saíram ──
+   v3.5: o motivo vem em destaque; quando o erro tem correção, a tela diz o que CORRIGIR. Para mandar, um link abre o
+   WhatsApp Web já na conversa e com a mensagem pronta escrita. Continua sem gravar nada. */
 var FALHA_TXT = {
-  falhou:      { label:"Envio falhou", cor:"#C93400", sub:"Mandar na mão pela plataforma",
-                 acao:"Copiar o número, achar a conversa na plataforma, copiar a mensagem pronta e enviar. Ninguém sai da agenda sem ter sido avisado." },
-  sem_celular: { label:"Sem celular", cor:"#D70015", sub:"Completar o cadastro no Feegow primeiro",
-                 acao:"O cadastro não tem celular. Completar no Feegow antes de qualquer coisa; depois mandar a mensagem pronta." }
+  sem_celular:  { label:"Sem celular", cor:"#D70015", sub:"Corrigir o cadastro e depois mandar",
+                  porque:"O cadastro não tem um número de celular que sirva para WhatsApp.",
+                  corrigir:"Cadastrar o celular do paciente no Feegow.",
+                  passo:"Depois de corrigir, abra o WhatsApp com a mensagem pronta e envie." },
+  guia_vencida: { label:"Guia vencida", cor:"#C93400", sub:"Avisar que a consulta não vai acontecer",
+                  porque:"O robô não manda confirmação quando a guia está vencida.",
+                  passo:"Abra o WhatsApp com a mensagem pronta e envie: ela avisa que a consulta não vai acontecer porque a guia venceu." },
+  sem_guia:     { label:"Sem guia", cor:"#C93400", sub:"Avisar que a consulta não vai acontecer",
+                  porque:"O robô não manda confirmação de consulta sem guia Unimed.",
+                  passo:"Abra o WhatsApp com a mensagem pronta e envie: ela avisa que a consulta não vai acontecer porque não tem guia." },
+  erro_envio:   { label:"Erro no envio", cor:"#636366", sub:"Não tem o que corrigir: é só mandar",
+                  porque:"A plataforma de WhatsApp recusou ou caiu na hora do envio.",
+                  passo:"Não tem o que corrigir. Abra o WhatsApp com a mensagem pronta e envie." },
+  nao_enviado:  { label:"Não enviado", cor:"#636366", sub:"Mandar a mensagem pronta",
+                  porque:"O robô não mandou esta mensagem.",
+                  passo:"Abra o WhatsApp com a mensagem pronta e envie." },
+  prof:         { label:"Aviso ao profissional", cor:"#2C2D6E", sub:"Mandar o aviso para o profissional",
+                  porque:"O robô tentou mandar o aviso da conferência da agenda e a plataforma não entregou.",
+                  passo:"Não tem o que corrigir. Abra o WhatsApp com a mensagem pronta e envie para o profissional." }
 };
-function falhaSit(f){ return f.status_envio === "SEM CELULAR" ? "sem_celular" : "falhou"; }
-function tipoMsgRot(t){ return t === "lembrete" ? "Lembrete" : "Confirmação"; }
+var FALHA_ORDEM = ["sem_celular", "guia_vencida", "sem_guia", "erro_envio", "nao_enviado", "prof"];
+function falhaMotivo(f){
+  if(f.origem === "profissional") return "prof";
+  if(f.status_envio === "SEM CELULAR") return "sem_celular";
+  if(f.status_envio === "NÃO ENVIADO"){
+    var e = String(f.erro_detalhe || "").toUpperCase();
+    if(e === "GUIA VENCIDA") return "guia_vencida";
+    if(e === "SEM GUIA" || e === "AGENDADO SEM GUIA") return "sem_guia";
+    return "nao_enviado";
+  }
+  return "erro_envio";
+}
+var PROF_AVISO_ROT = { abertura:"abertura da conferência", lembrete:"lembrete da conferência", ultimo:"último aviso da conferência",
+                       encerrado:"conferência encerrada", secretaria:"fechamento da conferência" };
+function tipoMsgRot(f){
+  if(f.origem === "profissional") return "Aviso: " + (PROF_AVISO_ROT[f.prof_tipo] || f.prof_tipo || "conferência");
+  return f.tipo === "lembrete" ? "Lembrete" : f.tipo === "aviso_guia" ? "Aviso de guia" : "Confirmação";
+}
+/* celular para o WhatsApp: do paciente, o primeiro celular válido do cadastro; do profissional, o telefone do aviso */
+function falhaCelular(f){
+  if(f.origem === "profissional"){
+    var d = String(f.telefone || "").replace(/\D/g, "");
+    if(d.slice(0,2) !== "55" && (d.length === 10 || d.length === 11)) d = "55" + d;
+    return d.length >= 12 ? d : "";
+  }
+  return primeiroCelular(f.celulares_raw, f.telefones_raw);
+}
+/* sem celular, mas o cadastro já tem um celular válido agora (corrigido depois da tentativa do robô) */
+function falhaCorrigida(f){ return falhaMotivo(f) === "sem_celular" && !!falhaCelular(f); }
+function falhaPrecisaCorrigir(f){ return !!FALHA_TXT[falhaMotivo(f)].corrigir && !falhaCorrigida(f); }
+function linkWhatsapp(cel, txt){ return "https://web.whatsapp.com/send?phone=" + cel + "&text=" + encodeURIComponent(txt); }
 function diaConsulta(iso){
   if(!iso) return "—";
   var p = String(iso).slice(0,10).split("-"), d = new Date(+p[0], +p[1]-1, +p[2]), h = new Date();
@@ -2277,7 +2371,10 @@ function diaConsulta(iso){
 }
 function falhaOrdenada(){
   return (estado.falhas || []).slice().sort(function(a, b){
-    var x = String(a.data_atendimento || "") + String(a.horario || ""), y = String(b.data_atendimento || "") + String(b.horario || "");
+    var pa = a.origem === "profissional" ? 1 : 0, pb = b.origem === "profissional" ? 1 : 0;
+    if(pa !== pb) return pa - pb;
+    var x = String(a.data_atendimento || a.ultima_tentativa || "") + String(a.horario || ""),
+        y = String(b.data_atendimento || b.ultima_tentativa || "") + String(b.horario || "");
     return x < y ? -1 : x > y ? 1 : 0;
   });
 }
@@ -2285,62 +2382,67 @@ function falhaVisiveis(){
   var q = semAcento(estado.falhaBusca || "").trim(), f = estado.falhaFiltro || "todos";
   return falhaOrdenada().filter(function(x){
     if(q && semAcento(x.nome_paciente || "").indexOf(q) < 0) return false;
-    return f === "todos" || falhaSit(x) === f;
+    return f === "todos" || falhaMotivo(x) === f;
   });
 }
+function falhaGrupo(x){ return x.origem === "profissional" ? "Avisos aos profissionais" : "Consultas de " + diaConsulta(x.data_atendimento); }
 function desenharFalhas(){
   var main = document.getElementById("gv-conteudo"); if(!main) return;
-  campoBusca("falhas", "falhaBusca", "Buscar paciente", estado.falhaBusca, function(v){ estado.falhaBusca = v; estado._falhaTopo = true; desenharFalhas(); });
+  campoBusca("falhas", "falhaBusca", "Buscar nome", estado.falhaBusca, function(v){ estado.falhaBusca = v; estado._falhaTopo = true; desenharFalhas(); });
   var antes = main.querySelector(".lista-corpo");
   var rolagem = antes && !estado._falhaTopo ? antes.scrollTop : 0;
   estado._falhaTopo = false;
   main.innerHTML = "";
   var todas = estado.falhas || [];
-  var semCel = todas.filter(function(x){ return falhaSit(x) === "sem_celular"; }).length;
+  var nCorr = todas.filter(falhaPrecisaCorrigir).length;
   if(window.moldura) moldura.resumo("falhas", estado.falhas === null ? "" :
-    (todas.length === 1 ? "1 mensagem que o robô não entregou" : todas.length + " mensagens que o robô não entregou") + " · " +
-    (semCel === 1 ? "1 paciente sem celular" : semCel + " pacientes sem celular") + " · consultas de hoje em diante");
+    (todas.length === 1 ? "1 mensagem de WhatsApp não saiu" : todas.length + " mensagens de WhatsApp não saíram") +
+    (nCorr ? " · " + (nCorr === 1 ? "1 precisa de correção" : nCorr + " precisam de correção") : ""));
   var q = semAcento(estado.falhaBusca || "").trim();
   var base = todas.filter(function(x){ return !q || semAcento(x.nome_paciente || "").indexOf(q) >= 0; });
-  var cont = { todos: base.length, falhou:0, sem_celular:0 };
-  base.forEach(function(x){ cont[falhaSit(x)]++; });
+  var cont = { todos: base.length };
+  base.forEach(function(x){ var k = falhaMotivo(x); cont[k] = (cont[k] || 0) + 1; });
   var filtro = estado.falhaFiltro || "todos";
+  if(filtro !== "todos" && !cont[filtro]) filtro = estado.falhaFiltro = "todos";   /* o motivo do filtro sumiu da lista */
   var vis = falhaVisiveis();
 
   var wrap = novo("div", "duas-col");
-  var sec = novo("section", "lista alta"); sec.setAttribute("aria-label", "Mensagens não entregues");
+  var sec = novo("section", "lista alta"); sec.setAttribute("aria-label", "Mensagens que não saíram");
   var topo = novo("div", "lista-topo");
   var seg = novo("div", "seg"); seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "Mostrar");
-  [["todos","Todas","#AEAEB2"],["falhou","Envio falhou",FALHA_TXT.falhou.cor],["sem_celular","Sem celular",FALHA_TXT.sem_celular.cor]].forEach(function(d){
-    var on = filtro === d[0];
-    var b = botao(on ? "on" : "", '<span class="q" style="background:' + d[2] + '"></span>' + d[1] + ' <span class="n">' + cont[d[0]] + '</span>',
-      function(){ estado.falhaFiltro = d[0]; estado._falhaTopo = true; desenharFalhas(); });
-    b.setAttribute("aria-pressed", on ? "true" : "false");
-    seg.appendChild(b);
-  });
+  [["todos", "Todas", "#AEAEB2"]].concat(FALHA_ORDEM.filter(function(k){ return cont[k]; }).map(function(k){ return [k, FALHA_TXT[k].label, FALHA_TXT[k].cor]; }))
+    .forEach(function(d){
+      var on = filtro === d[0];
+      var b = botao(on ? "on" : "", '<span class="q" style="background:' + d[2] + '"></span>' + escapa(d[1]) + ' <span class="n">' + (cont[d[0]] || 0) + '</span>',
+        function(){ estado.falhaFiltro = d[0]; estado._falhaTopo = true; desenharFalhas(); });
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+      seg.appendChild(b);
+    });
   topo.appendChild(seg);
   topo.appendChild(novo("span", "mostrando", vis.length === 1 ? "1 mensagem" : vis.length + " mensagens"));
   sec.appendChild(topo);
   var corpo = novo("div", "lista-corpo");
   if(estado.falhasErro) corpo.appendChild(novo("div", "lista-vazio erro", "Não consegui ler as falhas de envio. " + escapa(estado.falhasErro)));
   else if(estado.falhas === null) corpo.appendChild(novo("div", "lista-vazio", "Carregando…"));
-  else if(!vis.length) corpo.appendChild(novo("div", "lista-vazio", q ? "<b>Ninguém com esse nome</b><br>Confira a grafia ou limpe a busca." : '<b class="ok">Nenhuma falha</b><br>Todas as mensagens do período chegaram.'));
-  var dia = null, porDia = {};
-  vis.forEach(function(x){ porDia[x.data_atendimento] = (porDia[x.data_atendimento] || 0) + 1; });
+  else if(!vis.length) corpo.appendChild(novo("div", "lista-vazio", q ? "<b>Ninguém com esse nome</b><br>Confira a grafia ou limpe a busca." : '<b class="ok">Nenhuma falha</b><br>Todas as mensagens saíram.'));
+  var grupo = null, porGrupo = {};
+  vis.forEach(function(x){ var g = falhaGrupo(x); porGrupo[g] = (porGrupo[g] || 0) + 1; });
   vis.forEach(function(x){
-    if(dia !== x.data_atendimento){
-      dia = x.data_atendimento;
-      corpo.appendChild(novo("div", "dia-cab", '<b>Consultas de ' + escapa(diaConsulta(x.data_atendimento)) + '</b><span>' + (porDia[dia] === 1 ? "1 mensagem" : porDia[dia] + " mensagens") + '</span>'));
+    var g = falhaGrupo(x);
+    if(grupo !== g){
+      grupo = g;
+      corpo.appendChild(novo("div", "dia-cab", '<b>' + escapa(g) + '</b><span>' + (porGrupo[g] === 1 ? "1 mensagem" : porGrupo[g] + " mensagens") + '</span>'));
     }
-    var S = FALHA_TXT[falhaSit(x)];
-    var b = botao("linha" + (estado._falhaAberta === x.agendamento_id + x.tipo ? " aberta" : ""),
-      '<span class="h">' + escapa(x.horario || "—") + '</span>' +
+    var S = FALHA_TXT[falhaMotivo(x)];
+    var hora = x.origem === "profissional" ? horaDe(x.ultima_tentativa) : (x.horario || "—");
+    var b = botao("linha" + (estado._falhaAberta === x.chave ? " aberta" : ""),
+      '<span class="h">' + escapa(hora) + '</span>' +
       '<span class="q"><span class="nm">' + escapa(x.nome_paciente || ("ID:" + x.paciente_id)) + '</span><span class="mt">' +
-      escapa((x.profissional || "—") + " · " + tipoMsgRot(x.tipo) + (x.situacao ? " · guia: " + String(x.situacao).toLowerCase() : "")) + '</span></span>' +
-      '<span class="dir"><span class="tag" style="color:' + S.cor + '">' + S.label + '</span>' +
-      (x.ultima_tentativa ? '<span class="tr">tentou ' + escapa(fmtQuando(x.ultima_tentativa).replace(" ", " às ")) + '</span>' : '') + '</span>',
-      function(){ abrirFalhaItem(x.agendamento_id + x.tipo); });
-    b.setAttribute("aria-haspopup", "dialog"); b.setAttribute("data-falha", x.agendamento_id + x.tipo);
+      escapa((x.origem === "profissional" ? "" : (x.profissional || "—") + " · ") + tipoMsgRot(x)) + '</span></span>' +
+      '<span class="dir"><span class="tag" style="color:' + S.cor + '">' + escapa(S.label) + '</span>' +
+      (falhaPrecisaCorrigir(x) ? '<span class="falha-corr">Corrigir</span>' : falhaCorrigida(x) ? '<span class="falha-corr ok">Já corrigido</span>' : '') + '</span>',
+      function(){ abrirFalhaItem(x.chave); });
+    b.setAttribute("aria-haspopup", "dialog"); b.setAttribute("data-falha", x.chave);
     corpo.appendChild(b);
   });
   sec.appendChild(corpo);
@@ -2348,21 +2450,23 @@ function desenharFalhas(){
 
   var lado = novo("div", "lado");
   var pn = novo("section", "painel"); pn.setAttribute("aria-labelledby", "falha-sit");
-  pn.appendChild(novo("div", "painel-cab", '<h2 id="falha-sit">Situação</h2><span>' + (todas.length === 1 ? "1 mensagem" : todas.length + " mensagens") + '</span>'));
-  var contT = { falhou:0, sem_celular:0 };
-  todas.forEach(function(x){ contT[falhaSit(x)]++; });
-  ["falhou","sem_celular"].forEach(function(k){
+  pn.appendChild(novo("div", "painel-cab", '<h2 id="falha-sit">Motivos</h2><span>' + (todas.length === 1 ? "1 mensagem" : todas.length + " mensagens") + '</span>'));
+  var contT = {};
+  todas.forEach(function(x){ var k = falhaMotivo(x); contT[k] = (contT[k] || 0) + 1; });
+  FALHA_ORDEM.forEach(function(k){
+    if(!contT[k]) return;
     var S = FALHA_TXT[k];
-    var b = botao("cat", '<span class="q" style="background:' + S.cor + '"></span><span class="t"><b>' + S.label + '</b><small>' + escapa(S.sub) + '</small></span><span class="n">' + contT[k] + '</span>' + ico(IC.dir, 16, 2),
+    var b = botao("cat", '<span class="q" style="background:' + S.cor + '"></span><span class="t"><b>' + escapa(S.label) + '</b><small>' + escapa(S.sub) + '</small></span><span class="n">' + contT[k] + '</span>' + ico(IC.dir, 16, 2),
       function(){ abrirFalhaCat(k); });
     b.setAttribute("aria-haspopup", "dialog");
     pn.appendChild(b);
   });
+  if(!todas.length) pn.appendChild(novo("div", "lista-vazio", estado.falhas === null ? "Carregando…" : "Nenhuma falha agora."));
   lado.appendChild(pn);
   lado.appendChild(novo("section", "painel nota-lado",
-    '<h2>Regra da casa</h2><p>São as mensagens que o robô <b>não conseguiu entregar</b>, de consultas de hoje em diante.</p>' +
-    '<p><b>Ninguém sai da agenda sem ter sido avisado</b>: a recepção manda na mão. Copiar o número, achar a conversa na plataforma, copiar a mensagem pronta e enviar.</p>' +
-    '<p class="cinza">Sem celular: completar o cadastro no Feegow primeiro.</p>'));
+    '<h2>Regra da casa</h2><p>São as mensagens de WhatsApp que <b>não saíram</b>: confirmação, lembrete e aviso de guia dos pacientes (consultas de hoje em diante) e os avisos aos profissionais.</p>' +
+    '<p><b>Ninguém fica sem aviso.</b> Quando o erro tem correção, corrija primeiro. Depois, abra o WhatsApp com a mensagem pronta e envie.</p>' +
+    '<p class="cinza">O item sai sozinho quando o dia da consulta passa ou quando o robô consegue mandar.</p>'));
   wrap.appendChild(lado);
   main.appendChild(wrap);
   ajustaAltura();
@@ -2371,15 +2475,19 @@ function desenharFalhas(){
 function abrirFalhaCat(k){
   if(!window.moldura) return;
   var S = FALHA_TXT[k];
-  var lista = (estado.falhas || []).filter(function(x){ return falhaSit(x) === k; });
-  var P = moldura.pop({ largura:"640px", titulo:"Mensagens não entregues" });
-  P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-alerta" style="color:' + S.cor + '">' + (lista.length === 1 ? "1 mensagem" : lista.length + " mensagens") + '</span><h2>' + S.label + '</h2>'));
-  P.corpo.appendChild(novo("div", "pp-caixa", '<span class="pp-rot">O que fazer</span><span class="pp-txt">' + escapa(S.acao) + '</span>'));
+  var lista = falhaOrdenada().filter(function(x){ return falhaMotivo(x) === k; });
+  var P = moldura.pop({ largura:"640px", titulo:"Mensagens que não saíram" });
+  P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-alerta" style="color:' + S.cor + '">' + (lista.length === 1 ? "1 mensagem" : lista.length + " mensagens") + '</span><h2>' + escapa(S.label) + '</h2>'));
+  var cx = novo("div", "pp-caixa", '<span class="pp-rot">Por quê</span><span class="pp-txt">' + escapa(S.porque) + '</span>');
+  if(S.corrigir) cx.appendChild(novo("div", "falha-corrigir", '<b>CORRIGIR</b><span>' + escapa(S.corrigir) + '</span>'));
+  cx.appendChild(novo("span", "pp-txt", escapa(S.passo)));
+  P.corpo.appendChild(cx);
   var ul = novo("div", "pp-lista");
   lista.forEach(function(x){
-    ul.appendChild(botao("pp-linha", '<span class="w">' + escapa(String(x.data_fmt || "").slice(0,5) + " " + (x.horario || "")) + '</span><span class="q"><b>' + escapa(x.nome_paciente || "—") + '</b><small>' +
-      escapa((x.profissional || "—") + " · " + tipoMsgRot(x.tipo)) + '</small></span>' + ico(IC.dir, 14, 2),
-      function(){ estado.falhaFiltro = k; estado.falhaBusca = ""; var i = document.getElementById("falhaBusca"); if(i) i.value = ""; desenharFalhas(); abrirFalhaItem(x.agendamento_id + x.tipo); }));
+    var quando = x.origem === "profissional" ? fmtQuando(x.ultima_tentativa) : String(x.data_fmt || "").slice(0,5) + " " + (x.horario || "");
+    ul.appendChild(botao("pp-linha", '<span class="w">' + escapa(quando) + '</span><span class="q"><b>' + escapa(x.nome_paciente || "—") + '</b><small>' +
+      escapa((x.origem === "profissional" ? "" : (x.profissional || "—") + " · ") + tipoMsgRot(x)) + '</small></span>' + ico(IC.dir, 14, 2),
+      function(){ estado.falhaFiltro = k; estado.falhaBusca = ""; var i = document.getElementById("falhaBusca"); if(i) i.value = ""; desenharFalhas(); abrirFalhaItem(x.chave); }));
   });
   if(!lista.length) ul.appendChild(novo("div", "lista-vazio", "Nenhuma mensagem aqui agora."));
   P.corpo.appendChild(ul);
@@ -2393,8 +2501,8 @@ function abrirFalhaCat(k){
 function abrirFalhaItem(chave){
   if(!window.moldura) return;
   var atual = chave;
-  var P = moldura.pop({ largura:"640px", titulo:"Mensagem não entregue", aoFechar:function(){ estado._falhaAberta = null; marca(); } });
-  function k(x){ return x.agendamento_id + x.tipo; }
+  var P = moldura.pop({ largura:"660px", titulo:"Mensagem que não saiu", aoFechar:function(){ estado._falhaAberta = null; marca(); } });
+  function k(x){ return x.chave; }
   function marca(){
     document.querySelectorAll("#gv-conteudo .linha.aberta").forEach(function(x){ x.classList.remove("aberta"); });
     if(estado._falhaAberta){ var r = document.querySelector('#gv-conteudo .linha[data-falha="' + CSS.escape(estado._falhaAberta) + '"]'); if(r) r.classList.add("aberta"); }
@@ -2410,33 +2518,61 @@ function abrirFalhaItem(chave){
     var x = V.i >= 0 ? L[V.i] : (estado.falhas || []).find(function(y){ return k(y) === atual; });
     if(!x){ P.fechar(); return; }
     estado._falhaAberta = k(x); marca();
-    var s = falhaSit(x), S = FALHA_TXT[s];
+    var m = falhaMotivo(x), S = FALHA_TXT[m];
+    var cel = falhaCelular(x);
+    var txt = textoFalha(x);
     P.corpo.innerHTML = "";
-    P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-quando">Consulta de ' + escapa(diaConsulta(x.data_atendimento)) + " às " + escapa(x.horario || "—") + '</span>' +
-      '<h2>' + escapa(x.nome_paciente || ("ID:" + x.paciente_id)) + '</h2><span class="pp-l1">' + escapa((x.profissional || "—") + (x.especialidade ? " · " + x.especialidade : "")) + '</span>'));
-    P.corpo.appendChild(novo("div", "pp-caixa",
-      '<span class="pp-tag" style="color:' + S.cor + '">' + S.label + '</span>' +
-      '<span class="pp-txt">Mensagem de ' + tipoMsgRot(x.tipo).toLowerCase() + ' · falha: ' + escapa(String(x.status_envio || "").toLowerCase()) +
-      (x.erro_detalhe ? ' (' + escapa(String(x.erro_detalhe).slice(0, 80).toLowerCase()) + ')' : '') + '</span>' +
-      (x.ultima_tentativa ? '<span class="pp-l2">Última tentativa ' + escapa(fmtQuando(x.ultima_tentativa).replace(" ", " às ")) + '</span>' : '') +
-      (s === "sem_celular" ? '<span class="pp-txt" style="color:#D70015"><b>Cadastro sem celular:</b> completar no Feegow antes de qualquer coisa.</span>' : '')));
-    var cel = primeiroCelular(x.celulares_raw, x.telefones_raw);
+    var quando = x.origem === "profissional"
+      ? "Aviso ao profissional · " + (PROF_AVISO_ROT[x.prof_tipo] || x.prof_tipo || "")
+      : "Consulta de " + diaConsulta(x.data_atendimento) + " às " + (x.horario || "—");
+    P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-quando">' + escapa(quando) + '</span>' +
+      '<h2>' + escapa(x.nome_paciente || ("ID:" + x.paciente_id)) + '</h2>' +
+      (x.origem === "profissional" ? "" : '<span class="pp-l1">' + escapa((x.profissional || "—") + (x.especialidade ? " · " + x.especialidade : "")) + '</span>')));
+    /* motivo + o que corrigir */
+    var cx = novo("div", "pp-caixa", '<span class="pp-tag" style="color:' + S.cor + '">' + escapa(S.label) + '</span><span class="pp-txt">' + escapa(S.porque) + '</span>');
+    if(S.corrigir){
+      var feito = falhaCorrigida(x);
+      cx.appendChild(novo("div", "falha-corrigir" + (feito ? " ok" : ""),
+        feito ? '<b>CORRIGIDO</b><span>O cadastro já tem celular agora. É só mandar a mensagem.</span>'
+              : '<b>CORRIGIR</b><span>' + escapa(S.corrigir) + '</span>'));
+    }
+    cx.appendChild(novo("span", "pp-l2", escapa(tipoMsgRot(x)) +
+      (x.erro_detalhe && m === "erro_envio" || x.origem === "profissional" ? " · " + escapa(String(x.erro_detalhe || "").slice(0, 90)) : "") +
+      (x.ultima_tentativa ? " · tentativa em " + escapa(fmtQuando(x.ultima_tentativa).replace(" ", " às ")) : "")));
+    P.corpo.appendChild(cx);
+    var passo = falhaCorrigida(x) ? "Já corrigido no cadastro: abra o WhatsApp com a mensagem pronta e envie." : S.passo;
+    P.corpo.appendChild(novo("div", "pp-bloco", '<span class="pp-rot">O que fazer</span><span class="pp-txt">' + escapa(passo) + '</span>'));
+    /* número */
+    var fone = novo("div", "pp-fone");
     if(cel){
       var dig = foneDigitos(cel);
-      var fone = novo("div", "pp-fone", '<span><small>Celular</small><b>' + escapa(foneBonito(cel)) + '</b></span>');
+      fone.innerHTML = '<span><small>Celular</small><b>' + escapa(foneBonito(cel)) + '</b></span>';
       var bc = botao("btn btn-s btn-sm", "Copiar", function(){ copia(dig, bc, "Copiado", "Copiar"); });
-      bc.title = "Copiar o número (só dígitos, sem o 55): é assim que a busca da plataforma acha";
+      bc.title = "Copiar o número (só dígitos, sem o 55)";
       fone.appendChild(bc);
-      P.corpo.appendChild(fone);
-    }
-    var txt = textoFalha(x);
+    } else fone.innerHTML = '<span><small>Celular</small><b class="falha-semcel">Sem celular válido no cadastro</b></span>';
+    P.corpo.appendChild(fone);
+    /* mensagem pronta + link do WhatsApp Web */
     var bm = novo("div", "pp-bloco");
-    var cab = novo("div", "pp-msg-cab", '<span class="pp-rot">Mensagem pronta · ' + tipoMsgRot(x.tipo).toLowerCase() + '</span>');
-    var bmsg = botao("btn btn-p btn-sm", "Copiar a mensagem", function(){ copia(txt, bmsg, "Copiada: é só colar na conversa", "Copiar a mensagem"); });
-    bmsg.title = "O texto do padrão novo, com os dados deste paciente preenchidos";
-    cab.appendChild(bmsg);
-    bm.appendChild(cab);
-    bm.appendChild(novo("div", "pp-msg", escapa(txt)));
+    var rotMsg = (m === "guia_vencida" || m === "sem_guia") ? "a consulta não vai acontecer" : tipoMsgRot(x).toLowerCase();
+    var cab2 = novo("div", "pp-msg-cab", '<span class="pp-rot">Mensagem pronta · ' + escapa(rotMsg) + '</span>');
+    var acoes = novo("span", "falha-acoes");
+    var bmsg = botao("btn btn-s btn-sm", "Copiar", function(){ copia(txt, bmsg, "Copiada", "Copiar"); });
+    bmsg.title = "Copiar só o texto";
+    acoes.appendChild(bmsg);
+    if(cel && txt){
+      var a = novo("a", "btn btn-p btn-sm falha-wpp", ico("M20.5 11.6a8.5 8.5 0 0 1-12.6 7.4L3.5 20.5l1.5-4.3A8.5 8.5 0 1 1 20.5 11.6z", 15, 2) + "Abrir no WhatsApp");
+      a.href = linkWhatsapp(cel, txt); a.target = "whatsapp_cmjf";
+      a.title = "Abre o WhatsApp Web na conversa, com a mensagem já escrita: é só apertar enviar";
+      acoes.appendChild(a);
+    } else {
+      var off = botao("btn btn-p btn-sm", "Abrir no WhatsApp"); off.disabled = true;
+      off.title = cel ? "Sem mensagem pronta" : "Sem celular válido: corrija o cadastro primeiro";
+      acoes.appendChild(off);
+    }
+    cab2.appendChild(acoes);
+    bm.appendChild(cab2);
+    bm.appendChild(novo("div", "pp-msg", escapa(txt || "—")));
     P.corpo.appendChild(bm);
     P.rodape.hidden = false; P.rodape.innerHTML = "";
     var bA = botao("btn btn-s", ico(IC.esq, 16, 2.2) + "Anterior", function(){ if(V.ant){ atual = k(V.ant); pinta(); } }); bA.disabled = !V.ant;
