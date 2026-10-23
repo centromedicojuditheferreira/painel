@@ -155,7 +155,7 @@ var moldura = (function () {
     atual = d;
     document.getElementById('pg-secao').textContent = x.secao;
     document.getElementById('pg-titulo').textContent = x.titulo;
-    document.title = x.titulo + ' · Lev Soul';
+    document.title = x.titulo + ' · Cortex';
     document.getElementById('pg-resumo').textContent = resumos[d] || '';
     var ehGV = x.s === 'guias';
     ['gv-renov', 'gv-lupa'].forEach(function (id) { var el = document.getElementById(id); if (el) el.hidden = !x.busca; });
