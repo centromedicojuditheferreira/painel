@@ -507,8 +507,12 @@ function detalheTxt(l){
   var g = l.numero_guia || "—", fim = l.guia_fim_fmt || "—";
   switch(l.situacao){
     case "coberto": return "Guia " + g + " · " + ses(l.saldo_guia) + " · vence " + fim + ".";
-    case "guia_vencida": return "A última guia, " + g + ", venceu em " + fim +
-      (typeof l.dias_para_vencer === "number" ? " (há " + Math.abs(l.dias_para_vencer) + (Math.abs(l.dias_para_vencer) === 1 ? " dia)." : " dias).") : ".");
+    case "guia_vencida":
+      if(typeof l.dias_para_vencer === "number" && l.dias_para_vencer >= 0)   /* PRE v3.0: ainda vale hoje, mas acaba antes desta consulta */
+        return "A guia " + g + " vale até " + fim + (l.dias_para_vencer === 0 ? " (vence hoje)" : " (daqui a " + l.dias_para_vencer + (l.dias_para_vencer === 1 ? " dia)" : " dias)")) +
+          " e acaba antes desta consulta.";
+      return "A última guia, " + g + ", venceu em " + fim +
+        (typeof l.dias_para_vencer === "number" ? " (há " + Math.abs(l.dias_para_vencer) + (Math.abs(l.dias_para_vencer) === 1 ? " dia)." : " dias).") : ".");
     case "saldo_esgotado": return "A guia " + g + " vale até " + fim + ", mas o saldo zerou.";
     case "psico_com_guia_aba": return "Guia de ABA viva" + (l.outra_guia_numero ? " " + l.outra_guia_numero : "") +
       (l.outra_guia_qt != null ? " · " + ses(l.outra_guia_qt) : "") + (l.outra_guia_fim ? " · vence " + fmtData(l.outra_guia_fim) : "") +
@@ -1067,6 +1071,9 @@ var CAD_TXT = {
   /* v2.3 */
   convenio_agendamento: { curto:"Convênio do agendamento", titulo:"Agendamento no convênio errado", sub:"Trocar o convênio do agendamento no Feegow",
     acao:"O paciente tem guia com saldo de um convênio, mas o agendamento está marcado no outro. O lançamento sai no convênio do agendamento: guia Intercâmbio em agendamento Local (ou o contrário) a Unimed glosa. Abrir cada agendamento listado no Feegow e trocar o convênio para o da guia. Carteirinha que começa com 0178 é Unimed Local; qualquer outra, Intercâmbio." },
+  /* v2.5 · saiu da Agenda (PRE v3.0) */
+  procedimento_agendamento: { curto:"Procedimento do agendamento", titulo:"Agendamento com procedimento errado", sub:"Trocar o procedimento do agendamento no Feegow",
+    acao:"O agendamento é da Unimed, mas o procedimento marcado não é nenhum dos 4 códigos que a Unimed paga: do jeito que está não fatura, e a Agenda não consegue conferir a guia dessa sessão. Abrir cada agendamento listado no Feegow e trocar o procedimento: psicologia 50000470 (sessão) ou 50001221 (1ª consulta), ABA 2250005103, nutrição 50000560." },
   guia_sem_ficha:       { curto:"Guia sem ficha", titulo:"Guia puxada no SGU sem ficha no Feegow", sub:"Criar ou completar a ficha com a carteirinha",
     acao:"A Unimed autorizou a guia, mas a carteirinha dela não está em nenhuma ficha do Feegow — o sistema não sabe de quem é a guia e não fatura as sessões. Procurar o paciente por CPF ou telefone (pode estar com outro nome); se não existir, criar a ficha com a carteirinha e o convênio indicados. Carteirinha que começa com 0178 é Unimed Local; qualquer outra, Intercâmbio." }
 };
@@ -1075,7 +1082,7 @@ var CAD_LIXO = { titulo:"Dado inválido: nunca juntar", sub:"CPF de zeros ou car
 var TRAT_CAD_ROT = { pendente:"Pendente", corrigido:"Corrigido", estava_certo:"Estava certo", sem_solucao:"Sem solução" };
 var IC_ALERTA = "M12 3.5 21.5 20h-19zM12 10v4.5M12 17.2h.01";
 function cadTxt(t){ return CAD_TXT[t] || { curto:t, titulo:t, sub:"", acao:"" }; }
-var CAD_TIPOS_LISTA = ["convenio_invertido","convenio_agendamento","paciente_duplicado","carteirinha_repetida","guia_sem_ficha"];   /* v2.1: ordem dos filtros e do painel "Problemas" */
+var CAD_TIPOS_LISTA = ["convenio_invertido","convenio_agendamento","procedimento_agendamento","paciente_duplicado","carteirinha_repetida","guia_sem_ficha"];   /* v2.1: ordem dos filtros e do painel "Problemas" */
 function cadFichaTxt(c){ return c.sem_ficha ? "Sem ficha no Feegow" : "Ficha #" + escapa(c.paciente_id); }
 function cadTipos(c){ var v = {}, out = []; c.problemas.forEach(function(p){ if(!v[p.tipo]){ v[p.tipo] = 1; out.push(p.tipo); } }); return out; }
 function futTxt(n){ return !n ? "sem consulta marcada" : (n === 1 ? "1 consulta marcada" : n + " consultas marcadas"); }
@@ -1115,6 +1122,10 @@ function textoProblema2(p){
     var ds = escapa(p.detalhe || "");
     return ds.replace("Procurar o paciente por CPF ou telefone; se não existir, criar a ficha com essa carteirinha e esse convênio.",
                       "<b>Procurar o paciente por CPF ou telefone; se não existir, criar a ficha com essa carteirinha e esse convênio.</b>");
+  }
+  if(p.tipo === "procedimento_agendamento"){   /* v2.5 */
+    var dp = escapa(p.detalhe || "");
+    return dp.replace(/(Trocar o procedimento no Feegow)/, "<b>$1</b>");
   }
   return escapa(p.detalhe || "");
 }
@@ -1222,6 +1233,7 @@ function desenharCad(){
     '<h2>Como funciona</h2><p>Uma linha por <b>paciente</b>: abra a ficha no Feegow e resolva o que está listado.</p>' +
     '<p><b>Guia sem ficha</b> é guia viva no SGU cuja carteirinha não está em ficha nenhuma: procure o paciente e crie ou complete a ficha. Sem isso a guia não fatura.</p>' +
     '<p><b>Agendamento no convênio errado</b>: a guia do paciente é de um convênio e o agendamento está no outro. Abra o agendamento no Feegow e troque o convênio para o da guia.</p>' +
+    '<p><b>Agendamento com procedimento errado</b>: o agendamento é da Unimed, mas o procedimento não é nenhum dos 4 códigos que ela paga. Abra o agendamento no Feegow e troque o procedimento.</p>' +
     '<p>O robô recompara com o espelho da Unimed a cada 15 minutos. <b>Corrigiu? A linha some sozinha na próxima rodada.</b></p>' +
     '<p class="cinza">Marque o que você fez, para ninguém conferir a mesma coisa duas vezes.</p>'));
   wrap.appendChild(lado);
