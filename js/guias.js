@@ -405,12 +405,14 @@ function desenharFaixa(){
   if(!window.moldura) return;
   var cadN  = (estado.cad  || []).filter(cadAberto).length;
   var exclN = (estado.excl || []).filter(exclAberta).length;
+  var corteN = (estado.corte || []).filter(corteAtivo).length;   /* v3.2: o Corte também entra aqui (mesmo número do menu) */
   var chips = [];
   categorias().forEach(function(c){
     chips.push({ chave:c.chave, rot:c.rot, n:c.n, dica:c.sub,
       acao:function(){ irParaTela("agenda"); abrirCatAgenda(c.chave); } });
   });
-  if(chips.length && (cadN || exclN)) chips.push({ sep:true });
+  if(chips.length && (corteN || cadN || exclN)) chips.push({ sep:true });
+  if(corteN) chips.push({ chave:"corte", rot:"Corte", n:corteN, dica:"Abrir Corte: consultas para apagar no Feegow", acao:function(){ irParaTela("corte"); } });
   if(cadN) chips.push({ chave:"cadastros", rot:"Cadastros", n:cadN, dica:"Abrir Cadastros", acao:function(){ irParaTela("cad"); } });
   if(exclN) chips.push({ chave:"exclusoes", rot:"Exclusões", n:exclN, dica:"Abrir Exclusões", acao:function(){ irParaTela("excl"); } });
   moldura.alertas(chips);
@@ -697,9 +699,11 @@ function agPainel(){
   cats.forEach(function(c){ var b = cat(c.rot, c.sub, c.n, c.cor, function(){ abrirCatAgenda(c.chave); }); b.setAttribute("aria-haspopup", "dialog"); sec.appendChild(b); });
   var cadN  = (estado.cad  || []).filter(cadAberto).length;
   var exclN = (estado.excl || []).filter(exclAberta).length;
+  var corteN = (estado.corte || []).filter(corteAtivo).length;   /* v3.2 */
+  if(corteN) sec.appendChild(cat("Corte", "Consultas para apagar no Feegow, na tela de Corte", corteN, TOM.r, function(){ irParaTela("corte"); }));
   if(cadN)  sec.appendChild(cat("Cadastros", "Fichas com problema de cadastro, na tela de Cadastros", cadN, TOM.r, function(){ irParaTela("cad"); }));
   if(exclN) sec.appendChild(cat("Exclusões", "Séries apagadas inteiras no Feegow, na tela de Exclusões", exclN, TOM.r, function(){ irParaTela("excl"); }));
-  if(!cats.length && !cadN && !exclN) sec.appendChild(novo("div", "lista-vazio", estado._carregouEm ? "Nada para resolver agora." : "Buscando…"));
+  if(!cats.length && !corteN && !cadN && !exclN) sec.appendChild(novo("div", "lista-vazio", estado._carregouEm ? "Nada para resolver agora." : "Buscando…"));
   return sec;
 }
 /* janela de uma categoria: lista as consultas e leva para a lista filtrada */
