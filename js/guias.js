@@ -123,34 +123,46 @@ function carregarFila(){
       estado._filaJson = json;
       estado.fila = dados; estado.filaErro = "";
       badgesTopo();
-      if(estado.tela === "fila" && mudou) desenharFila();
+      if(renovAberta() && mudou) desenharFila();
     })
     .catch(function(e){
       estado.filaErro = e.message;
       if(estado.fila === null) estado.fila = [];
       badgesTopo();
-      if(estado.tela === "fila") desenharFila();
+      if(renovAberta()) desenharFila();
     });
 }
+var FILA_RECUSA = {   /* v3.4: o banco recusa na entrada (RENOV v2.0) */
+  fora: "Essa guia não está no nosso banco. Aqui é só guia que já existe e teve a data renovada. Guia nova o coletor traz sozinho.",
+  ja:   function(h){ return "Essa guia já está com o robô" + (h ? ": ele confere de novo às " + h : "") + ". Não precisa mandar de novo."; }
+};
 function enviarFila(){
   var campo = document.getElementById("filaNum");
   if(!campo) return;
   var num = (campo.value || "").replace(/\D/g, "");
   if(num.length < 6){ avisoFila("Número esquisito — a guia tem só números (ex.: 16337779).", true); return; }
-  var vivo = (estado.fila || []).some(function(l){
-    return l.numero_guia === num && (l.situacao === "aguardando" || l.situacao === "conferindo");
+  var viva = (estado.fila || []).find(function(l){
+    var k = filaChave(l);
+    return l.numero_guia === num && (k === "fila" || k === "espera");
   });
-  if(vivo){ avisoFila("Essa guia já está na fila — o robô já vai olhar.", true); return; }
+  if(viva){ avisoFila(FILA_RECUSA.ja(viva.proxima_em ? horaDe(viva.proxima_em) : ""), true); return; }
   fetch(GCFG.url + "/rest/v1/pre_guias_reconferir", {
     method: "POST",
     headers: cab({ "Content-Type": "application/json", "Prefer": "return=minimal" }),
     body: JSON.stringify([{ numero_guia: num, autora: autora() || null }])
   }).then(function(r){
-    if(r.status === 409){ avisoFila("Essa guia já está na fila — o robô já vai olhar.", true); return; }
-    if(!r.ok) throw new Error("HTTP " + r.status);
-    campo.value = ""; estado.filaDraft = "";
-    avisoFila("Mandei pro robô. O resultado aparece na lista em instantes.", false);
-    carregarFila();
+    if(r.ok){
+      campo.value = ""; estado.filaDraft = "";
+      avisoFila("Mandei pro robô. O resultado aparece na lista em instantes.", false);
+      carregarFila();
+      return;
+    }
+    return r.json().catch(function(){ return {}; }).then(function(e){
+      var m = (e && e.message) || "";
+      if(m === "RENOV_FORA_DO_BANCO"){ avisoFila(FILA_RECUSA.fora, true); return; }
+      if(m === "RENOV_JA_NA_FILA" || r.status === 409){ avisoFila(FILA_RECUSA.ja(e && e.details), true); return; }
+      throw new Error("HTTP " + r.status);
+    });
   }).catch(function(e){ avisoFila("Não consegui mandar (" + e.message + ")", true); });
 }
 function dispensarFila(id){
@@ -163,14 +175,15 @@ function dispensarFila(id){
     estado.fila = (estado.fila || []).filter(function(l){ return l.id !== id; });
     estado._filaJson = JSON.stringify(estado.fila);
     badgesTopo();
-    if(estado.tela === "fila") desenharFila();
+    if(renovAberta()) desenharFila();
   }).catch(function(){ avisoFila("Não consegui dispensar — tente de novo.", true); });
 }
 function avisoFila(msg, ehErro){
   var el = document.getElementById("filaAviso");
   if(!el) return;
   el.textContent = msg;
-  el.style.color = ehErro ? "var(--critico)" : "var(--ok)";
+  el.style.color = ehErro ? "var(--vermelho)" : "var(--verde)";   /* v3.4: o popup mora fora do #s-guias (lá não há --critico/--ok) */
+  el.style.fontWeight = ehErro ? "600" : "";
   clearTimeout(GV._avisoT);
   if(!ehErro){ GV._avisoT = setTimeout(function(){ el.textContent = ""; }, 6000); }
 }
@@ -388,7 +401,7 @@ function foneBonito(n){
 /* ═══ badges (abas + sidebar) + FAIXA piscante ═══ */
 function badgesTopo(){
   var pend = estado.linhas.filter(ehPendencia).length;
-  var prontos = (estado.fila || []).filter(function(l){ return FILA_FINAIS.indexOf(l.situacao) >= 0; }).length;
+  var prontos = (estado.fila || []).filter(filaFinal).length;   /* v3.4: quem espera nova conferência ainda não é resultado */
   var cadN  = (estado.cad  || []).filter(cadAberto).length;
   var exclN = (estado.excl || []).filter(exclAberta).length;
   function b(id, n){ var el = document.getElementById(id); if(!el) return; el.hidden = !n; el.textContent = n; }
@@ -581,35 +594,30 @@ function diasUnicos(){
    Cobertas, já tratadas (Resolvido/Desmarcado) e "Depois da última" não entram. */
 function paraResolver(l){ return ehPendencia(l) || ehAviso(l); }
 function passaFiltro(l){
-  if(estado.filtroDia && l.data !== estado.filtroDia) return false;
-  if(estado.busca && semAcento(l.paciente).indexOf(semAcento(estado.busca)) < 0) return false;
+  if(estado.filtroDia && l.data !== estado.filtroDia) return false;   /* v3.4: a busca saiu da lista (virou a janela da lupa) */
   if(estado.filtroTipo === "__aba__") return ehProblemaAba(l);
   if(estado.filtroTipo) return ehPendencia(l) && l.situacao === estado.filtroTipo;   /* veio de um quadrado do Resolver agora */
   return paraResolver(l);
 }
 function agLista(){
   var cont = contagens();
-  var sec = novo("section", "lista alta"); sec.setAttribute("aria-label", "Consultas");
-  var topo = novo("div", "lista-topo"), esq = novo("div", "lista-topo-esq");
-  esq.appendChild(novo("span", "lista-tit", "Para resolver"));   /* v3.3: sem os botões Pendências/Avisos/Já tratadas/Cobertas/Tudo */
-  if(estado.filtroTipo){
-    var so = botao("so-tipo", "Só " + escapa(rotTipo(estado.filtroTipo)) + " " + ico(IC.x, 12, 2.6), function(){ estado.filtroTipo = null; agMudou(); });
-    so.title = "Tirar este filtro";
-    esq.appendChild(so);
-  }
-  topo.appendChild(esq);
+  var sec = novo("section", "lista alta"); sec.setAttribute("aria-label", "Consultas para resolver");
+  /* v3.4: sem a barra "Para resolver · Mostrando N de N" — o filtro "Só X" fica marcado no próprio quadrado lá em cima */
   var vis = estado.linhas.filter(passaFiltro);
   var lim = estado.agLimite || 150;
-  topo.appendChild(novo("span", "mostrando", vis.length ? "Mostrando " + Math.min(lim, vis.length) + " de " + vis.length : ""));
-  sec.appendChild(topo);
   sec.appendChild(agDias(cont));
   var corpo = novo("div", "lista-corpo");
   if(!estado.linhas.length){
     corpo.appendChild(novo("div", "lista-vazio", estado._carregouEm ? "Nenhuma consulta na agenda." : "Buscando a agenda no banco…"));
   } else if(!vis.length){
-    corpo.appendChild(novo("div", "lista-vazio", !estado.filtroTipo && !estado.busca && !estado.filtroDia
+    var vz = novo("div", "lista-vazio", !estado.filtroTipo && !estado.filtroDia
       ? "Nada para resolver: está tudo coberto ou já tratado."
-      : "Nada para resolver com esses filtros."));
+      : "Nada para resolver com esses filtros.");
+    if(estado.filtroTipo || estado.filtroDia){   /* v3.4: se o quadrado do filtro sumiu (zerou), a saída é por aqui */
+      vz.appendChild(novo("br"));
+      vz.appendChild(botao("btn btn-s vz-tudo", "Mostrar tudo", function(){ estado.filtroTipo = null; estado.filtroDia = null; agMudou(); }));
+    }
+    corpo.appendChild(vz);
   }
   var infoDia = {}; diasUnicos().forEach(function(d){ infoDia[d.data] = d; });
   var porDia = {}; vis.forEach(function(l){ porDia[l.data] = (porDia[l.data]||0)+1; });
@@ -732,7 +740,8 @@ function abrirPacAgenda(agid, ctx){
   if(!window.moldura) return;
   var atualId = agid, msg = null, msgId = null, notaTimer = null;
   var P = moldura.pop({ largura:"620px", aoFechar:function(){ estado._agAberto = null; marcaAberta(); } });
-  function lista(){ return ctx === "lista" ? estado.linhas.filter(passaFiltro) : linhasDaCategoria(ctx); }
+  var busca = (ctx && typeof ctx === "object") ? String(ctx.busca || "") : null;   /* v3.4: veio da janela da lupa */
+  function lista(){ return busca !== null ? linhasDaBusca(busca) : (ctx === "lista" ? estado.linhas.filter(passaFiltro) : linhasDaCategoria(ctx)); }
   function marcaAberta(){
     document.querySelectorAll("#gv-conteudo .linha.aberta").forEach(function(x){ x.classList.remove("aberta"); });
     if(estado._agAberto){ var r = document.querySelector('#gv-conteudo .linha[data-ag="' + estado._agAberto + '"]'); if(r) r.classList.add("aberta"); }
@@ -743,7 +752,8 @@ function abrirPacAgenda(agid, ctx){
     estado._agAberto = atualId; marcaAberta();
     var m = sitTxt(l.situacao), t = l.tratamento || "pendente";
     P.topo.innerHTML = "";
-    if(ctx !== "lista") P.topo.appendChild(botao("pop-volta", ico(IC.esq, 16, 2.2) + escapa(rotTipo(ctx)), function(){ abrirCatAgenda(ctx); }));
+    if(busca !== null) P.topo.appendChild(botao("pop-volta", ico(IC.esq, 16, 2.2) + "Busca", function(){ abrirBusca(busca); }));
+    else if(ctx !== "lista") P.topo.appendChild(botao("pop-volta", ico(IC.esq, 16, 2.2) + escapa(rotTipo(ctx)), function(){ abrirCatAgenda(ctx); }));
     P.corpo.innerHTML = "";
     P.corpo.appendChild(novo("div", "pp-cab",
       '<span class="pp-quando">' + (l.dias_ate === 0 ? "Hoje, " : "") + escapa(l.dia_semana) + ", " + escapa(l.data_fmt) + " às " + escapa(l.horario) + '</span>' +
@@ -842,19 +852,72 @@ function abrirPacAgenda(agid, ctx){
   pinta();
 }
 
-/* ═══ 🔁 Renovações — design novo: lista das guias mandadas ao robô + "Resultados do robô" ═══
-   Gravações iguais às de antes: enviarFila (POST) e dispensarFila (PATCH) em pre_guias_reconferir. */
+/* ═══ 🔍 Buscar paciente — janela no meio da tela (v3.4) ═══
+   A busca saiu do canto do cabeçalho: virou a lupa (ou a tecla /). Procura em TODAS as consultas da
+   agenda carregada, cobertas inclusive, e não só nas que têm algo para resolver. */
+function linhasDaBusca(t){
+  var q = semAcento(String(t || "").trim());
+  if(q.length < 2) return [];
+  return estado.linhas.filter(function(l){ return semAcento(l.paciente).indexOf(q) >= 0; });
+}
+function abrirBusca(termo){
+  if(!window.moldura) return;
+  var P = moldura.pop({ largura:"600px", classe:"pop-busca", titulo:"Buscar paciente" });
+  var lab = novo("label", "busca busca-grande", ico("M4.5 11a6.5 6.5 0 1 0 13 0 6.5 6.5 0 1 0-13 0M16 16l4 4", 18, 2));
+  var campo = novo("input"); campo.type = "search"; campo.placeholder = "Nome do paciente"; campo.autocomplete = "off";
+  campo.setAttribute("aria-label", "Nome do paciente"); campo.value = termo || "";
+  lab.appendChild(campo); P.corpo.appendChild(lab);
+  var info = novo("span", "busca-info"); info.setAttribute("aria-live", "polite"); P.corpo.appendChild(info);
+  var res = novo("div", "pp-lista busca-res"); P.corpo.appendChild(res);
+  function pinta(){
+    var q = campo.value.trim(), L = linhasDaBusca(q);
+    res.innerHTML = "";
+    if(q.length < 2){ info.textContent = "Procura em todas as consultas da agenda, cobertas inclusive."; res.hidden = true; return; }
+    res.hidden = false;
+    info.textContent = L.length ? (L.length === 1 ? "1 consulta" : L.length + " consultas") : "";
+    if(!L.length){ res.appendChild(novo("div", "lista-vazio", "Nenhuma consulta de “" + escapa(q) + "” na agenda.")); return; }
+    L.slice(0, 80).forEach(function(l){
+      var m = sitTxt(l.situacao), t = l.tratamento || "pendente";
+      var cor = tratada(l) ? TOM.c : (TOM[m.tom] || TOM.c);
+      res.appendChild(botao("pp-linha", '<span class="w">' + escapa(quandoCurto(l)) + '</span><span class="q"><b>' + escapa(l.paciente) + '</b><small>' + escapa(metaLinha(l)) + '</small></span>' +
+        '<span class="st"><span style="color:' + cor + '">' + escapa(m.rot) + '</span>' + (t !== "pendente" ? '<small>' + escapa(TRAT_ROT[t] || t) + '</small>' : '') + '</span>' + ico(IC.dir, 14, 2),
+        function(){ abrirPacAgenda(l.agendamento_id, { busca: campo.value }); }));
+    });
+    if(L.length > 80) res.appendChild(novo("div", "lista-vazio", "E mais " + (L.length - 80) + ". Digite mais letras do nome."));
+  }
+  campo.addEventListener("input", pinta);
+  campo.addEventListener("keydown", function(ev){ if(ev.key === "Enter"){ var f = res.querySelector(".pp-linha"); if(f) f.click(); } });
+  pinta();
+  setTimeout(function(){ if(P.aberto){ campo.focus(); campo.select(); } }, 30);
+}
+
+/* ═══ 🔁 Renovação de validade Unimed — popup grande (v3.4) ═══
+   Saiu do menu: abre pelo botão do topo da Agenda. Gravações iguais às de antes: enviarFila (POST) e
+   dispensarFila (PATCH) em pre_guias_reconferir. RENOV v2.0 (no banco): número fora do nosso banco é
+   recusado na entrada; SGU ainda com a data velha (ou erro) → a guia volta sozinha para o robô depois de
+   20 min, 1 h e 4 h; esgotou sem renovar → o Gabriel é avisado pelo Telegram. */
 var FILA_TXT = {
   aguardando:    { rot:"Na fila do robô", curto:"Na fila do robô", cor:"#636366", sub:"O robô ainda vai olhar", acao:"O robô abre a guia no SGU e confere as duas datas (senha e carteirinha). O resultado aparece na lista em instantes." },
   conferindo:    { rot:"Robô no SGU agora…", curto:"Na fila do robô", cor:"#636366", sub:"O robô ainda vai olhar", acao:"O robô abre a guia no SGU e confere as duas datas (senha e carteirinha). O resultado aparece na lista em instantes." },
+  espera:        { rot:"Vai conferir de novo", curto:"Vai conferir de novo", cor:"#2C2D6E", sub:"O robô confere de novo sozinho", acao:"O SGU ainda mostrava a data antiga. O robô confere de novo sozinho depois de 20 minutos, de 1 hora e de 4 horas. Não precisa mandar o número de novo." },
   renovada:      { rot:"Validade atualizada", curto:"Atualizadas", cor:"#248A3D", sub:"Já atualizada no sistema: é só ler", acao:"O robô atualizou a validade no sistema. A Agenda do painel atualiza em poucos minutos. É só ler e tirar da tela." },
+  nao_renovou:   { rot:"Não renovou no SGU", curto:"Não renovou", cor:"#D70015", sub:"O Gabriel é avisado pelo Telegram", acao:"O robô conferiu várias vezes, ao longo de umas 5 horas, e o SGU continua com a data antiga. O Gabriel é avisado pelo Telegram. Leu, tire da tela." },
   sem_mudanca:   { rot:"SGU ainda com a data velha", curto:"Data velha no SGU", cor:"#C93400", sub:"Esperar uns minutos e mandar de novo", acao:"O SGU ainda mostra a data antiga. Se a Unimed confirmou a renovação, aguarde alguns minutos e mande o número de novo." },
   fora_do_banco: { rot:"Guia fora do nosso banco", curto:"Fora do banco", cor:"#636366", sub:"Conferir se o número foi digitado certo", acao:"Essa guia não está no nosso banco. Se for guia nova da Unimed, o coletor captura sozinho. Se for renovação de guia antiga, confira se o número foi digitado certo." },
-  erro:          { rot:"Erro ao conferir", curto:"Erro", cor:"#D70015", sub:"Mandar de novo", acao:"O robô não conseguiu conferir. Mande o número de novo." }
+  erro:          { rot:"Erro ao conferir", curto:"Erro", cor:"#D70015", sub:"O robô não conseguiu conferir", acao:"O robô não conseguiu conferir a guia no SGU. Quando ele já tentou todas as vezes, o Gabriel é avisado pelo Telegram." }
 };
+var FILA_SEMPRE = ["todos", "renovada", "espera", "nao_renovou", "fila"];   /* filtros que aparecem mesmo zerados */
 function filaTxt(s){ return FILA_TXT[s] || { rot:s, curto:s, cor:"#636366", sub:"", acao:"" }; }
-function filaChave(l){ return (l.situacao === "aguardando" || l.situacao === "conferindo") ? "fila" : l.situacao; }
-function filaFinal(l){ return FILA_FINAIS.indexOf(l.situacao) >= 0; }
+/* chave de tela: fila · espera (vai conferir de novo) · renovada · nao_renovou · e as antigas sem_mudanca/fora_do_banco/erro */
+function filaChave(l){
+  if(l.situacao === "aguardando" || l.situacao === "conferindo") return "fila";
+  if((l.situacao === "sem_mudanca" || l.situacao === "erro") && l.proxima_em) return "espera";
+  if(l.situacao === "sem_mudanca" && l.esgotada_em) return "nao_renovou";
+  return l.situacao;
+}
+function filaFinal(l){ var k = filaChave(l); return k !== "fila" && k !== "espera"; }
+function filaTxtDe(l){ var k = filaChave(l); return k === "fila" ? filaTxt(l.situacao) : filaTxt(k); }
+function filaTag(l){ return filaChave(l) === "espera" ? "Confere de novo " + quandoProx(l.proxima_em) : filaTxtDe(l).rot; }
 function dataBr(iso){ if(!iso) return "—"; var p = String(iso).slice(0,10).split("-"); return p[2] + "/" + p[1] + "/" + p[0]; }
 function diaRotulo(iso){
   if(!iso) return "—";
@@ -867,6 +930,18 @@ function diaRotulo(iso){
   return dias[d.getDay()] + ", " + String(d.getDate()).padStart(2,"0") + "/" + String(d.getMonth()+1).padStart(2,"0");
 }
 function horaDe(iso){ if(!iso) return ""; var d = new Date(iso); return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0"); }
+/* "às 15:40" hoje · "amanhã às 01:20" · "24/10 às 09:00" */
+function quandoProx(iso){
+  if(!iso) return "";
+  var d = new Date(iso), h = new Date();
+  var a = new Date(d.getFullYear(), d.getMonth(), d.getDate()), b = new Date(h.getFullYear(), h.getMonth(), h.getDate());
+  var dif = Math.round((a - b) / 86400000);
+  return (dif === 0 ? "" : dif === 1 ? "amanhã " : String(d.getDate()).padStart(2,"0") + "/" + String(d.getMonth()+1).padStart(2,"0") + " ") + "às " + horaDe(iso);
+}
+function avisoGabriel(l){
+  if(l.avisado_em) return "O Gabriel foi avisado pelo Telegram.";
+  return "O aviso para o Gabriel sai pelo Telegram" + (new Date().getHours() < 8 ? " às 8h." : " em instantes.");
+}
 function filaOrdenada(){
   return (estado.fila || []).slice().sort(function(a, b){
     var fa = filaFinal(a) ? 1 : 0, fb = filaFinal(b) ? 1 : 0;
@@ -874,7 +949,7 @@ function filaOrdenada(){
     return a.criado_em < b.criado_em ? 1 : -1;
   });
 }
-/* ordem da tela: filtra e agrupa por dia na ordem em que o dia aparece (as que ainda estão na fila vêm primeiro) */
+/* ordem da tela: filtra e agrupa por dia na ordem em que o dia aparece (as que ainda estão com o robô vêm primeiro) */
 function filaEmOrdem(filtro){
   var t = filaOrdenada();
   if(filtro && filtro !== "todos") t = t.filter(function(l){ return filaChave(l) === filtro; });
@@ -885,57 +960,82 @@ function filaEmOrdem(filtro){
   return out;
 }
 function filaDetalhe(l){
-  if(l.situacao === "fora_do_banco") return "Essa guia não está no nosso banco. Se for guia nova da Unimed, o coletor captura sozinho; se for renovação de guia antiga, confira se o número foi digitado certo.";
-  if(l.situacao === "sem_mudanca") return "O SGU ainda mostra a data antiga: senha até " + dataBr(l.senha_depois) + " · carteirinha até " + dataBr(l.cart_depois) + ". Se a Unimed confirmou a renovação, aguarde alguns minutos e mande de novo.";
-  if(l.situacao === "renovada"){
-    var f = function(a, b){ return a === b ? "sem mudança (" + dataBr(b) + ")" : dataBr(a) + " → " + dataBr(b); };
-    return "Renovou! Senha: " + f(l.senha_antes, l.senha_depois) + " · carteirinha: " + f(l.cart_antes, l.cart_depois) + ". A Agenda do painel atualiza em poucos minutos.";
+  var n = l.tentativas || 0, vezes = n === 1 ? "1 vez" : n + " vezes";
+  var k = filaChave(l);
+  var datas = "senha até " + dataBr(l.senha_depois) + " · carteirinha até " + dataBr(l.cart_depois);
+  if(k === "fila"){
+    if(l.situacao === "conferindo") return "O robô está com a guia aberta no SGU, conferindo as duas datas.";
+    return n ? "Voltou para o robô: esta é a " + (n + 1) + "ª conferência." : "O robô ainda vai olhar esta guia.";
   }
-  if(l.situacao === "conferindo") return "O robô está com a guia aberta no SGU, conferindo as duas datas.";
-  if(l.situacao === "erro") return "O robô não conseguiu conferir esta guia.";
-  return "O robô ainda vai olhar esta guia.";
+  if(k === "espera")
+    return (l.situacao === "erro" ? "O robô não conseguiu conferir no SGU." : "O SGU ainda mostra a data antiga: " + datas + ".") +
+      " O robô confere de novo sozinho " + quandoProx(l.proxima_em) + ". Já conferiu " + vezes + ". Não precisa mandar o número de novo.";
+  if(k === "nao_renovou") return "O robô conferiu " + vezes + " e o SGU continua com a data antiga: " + datas + ". " + avisoGabriel(l);
+  if(k === "erro") return l.esgotada_em ? "O robô tentou " + vezes + " e não conseguiu conferir esta guia. " + avisoGabriel(l)
+                                        : "O robô não conseguiu conferir esta guia. Mande o número de novo.";
+  if(k === "fora_do_banco") return "Essa guia não está no nosso banco. Se for guia nova da Unimed, o coletor captura sozinho; se for renovação de guia antiga, confira se o número foi digitado certo.";
+  if(k === "sem_mudanca") return "O SGU ainda mostra a data antiga: " + datas + ". Se a Unimed confirmou a renovação, aguarde alguns minutos e mande de novo.";
+  if(k === "renovada"){
+    var f = function(a, b){ return a === b ? "sem mudança (" + dataBr(b) + ")" : dataBr(a) + " → " + dataBr(b); };
+    return "Renovou! Senha: " + f(l.senha_antes, l.senha_depois) + " · carteirinha: " + f(l.cart_antes, l.cart_depois) + "." +
+      (n > 1 ? " Apareceu na " + n + "ª conferência." : "") + " A Agenda do painel atualiza em poucos minutos.";
+  }
+  return "";
 }
-function filaCampo(){
-  /* número da guia + "Mandar pro robô" no cabeçalho (criado uma vez por visita, para não perder o que está sendo digitado) */
-  var ac = window.moldura && moldura.acoesDe("renovacoes");
-  if(!ac || ac.querySelector("#filaNum")) return;
-  var box = novo("div", "fila-envio");
+var renov = null;   /* o popup aberto (api do moldura.pop) */
+function renovAberta(){ return !!(renov && renov.aberto); }
+function abrirRenovacoes(){
+  if(!window.moldura || renovAberta()) return;
+  renov = moldura.pop({ largura:"min(1320px, calc(100vw - 48px))", classe:"pop-grande", titulo:"Renovação de validade Unimed",
+    aoFechar:function(){ renov = null; estado._filaAberta = null; desligarPollFila(); } });
+  var c = renov.corpo; c.classList.add("renov");
+  c.appendChild(novo("div", "renov-aviso", ico(IC_ALERTA, 30, 2.2) +
+    '<div><strong>APENAS GUIAS QUE TIVERAM A DATA RENOVADA</strong><span>Guia nova não entra aqui: o coletor traz sozinho para o sistema.</span></div>'));
+  c.appendChild(filaEnvio());
+  var area = novo("div", "renov-area"); area.id = "renov-area"; c.appendChild(area);
+  estado._filaTopo = true;
+  desenharFila();
+  carregarFila(); ligarPollFila();
+  setTimeout(function(){ var f = document.getElementById("filaNum"); if(f && renovAberta()) f.focus({ preventScroll: true }); }, 30);
+}
+function filaEnvio(){
+  /* número da guia + "Mandar pro robô": fica fora da área que redesenha, para não perder o que está sendo digitado */
+  var box = novo("div", "renov-envio");
   box.innerHTML =
-    '<div class="fila-linha"><label class="busca" for="filaNum">' + ico("M9.5 4 7.5 20M16.5 4l-2 16M4.5 9h15M3.5 15h15", 16, 2) +
-    '<input id="filaNum" type="text" inputmode="numeric" autocomplete="off" placeholder="Número da guia (só números)" aria-label="Número da guia"></label>' +
-    '<button type="button" class="btn btn-p" id="filaEnviar">Mandar pro robô</button></div>' +
+    '<label class="busca renov-num" for="filaNum">' + ico("M9.5 4 7.5 20M16.5 4l-2 16M4.5 9h15M3.5 15h15", 18, 2) +
+    '<input id="filaNum" type="text" inputmode="numeric" autocomplete="off" placeholder="Número da guia renovada" aria-label="Número da guia renovada"></label>' +
+    '<button type="button" class="btn btn-p" id="filaEnviar">Mandar pro robô</button>' +
     '<span class="fila-aviso2" id="filaAviso" role="status"></span>';
-  ac.appendChild(box);
   var campo = box.querySelector("#filaNum");
   campo.value = estado.filaDraft || "";
   campo.addEventListener("input", function(){ estado.filaDraft = campo.value; });
   campo.addEventListener("keydown", function(ev){ if(ev.key === "Enter") enviarFila(); });
   box.querySelector("#filaEnviar").addEventListener("click", enviarFila);
+  return box;
 }
 function desenharFila(){
-  var main = document.getElementById("gv-conteudo");
-  filaCampo();
+  if(!renovAberta()) return;
+  var main = document.getElementById("renov-area");
+  if(!main) return;
   var antes = main.querySelector(".lista-corpo");
   var rolagem = antes && !estado._filaTopo ? antes.scrollTop : 0;
   estado._filaTopo = false;
   main.innerHTML = "";
   var todas = filaOrdenada();
-  var cont = { todos: todas.length, renovada:0, sem_mudanca:0, fora_do_banco:0, erro:0, fila:0 };
+  var cont = { todos: todas.length, renovada:0, espera:0, nao_renovou:0, sem_mudanca:0, fora_do_banco:0, erro:0, fila:0 };
   todas.forEach(function(l){ var k = filaChave(l); cont[k] = (cont[k] || 0) + 1; });
-  var nLer = cont.renovada + cont.sem_mudanca + cont.fora_do_banco + cont.erro;
-  if(window.moldura) moldura.resumo("renovacoes", estado.fila === null ? "" :
-    (nLer === 1 ? "1 resultado para ler" : nLer + " resultados para ler") + " · " +
-    (cont.fila === 0 ? "nenhuma guia na fila do robô" : (cont.fila === 1 ? "1 guia na fila do robô" : cont.fila + " guias na fila do robô")));
+  var nLer = todas.filter(filaFinal).length;
   var filtro = estado.filaFiltro || "todos";
+  if(FILA_SEMPRE.indexOf(filtro) < 0 && !cont[filtro]) filtro = estado.filaFiltro = "todos";   /* o tipo do filtro sumiu da lista */
   var vis = filaEmOrdem(filtro);
 
   var wrap = novo("div", "duas-col");
-  var sec = novo("section", "lista alta"); sec.setAttribute("aria-label", "Guias mandadas ao robô");
+  var sec = novo("section", "lista"); sec.setAttribute("aria-label", "Guias mandadas ao robô");
   var topo = novo("div", "lista-topo");
   var seg = novo("div", "seg"); seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "Mostrar");
-  var defs = [["todos","Todos","#AEAEB2"],["renovada",FILA_TXT.renovada.curto,FILA_TXT.renovada.cor],["sem_mudanca",FILA_TXT.sem_mudanca.curto,FILA_TXT.sem_mudanca.cor],
-              ["fora_do_banco",FILA_TXT.fora_do_banco.curto,FILA_TXT.fora_do_banco.cor]];
-  if(cont.erro) defs.push(["erro","Erro",FILA_TXT.erro.cor]);
+  var defs = [["todos","Todos","#AEAEB2"],["renovada",FILA_TXT.renovada.curto,FILA_TXT.renovada.cor],["espera",FILA_TXT.espera.curto,FILA_TXT.espera.cor],
+              ["nao_renovou",FILA_TXT.nao_renovou.curto,FILA_TXT.nao_renovou.cor]];
+  ["sem_mudanca","fora_do_banco","erro"].forEach(function(k){ if(cont[k]) defs.push([k, FILA_TXT[k].curto, FILA_TXT[k].cor]); });
   defs.push(["fila","Na fila do robô","#D2D2D7"]);
   defs.forEach(function(d){
     var on = filtro === d[0];
@@ -950,18 +1050,20 @@ function desenharFila(){
   var corpo = novo("div", "lista-corpo");
   if(estado.fila === null) corpo.appendChild(novo("div", "lista-vazio", "Buscando a fila no banco…"));
   else if(estado.filaErro) corpo.appendChild(novo("div", "lista-vazio erro", "Não consegui ler a fila de renovações. " + escapa(estado.filaErro)));
-  else if(!vis.length) corpo.appendChild(novo("div", "lista-vazio", '<b class="ok">Nada na fila</b><br>Renovou uma guia com a Unimed? Digite o número lá em cima que o robô confere no SGU.'));
+  else if(!vis.length) corpo.appendChild(novo("div", "lista-vazio", filtro === "todos"
+    ? '<b class="ok">Nada na fila</b><br>A Unimed renovou a data de uma guia? Digite o número lá em cima que o robô confere no SGU.'
+    : "Nenhuma guia aqui agora."));
   var porDia = {};
   vis.forEach(function(l){ var k = diaRotulo(l.criado_em); (porDia[k] = porDia[k] || []).push(l); });
   var dia = null;
   vis.forEach(function(l){
     var k = diaRotulo(l.criado_em);
     if(dia !== k){ dia = k; corpo.appendChild(novo("div", "dia-cab", '<b>' + escapa(k) + '</b><span>' + (porDia[k].length === 1 ? "1 guia" : porDia[k].length + " guias") + '</span>')); }
-    var t = filaTxt(l.situacao);
+    var t = filaTxtDe(l);
     var b = botao("linha" + (estado._filaAberta === l.id ? " aberta" : ""),
       '<span class="h">' + escapa(horaDe(l.criado_em)) + '</span>' +
       '<span class="q"><span class="nm">Guia ' + escapa(l.numero_guia) + '</span><span class="mt">' + escapa((l.paciente || "Paciente não identificado") + " · por " + (l.autora || "—")) + '</span></span>' +
-      '<span class="dir"><span class="tag" style="color:' + t.cor + '">' + escapa(t.rot) + '</span></span>',
+      '<span class="dir"><span class="tag" style="color:' + t.cor + '">' + escapa(filaTag(l)) + '</span></span>',
       function(){ abrirFilaItem(l.id, filtro); });
     b.setAttribute("aria-haspopup", "dialog"); b.setAttribute("data-fila", l.id);
     corpo.appendChild(b);
@@ -972,8 +1074,9 @@ function desenharFila(){
   var lado = novo("div", "lado");
   var res = novo("section", "painel"); res.setAttribute("aria-labelledby", "res-titulo");
   res.appendChild(novo("div", "painel-cab", '<h2 id="res-titulo">Resultados do robô</h2><span>' + (nLer === 1 ? "1 para ler" : nLer + " para ler") + '</span>'));
-  ["fila","renovada","sem_mudanca","fora_do_banco","erro"].forEach(function(k){
-    if((k === "fila" || k === "erro") && !cont[k]) return;
+  ["fila","espera","renovada","nao_renovou","sem_mudanca","fora_do_banco","erro"].forEach(function(k){
+    if(FILA_SEMPRE.indexOf(k) < 0 && !cont[k]) return;
+    if(k === "fila" && !cont[k]) return;
     var t = k === "fila" ? FILA_TXT.aguardando : filaTxt(k);
     var b = botao("cat", '<span class="q" style="background:' + t.cor + '"></span><span class="t"><b>' + escapa(k === "fila" ? "Na fila do robô" : t.rot) + '</b><small>' + escapa(t.sub) + '</small></span>' +
       '<span class="n">' + (cont[k] || 0) + '</span>' + ico(IC.dir, 16, 2), function(){ abrirFilaCat(k); });
@@ -982,16 +1085,16 @@ function desenharFila(){
   });
   lado.appendChild(res);
   lado.appendChild(novo("section", "painel nota-lado",
-    '<h2>Como funciona</h2><p>A Unimed renovou a validade (senha ou carteirinha) de uma guia que <b>já existe</b>? Digite o número lá em cima: o robô abre a guia no SGU, confere as duas datas e atualiza o sistema sozinho.</p>' +
+    '<h2>Como funciona</h2><p>A Unimed renovou a data (senha ou carteirinha) de uma guia que <b>já existe</b>? Digite o número lá em cima: o robô abre a guia no SGU, confere as duas datas e atualiza o sistema sozinho.</p>' +
+    '<p>Se o SGU ainda estiver com a data antiga, o robô confere de novo sozinho depois de 20 minutos, de 1 hora e de 4 horas. Se mesmo assim não renovar, o Gabriel é avisado.</p>' +
     '<p class="cinza">O resultado aparece na lista. Leu, tire da tela.</p>'));
   wrap.appendChild(lado);
   main.appendChild(wrap);
-  ajustaAltura();
   var c2 = main.querySelector(".lista-corpo"); if(c2) c2.scrollTop = rolagem;
 }
 function abrirFilaCat(k){
   if(!window.moldura) return;
-  var P = moldura.pop({ largura:"620px", titulo:"Resultado do robô" });
+  var P = moldura.pop({ largura:"620px", titulo:"Resultado do robô", sobre:true });
   var t = k === "fila" ? FILA_TXT.aguardando : filaTxt(k);
   var lista = filaOrdenada().filter(function(l){ return filaChave(l) === k; });
   P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-alerta" style="color:' + t.cor + '">' + (lista.length === 1 ? "1 guia" : lista.length + " guias") + '</span>' +
@@ -1001,7 +1104,7 @@ function abrirFilaCat(k){
   lista.forEach(function(l){
     ul.appendChild(botao("pp-linha", '<span class="w">' + escapa(fmtQuando(l.criado_em)) + '</span><span class="q"><b>Guia ' + escapa(l.numero_guia) + '</b><small>' +
       escapa((l.paciente || "Paciente não identificado") + " · por " + (l.autora || "—")) + '</small></span>' + ico(IC.dir, 14, 2),
-      function(){ estado.filaFiltro = k; desenharFila(); abrirFilaItem(l.id, k); }));
+      function(){ P.fechar(true); estado.filaFiltro = k; desenharFila(); abrirFilaItem(l.id, k); }));
   });
   if(!lista.length) ul.appendChild(novo("div", "lista-vazio", "Nenhuma guia aqui agora."));
   P.corpo.appendChild(ul);
@@ -1012,23 +1115,24 @@ function abrirFilaCat(k){
 function abrirFilaItem(id, filtro){
   if(!window.moldura) return;
   var atualId = id;
-  var P = moldura.pop({ largura:"620px", titulo:"Guia mandada ao robô", aoFechar:function(){ estado._filaAberta = null; marca(); } });
+  var P = moldura.pop({ largura:"620px", titulo:"Guia mandada ao robô", sobre:true, aoFechar:function(){ estado._filaAberta = null; marca(); } });
   function lista(){ return filaEmOrdem(filtro); }
   function marca(){
-    document.querySelectorAll("#gv-conteudo .linha.aberta").forEach(function(x){ x.classList.remove("aberta"); });
-    if(estado._filaAberta){ var r = document.querySelector('#gv-conteudo .linha[data-fila="' + estado._filaAberta + '"]'); if(r) r.classList.add("aberta"); }
+    document.querySelectorAll("#renov-area .linha.aberta").forEach(function(x){ x.classList.remove("aberta"); });
+    if(estado._filaAberta){ var r = document.querySelector('#renov-area .linha[data-fila="' + estado._filaAberta + '"]'); if(r) r.classList.add("aberta"); }
   }
   function pinta(){
     var L = lista();
     var i = L.findIndex(function(x){ return x.id === atualId; });
     if(i < 0){ if(!L.length){ P.fechar(); return; } i = 0; atualId = L[0].id; }
-    var l = L[i], t = filaTxt(l.situacao);
+    var l = L[i], t = filaTxtDe(l), fim = filaFinal(l), n = l.tentativas || 0;
     estado._filaAberta = l.id; marca();
     P.corpo.innerHTML = "";
     P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-quando">Mandada por ' + escapa(l.autora || "—") + " · " + escapa(fmtQuando(l.criado_em).replace(" ", " às ")) + '</span>' +
       '<h2>Guia ' + escapa(l.numero_guia) + '</h2><span class="pp-l1"' + (l.paciente ? '' : ' style="color:var(--cinza)"') + '>' + escapa(l.paciente || "Paciente não identificado") + '</span>'));
-    var cx = novo("div", "pp-caixa", '<span class="pp-tag" style="color:' + t.cor + '">' + escapa(t.rot) + '</span><span class="pp-txt">' + escapa(filaDetalhe(l)) + '</span>');
-    if(l.detalhe) cx.appendChild(novo("span", "pp-txt cinza", escapa(l.detalhe)));
+    var cx = novo("div", "pp-caixa", '<span class="pp-tag" style="color:' + t.cor + '">' + escapa(filaTag(l)) + '</span><span class="pp-txt">' + escapa(filaDetalhe(l)) + '</span>');
+    /* o texto do robô diz "mande de novo": só vale para as linhas de antes das novas tentativas (RENOV v2.0) */
+    if(l.detalhe && l.retentar !== true) cx.appendChild(novo("span", "pp-txt cinza", escapa(l.detalhe)));
     P.corpo.appendChild(cx);
     if(l.situacao === "renovada" || l.situacao === "sem_mudanca"){
       var g = novo("div", "pp-datas", '<span></span><span class="c">Antes</span><span class="c">No SGU agora</span>');
@@ -1038,7 +1142,9 @@ function abrirFilaItem(id, filtro){
       });
       P.corpo.appendChild(g);
     }
-    P.corpo.appendChild(novo("span", "pp-l2", l.conferida_em ? "Conferida no SGU em " + escapa(fmtQuando(l.conferida_em).replace(" ", " às ")) : "Ainda não conferida"));
+    P.corpo.appendChild(novo("span", "pp-l2", l.conferida_em
+      ? "Conferida no SGU em " + escapa(fmtQuando(l.conferida_em).replace(" ", " às ")) + (n > 1 ? " · " + n + " conferências" : "")
+      : "Ainda não conferida"));
     P.rodape.hidden = false; P.rodape.innerHTML = "";
     var ant = L[i-1], prox = L[i+1];
     var bA = botao("btn btn-s", ico(IC.esq, 16, 2.2) + "Anterior", function(){ if(ant){ atualId = ant.id; pinta(); } }); bA.disabled = !ant;
@@ -1049,7 +1155,8 @@ function abrirFilaItem(id, filtro){
       dispensarFila(l.id);
       setTimeout(function(){ if(!P.aberto) return; if(seguinte){ atualId = seguinte.id; pinta(); } else P.fechar(); }, 450);
     });
-    bT.disabled = !filaFinal(l); bT.title = filaFinal(l) ? "Li — pode tirar da tela" : "O robô ainda vai olhar";
+    bT.disabled = !fim;
+    bT.title = fim ? "Li — pode tirar da tela" : (filaChave(l) === "espera" ? "O robô ainda vai conferir de novo " + quandoProx(l.proxima_em) : "O robô ainda vai olhar");
     var bP = botao("btn btn-p", "Próxima" + ico(IC.dir, 16, 2.2), function(){ if(prox){ atualId = prox.id; pinta(); } }); bP.disabled = !prox;
     P.rodape.appendChild(bA);
     P.rodape.appendChild(novo("span", "pop-pos", (i + 1) + " de " + L.length));
@@ -3009,6 +3116,7 @@ function abrirMalItem(chave){
 
 function trocaTela(t){
   if(t === "dono" && !ehDono()) t = "agenda";
+  if(t === "fila"){ t = "agenda"; setTimeout(abrirRenovacoes, 0); }   /* v3.4: Renovações saiu do menu e virou o popup da Agenda */
   estado.tela = t;
   if(window.moldura) moldura.aoTrocarTela(t);      /* cabeçalho primeiro: a tela pode pôr controles nele */
   var abas = document.querySelectorAll("#s-guias .gv-aba");
@@ -3019,9 +3127,7 @@ function trocaTela(t){
   if(rg) rg.style.display = (t === "agenda") ? "" : "none";
   var fx = document.getElementById("gv-faixa");
   if(fx && t !== "agenda") fx.hidden = true;
-  if(t === "fila") ligarPollFila(); else desligarPollFila();
-  if(t === "agenda"){ desenharAgenda(); }
-  else if(t === "fila"){ desenharFila(); carregarFila(); }
+  if(t === "agenda"){ desenharAgenda(); }      /* a fila do robô só é consultada de 20 em 20 s com o popup aberto */
   else if(t === "cad"){ desenharCad(); loadCad(); }
   else if(t === "excl"){ desenharExcl(); loadExcl(); }
   else if(t === "corte"){ desenharCorte(); loadCorte(); }
@@ -3043,11 +3149,18 @@ function boot(t){
     for(var i=0;i<abas.length;i++){
       (function(b){ b.addEventListener("click", function(){ trocaTela(b.getAttribute("data-tela")); }); })(abas[i]);
     }
-    var bu = document.getElementById("gv-busca");
-    if(bu) bu.addEventListener("input", function(e){
-      estado.busca = e.target.value.trim().toLowerCase();
-      estado.agLimite = 150; estado._agTopo = true;
-      if(estado.tela === "agenda") desenharAgenda();
+    /* v3.4: no topo da Agenda, Renovação de validade Unimed (popup grande) e a lupa (busca em janela; tecla /) */
+    var rv = document.getElementById("gv-renov");
+    if(rv) rv.addEventListener("click", abrirRenovacoes);
+    var lu = document.getElementById("gv-lupa");
+    if(lu) lu.addEventListener("click", function(){ abrirBusca(""); });
+    document.addEventListener("keydown", function(ev){
+      if(ev.key !== "/" || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+      var a = document.activeElement, tag = a && a.tagName;
+      if(tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (a && a.isContentEditable)) return;
+      if(typeof CU === "undefined" || !CU) return;
+      if(!window.moldura || moldura.atual() !== "agenda" || document.querySelector(".pop")) return;
+      ev.preventDefault(); abrirBusca("");
     });
     var rc = document.getElementById("gv-recarregar");
     if(rc) rc.addEventListener("click", recarregarTudo);
@@ -3070,5 +3183,7 @@ function stopTimers(){
 
 return { boot: boot, startTimers: startTimers, stopTimers: stopTimers, recarregarTudo: recarregarTudo,
          tela: function(t){ trocaTela(t); }, telaAtual: function(){ return estado.tela; },
-         filtroTipo: function(){ return estado.filtroTipo; }, ehDono: ehDono };
+         filtroTipo: function(){ return estado.filtroTipo; }, ehDono: ehDono,
+         limparFiltroTipo: function(){ estado.filtroTipo = null; agMudou(); },
+         abrirRenovacoes: abrirRenovacoes, abrirBusca: abrirBusca };
 })();
