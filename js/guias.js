@@ -13,19 +13,19 @@ function ehDono(){ return (typeof CU!=="undefined" && CU && CU.admin===true); }
 /* ── dicionário das situações (voz da recepção) · v2.0 ── */
 var SIT = {
   sem_guia:              {rot:"Sem guia",             cls:"s0", g:"g0", acao:"🚫 REGRA DA CASA: consulta não pode estar na agenda sem guia. Solicitar guia AGORA — ou desmarcar."},
-  guia_vencida:          {rot:"Guia vencida",         cls:"s0", g:"g0", acao:"🚫 Guia vencida sai da agenda. Falar com a Unimed pra ATUALIZAR A VALIDADE (ou guia nova) AGORA — ou desmarcar."},
+  guia_vencida:          {rot:"Depois da última",     cls:"sinfo", g:"ginfo", acao:"A guia não alcança esta consulta. O aviso fica na última consulta coberta; se a guia não for renovada até lá, esta vai para o Corte."},
   saldo_esgotado:        {rot:"Saldo esgotado",       cls:"s0", g:"g0", acao:"🚫 Sem sessão sobrando = sem guia. Solicitar renovação AGORA — ou desmarcar."},
   sem_carteirinha:       {rot:"Sem carteirinha",      cls:"s0", g:"g0", acao:"Completar o cadastro do paciente HOJE — sem carteirinha nem dá pra casar guia."},
   guia_de_outra_terapia: {rot:"Guia de OUTRA terapia",cls:"s0", g:"g0", acao:"🚫 A guia viva do paciente é de outra terapia. Conferir se o erro é o procedimento marcado ou a guia pedida — corrigir AGORA ou desmarcar."},
   procedimento_errado:   {rot:"Procedimento errado",  cls:"s0", g:"g0", acao:"🚫 O procedimento do agendamento não é nenhum dos 4 códigos Unimed. Corrigir no Feegow — desse jeito não fatura e o painel fica cego."},
   aba_intercambio:       {rot:"ABA no Intercâmbio",   cls:"s0", g:"g0", acao:"🚫 ABA não é coberto no convênio Intercâmbio. Corrigir o convênio ou o procedimento ANTES da sessão."},
   psico_com_guia_aba:    {rot:"Psico com guia de ABA", cls:"s0", g:"g0", acao:"🚫 O paciente tem guia de ABA viva — não é pra ter sessão de psicologia acontecendo. Corrigir o procedimento do agendamento no Feegow AGORA."},
-  ultima_sessao:         {rot:"Última sessão",        cls:"s1", g:"g1", acao:"É a última sessão do saldo — solicitar guia nova já, pra agenda seguinte não furar."},
+  ultima_sessao:         {rot:"Última sessão (saldo)", cls:"s1", g:"g1", acao:"É a última sessão do saldo — solicitar guia nova já, pra agenda seguinte não furar."},
   duplicidade_dia:       {rot:"Duas no mesmo dia",    cls:"s1", g:"g1", acao:"Só uma consulta da mesma terapia fatura por dia. Remarcar ou excluir uma delas."},
   sem_saldo_na_fila:     {rot:"Fila passa do saldo",  cls:"s1", g:"g1", acao:"Solicitar guia nova ANTES desta data — a fila do paciente consome o saldo antes de chegar aqui."},
   guia_ainda_nao_vale:   {rot:"Guia só vale depois",  cls:"s1", g:"g1", acao:"Conferir a data de autorização com a Unimed."},
   sessao_em_feriado:     {rot:"Cai no feriado",       cls:"sinfo", g:"ginfo", acao:"Remarcar — o sistema não fatura sessão em feriado."},
-  ultima_viavel_validade:{rot:"Última viável (validade)", cls:"s1", g:"g1", acao:"A guia ainda tem saldo, mas a VALIDADE morre antes da próxima consulta — esta é a última que a cobertura alcança. Solicitar renovação já."},
+  ultima_viavel_validade:{rot:"Última viável (validade)", cls:"s1", g:"g1", acao:"A guia ainda tem saldo, mas a VALIDADE morre antes da próxima consulta — esta é a última que ela cobre. Renovar a validade: entrar em contato com o paciente."},
   coberto:               {rot:"Coberta",              cls:"s2", g:"g2", acao:""}
 };
 var SIT_ORDEM = ["sem_guia","guia_de_outra_terapia","psico_com_guia_aba","guia_vencida","saldo_esgotado","procedimento_errado","aba_intercambio","sem_carteirinha"];
@@ -336,6 +336,7 @@ function ehProblemaAba(l){
   if(tratada(l)) return false;
   if(l.situacao === "psico_com_guia_aba") return true;
   if(l.especialidade !== "aba") return false;
+  if(l.gravidade === 3) return false;   /* PRE v3.1: depois da última — o aviso é a Última, o resto é do Corte */
   return l.situacao !== "coberto" && l.situacao !== "sessao_em_feriado";
 }
 function escapa(s){ var d=document.createElement("div"); d.textContent=(s==null?"":String(s)); return d.innerHTML; }
@@ -348,7 +349,8 @@ function fmtQuando(iso){
 }
 function tratada(l){ return l.tratamento === "resolvido" || l.tratamento === "desmarcado"; }
 function ehPendencia(l){ return (l.gravidade === 0 || l.corte_hoje === true) && !tratada(l); } /* v2: só o VERMELHO · v2.1: + o amarelo do DIA do corte */
-function ehAviso(l){ return l.situacao !== "coberto" && l.gravidade !== 0 && !tratada(l); }
+function ehAviso(l){ return l.situacao !== "coberto" && l.gravidade !== 0 && l.gravidade !== 3 && !tratada(l); }
+function soNoTudo(l){ return l.gravidade === 3 && !tratada(l); }   /* PRE v3.1: "Depois da última" — fora de Pendências e Avisos */
 function cadAberto(c){ return !c.tratamento || c.tratamento === "pendente"; }
 function exclAberta(x){ return (!x.tratamento || x.tratamento === "pendente") || x.aguardando_dono === true; }
 /* ═══ 🗑️ Exclusões — marco fixo ═══
@@ -426,19 +428,19 @@ var TOM = { r:"#D70015", o:"#C93400", c:"#636366", v:"#248A3D" };
 /* textos da tela (voz do modelo novo); as regras continuam no SIT lá de cima */
 var SIT_TXT = {
   sem_guia:               { rot:"Sem guia", tom:"r", sub:"Solicitar a guia agora ou desmarcar", acao:"Regra da casa: consulta não pode estar na agenda sem guia. Solicitar a guia agora ou desmarcar." },
-  guia_vencida:           { rot:"Guia vencida", tom:"r", sub:"Atualizar a validade com a Unimed ou desmarcar", acao:"Guia vencida sai da agenda. Falar com a Unimed para atualizar a validade (ou pedir guia nova) agora, ou desmarcar." },
+  guia_vencida:           { rot:"Depois da última", tom:"c", sub:"Vai para o Corte se a guia não for renovada", acao:"A guia não alcança esta consulta. O aviso fica na última consulta coberta (Última viável ou Última sessão); se a guia não for renovada até lá, esta vai para o Corte." },
   saldo_esgotado:         { rot:"Saldo esgotado", tom:"r", sub:"Solicitar a renovação agora ou desmarcar", acao:"Sem sessão sobrando é o mesmo que sem guia. Solicitar a renovação agora ou desmarcar." },
   sem_carteirinha:        { rot:"Sem carteirinha", tom:"r", sub:"Completar o cadastro do paciente hoje", acao:"Completar o cadastro do paciente hoje: sem carteirinha não dá para casar a guia." },
   guia_de_outra_terapia:  { rot:"Guia de outra terapia", tom:"r", sub:"Conferir procedimento ou guia e corrigir", acao:"A guia viva do paciente é de outra terapia. Conferir se o erro é o procedimento marcado ou a guia pedida e corrigir agora, ou desmarcar." },
   procedimento_errado:    { rot:"Procedimento errado", tom:"r", sub:"Corrigir o procedimento no Feegow", acao:"O procedimento do agendamento não é nenhum dos 4 códigos Unimed. Corrigir no Feegow: assim não fatura e o painel fica cego." },
   aba_intercambio:        { rot:"ABA no Intercâmbio", tom:"r", sub:"Corrigir convênio ou procedimento", acao:"ABA não é coberto no Intercâmbio. Corrigir o convênio ou o procedimento antes da sessão." },
   psico_com_guia_aba:     { rot:"Psicologia com guia de ABA", tom:"r", sub:"Corrigir o procedimento no Feegow", acao:"O paciente tem guia de ABA viva: não deveria haver sessão de psicologia. Corrigir o procedimento do agendamento no Feegow agora." },
-  ultima_sessao:          { rot:"Última sessão", tom:"o", sub:"Última do saldo: pedir guia nova já", acao:"É a última sessão do saldo. Solicitar guia nova já, para a agenda seguinte não furar." },
+  ultima_sessao:          { rot:"Última sessão (saldo)", tom:"o", sub:"Última do saldo: pedir guia nova já", acao:"É a última sessão do saldo. Solicitar guia nova já, para a agenda seguinte não furar." },
   duplicidade_dia:        { rot:"Duas no mesmo dia", tom:"o", sub:"Remarcar ou excluir uma delas", acao:"Só uma consulta da mesma terapia fatura por dia. Remarcar ou excluir uma delas." },
   sem_saldo_na_fila:      { rot:"Fila passa do saldo", tom:"o", sub:"Pedir guia nova antes desta data", acao:"Solicitar guia nova antes desta data: a fila do paciente consome o saldo antes de chegar aqui." },
   guia_ainda_nao_vale:    { rot:"Guia só vale depois", tom:"o", sub:"Conferir a data com a Unimed", acao:"Conferir a data de autorização com a Unimed." },
   sessao_em_feriado:      { rot:"Cai no feriado", tom:"c", sub:"Remarcar", acao:"Remarcar: o sistema não fatura sessão em feriado." },
-  ultima_viavel_validade: { rot:"Última viável (validade)", tom:"o", sub:"Corte hoje: renovar a validade já", acao:"A guia ainda tem saldo, mas a validade termina antes da próxima consulta: esta é a última que a cobertura alcança. Solicitar a renovação já." },
+  ultima_viavel_validade: { rot:"Última viável (validade)", tom:"o", sub:"Corte hoje: renovar a validade (falar com o paciente)", acao:"A guia ainda tem saldo, mas a validade termina antes da próxima consulta: esta é a última que ela cobre. Renovar a validade: entrar em contato com o paciente. Se não renovar até o dia desta consulta, as seguintes vão para o Corte." },
   coberto:                { rot:"Coberta", tom:"v", sub:"", acao:"" }
 };
 var ABA_TXT = { rot:"ABA", tom:"r", sub:"Sem guia de ABA, ABA no Intercâmbio ou psicologia sobre guia de ABA",
@@ -477,6 +479,7 @@ function contagens(){
     if(ehPendencia(l)) c.pendencias++;
     else if(ehAviso(l)) c.avisos++;
     else if(l.situacao === "coberto") c.cobertas++;
+    else if(soNoTudo(l) && !(l.tratamento && l.tratamento !== "pendente")) return;   /* PRE v3.1: só aparece em "Tudo" */
     else c.tratadas++;
   });
   return c;
@@ -507,8 +510,12 @@ function detalheTxt(l){
   var g = l.numero_guia || "—", fim = l.guia_fim_fmt || "—";
   switch(l.situacao){
     case "coberto": return "Guia " + g + " · " + ses(l.saldo_guia) + " · vence " + fim + ".";
-    case "guia_vencida": return "A última guia, " + g + ", venceu em " + fim +
-      (typeof l.dias_para_vencer === "number" ? " (há " + Math.abs(l.dias_para_vencer) + (Math.abs(l.dias_para_vencer) === 1 ? " dia)." : " dias).") : ".");
+    case "guia_vencida":
+      if(typeof l.dias_para_vencer === "number" && l.dias_para_vencer >= 0)   /* PRE v3.0: ainda vale hoje, mas acaba antes desta consulta */
+        return "A guia " + g + " vale até " + fim + (l.dias_para_vencer === 0 ? " (vence hoje)" : " (daqui a " + l.dias_para_vencer + (l.dias_para_vencer === 1 ? " dia)" : " dias)")) +
+          " e acaba antes desta consulta.";
+      return "A última guia, " + g + ", venceu em " + fim +
+        (typeof l.dias_para_vencer === "number" ? " (há " + Math.abs(l.dias_para_vencer) + (Math.abs(l.dias_para_vencer) === 1 ? " dia)." : " dias).") : ".");
     case "saldo_esgotado": return "A guia " + g + " vale até " + fim + ", mas o saldo zerou.";
     case "psico_com_guia_aba": return "Guia de ABA viva" + (l.outra_guia_numero ? " " + l.outra_guia_numero : "") +
       (l.outra_guia_qt != null ? " · " + ses(l.outra_guia_qt) : "") + (l.outra_guia_fim ? " · vence " + fmtData(l.outra_guia_fim) : "") +
@@ -1067,6 +1074,9 @@ var CAD_TXT = {
   /* v2.3 */
   convenio_agendamento: { curto:"Convênio do agendamento", titulo:"Agendamento no convênio errado", sub:"Trocar o convênio do agendamento no Feegow",
     acao:"O paciente tem guia com saldo de um convênio, mas o agendamento está marcado no outro. O lançamento sai no convênio do agendamento: guia Intercâmbio em agendamento Local (ou o contrário) a Unimed glosa. Abrir cada agendamento listado no Feegow e trocar o convênio para o da guia. Carteirinha que começa com 0178 é Unimed Local; qualquer outra, Intercâmbio." },
+  /* v2.5 · saiu da Agenda (PRE v3.0) */
+  procedimento_agendamento: { curto:"Procedimento do agendamento", titulo:"Agendamento com procedimento errado", sub:"Trocar o procedimento do agendamento no Feegow",
+    acao:"O agendamento é da Unimed, mas o procedimento marcado não é nenhum dos 4 códigos que a Unimed paga: do jeito que está não fatura, e a Agenda não consegue conferir a guia dessa sessão. Abrir cada agendamento listado no Feegow e trocar o procedimento: psicologia 50000470 (sessão) ou 50001221 (1ª consulta), ABA 2250005103, nutrição 50000560." },
   guia_sem_ficha:       { curto:"Guia sem ficha", titulo:"Guia puxada no SGU sem ficha no Feegow", sub:"Criar ou completar a ficha com a carteirinha",
     acao:"A Unimed autorizou a guia, mas a carteirinha dela não está em nenhuma ficha do Feegow — o sistema não sabe de quem é a guia e não fatura as sessões. Procurar o paciente por CPF ou telefone (pode estar com outro nome); se não existir, criar a ficha com a carteirinha e o convênio indicados. Carteirinha que começa com 0178 é Unimed Local; qualquer outra, Intercâmbio." }
 };
@@ -1075,7 +1085,7 @@ var CAD_LIXO = { titulo:"Dado inválido: nunca juntar", sub:"CPF de zeros ou car
 var TRAT_CAD_ROT = { pendente:"Pendente", corrigido:"Corrigido", estava_certo:"Estava certo", sem_solucao:"Sem solução" };
 var IC_ALERTA = "M12 3.5 21.5 20h-19zM12 10v4.5M12 17.2h.01";
 function cadTxt(t){ return CAD_TXT[t] || { curto:t, titulo:t, sub:"", acao:"" }; }
-var CAD_TIPOS_LISTA = ["convenio_invertido","convenio_agendamento","paciente_duplicado","carteirinha_repetida","guia_sem_ficha"];   /* v2.1: ordem dos filtros e do painel "Problemas" */
+var CAD_TIPOS_LISTA = ["convenio_invertido","convenio_agendamento","procedimento_agendamento","paciente_duplicado","carteirinha_repetida","guia_sem_ficha"];   /* v2.1: ordem dos filtros e do painel "Problemas" */
 function cadFichaTxt(c){ return c.sem_ficha ? "Sem ficha no Feegow" : "Ficha #" + escapa(c.paciente_id); }
 function cadTipos(c){ var v = {}, out = []; c.problemas.forEach(function(p){ if(!v[p.tipo]){ v[p.tipo] = 1; out.push(p.tipo); } }); return out; }
 function futTxt(n){ return !n ? "sem consulta marcada" : (n === 1 ? "1 consulta marcada" : n + " consultas marcadas"); }
@@ -1115,6 +1125,10 @@ function textoProblema2(p){
     var ds = escapa(p.detalhe || "");
     return ds.replace("Procurar o paciente por CPF ou telefone; se não existir, criar a ficha com essa carteirinha e esse convênio.",
                       "<b>Procurar o paciente por CPF ou telefone; se não existir, criar a ficha com essa carteirinha e esse convênio.</b>");
+  }
+  if(p.tipo === "procedimento_agendamento"){   /* v2.5 */
+    var dp = escapa(p.detalhe || "");
+    return dp.replace(/(Trocar o procedimento no Feegow)/, "<b>$1</b>");
   }
   return escapa(p.detalhe || "");
 }
@@ -1222,6 +1236,7 @@ function desenharCad(){
     '<h2>Como funciona</h2><p>Uma linha por <b>paciente</b>: abra a ficha no Feegow e resolva o que está listado.</p>' +
     '<p><b>Guia sem ficha</b> é guia viva no SGU cuja carteirinha não está em ficha nenhuma: procure o paciente e crie ou complete a ficha. Sem isso a guia não fatura.</p>' +
     '<p><b>Agendamento no convênio errado</b>: a guia do paciente é de um convênio e o agendamento está no outro. Abra o agendamento no Feegow e troque o convênio para o da guia.</p>' +
+    '<p><b>Agendamento com procedimento errado</b>: o agendamento é da Unimed, mas o procedimento não é nenhum dos 4 códigos que ela paga. Abra o agendamento no Feegow e troque o procedimento.</p>' +
     '<p>O robô recompara com o espelho da Unimed a cada 15 minutos. <b>Corrigiu? A linha some sozinha na próxima rodada.</b></p>' +
     '<p class="cinza">Marque o que você fez, para ninguém conferir a mesma coisa duas vezes.</p>'));
   wrap.appendChild(lado);
