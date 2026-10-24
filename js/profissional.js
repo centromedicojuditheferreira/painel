@@ -438,7 +438,8 @@ function reciboModelo(r){
   var info = [['Profissional', r.profissional], ['Período', dmy(r.periodo_inicio) + ' a ' + dmy(r.periodo_fim)],
               ['Data de emissão', (r.emitido_em ? pdfData(r.emitido_em) : '—') + (r.versao > 1 ? ' (versão ' + r.versao + ')' : '')],
               ['Atendidos', String(at) + so]];
-  if(r.faltas != null) info.push(['Não compareceu', String(fa) + so]);
+  var fp = r.faltas_por || null, dm = fp ? Number(fp.desmarcadas) || 0 : 0;
+  if(r.faltas != null) info.push(['Não compareceu', String(fa) + so + (dm ? ' · ' + (dm === 1 ? '1 cancelada pelo profissional' : dm + ' canceladas pelo profissional') : '')]);
   if(novo && t && t.tipo === 'presenca') info.push(['Presença', rcPct(r.pct) + ' (' + at + ' de ' + (at + fa) + ' sessões) · mínimo de ' + t.corte_pct + '%: ' + (t.atingiu ? 'atingido' : 'não atingido')]);
   else if(!novo && r.mostra_pct) info.push(['Porcentagem de agenda', r.pct_texto]);
   var conf = (r.conferencias || []).map(function(c){ return ddmm(c.inicio) + ' a ' + ddmm(c.fim) + ' (' + (c.com_foto ? 'assinada' : 'confirmada') + ' em ' + rcDdmmTs(c.confirmado_em) + ')'; });
