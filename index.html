@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cortex · Lev Soul</title>
+<script>/* PROF v3.0: a área dos profissionais tem endereço próprio; links antigos de conferência e de convite seguem para lá */
+if(/[?&](conferir|convite)=/.test(location.search))location.replace('https://profissionais.levsoul.com.br/');</script>
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#F5F5F7">
 <link rel="icon" type="image/png" href="img/levsoul-marca.png">
@@ -65,7 +67,7 @@
 <!-- LOGIN (desenho em css/entrada.css · nomes, PIN e saudação em js/entrada.js)
      O <select id="lo-usr"> continua sendo a lista de verdade (lojinha.js e profissional.js enchem ele);
      troca do PIN provisório e migração do Firebase: js/loja_login.js, que desenha por cima da lista;
-     a escolha de Profissional saiu da tela por enquanto — os links ?conferir=1 e ?convite= seguem abrindo a entrada deles. -->
+     os profissionais entram em profissionais.levsoul.com.br (PROF v3.0); os links antigos ?conferir=1 e ?convite= são mandados para lá no <head>. -->
 <div id="lo">
   <div class="lo-fundo" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
   <div class="lo-cena">
@@ -334,7 +336,7 @@
 <script src="js/loja_api.js?v=1"></script>
 <script src="js/lojinha.js?v=11"></script>
 <script src="js/guias.js?v=13"></script>
-<script src="js/profissional.js?v=8"></script>
+<script src="js/profissional.js?v=9"></script>
 <script src="js/loja_nova.js?v=9"></script>
 <script src="js/financeiro.js?v=3"></script>
 <script src="js/moldura.js?v=10"></script>

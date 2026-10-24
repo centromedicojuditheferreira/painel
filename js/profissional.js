@@ -49,7 +49,9 @@ var MSG = {
   SEM_ACESSO:'Este profissional ainda não tem acesso — o administrador cria no ⚙️.',
   CONVITE_INVALIDO:'Este link de acesso não é válido ou já foi usado. Se você já escolheu a sua senha, entre com o seu nome e a senha; se não, peça um novo link à recepção.',
   CONVITE_EXPIRADO:'Este link de acesso venceu. Peça um novo link à recepção.',
-  CONVITE_USADO:'Este link já foi usado. Entre com o seu nome e a senha que você escolheu.'
+  CONVITE_USADO:'Este link já foi usado. Entre com o seu nome e a senha que você escolheu.',
+  SEM_EMAIL:'Cadastre o e-mail do profissional em Editar antes.', EMAIL_INVALIDO:'E-mail inválido. Confira e tente de novo.',
+  EMAIL_EM_USO:'Este e-mail já é de outro profissional.'
 };
 var sess = { id:null, senha:null, nome:null, semanas:[], semana:null, fotoObrigatoria:true };
 var secr = { senha:null, semana:null, semanas:[] };
@@ -447,50 +449,88 @@ function carregaScript(src, pronto){
     document.head.appendChild(sc);
   });
 }
+/* recibo em PDF — mesma cara do site dos profissionais: logo nas cores da marca no topo (v3.0) */
+var PDF_COR = { indigo: [44, 45, 110], orq: [182, 86, 156], tinta: [29, 29, 31], cinza: [107, 104, 120], linha: [223, 219, 231],
+                lavanda: [244, 242, 248], verde: [31, 122, 58], vermelho: [179, 38, 30] };
+var pdfLogoPromessa = null;
+function pdfLogo(){
+  if(pdfLogoPromessa) return pdfLogoPromessa;
+  pdfLogoPromessa = new Promise(function(resolve){
+    var a = document.querySelector('.lo-bv-luas .lua-maior'), b = document.querySelector('.lo-bv-luas .lua-menor');
+    if(!a || !b) return resolve(null);
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1756 1646"><path fill="#2C2D6E" d="' + a.getAttribute('d') + '"/><path fill="#B6569C" d="' + b.getAttribute('d') + '"/></svg>';
+    var img = new Image();
+    img.onload = function(){ try{ var c = document.createElement('canvas'); c.width = 527; c.height = 494; c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); resolve(c.toDataURL('image/png')); }catch(e){ resolve(null); } };
+    img.onerror = function(){ resolve(null); };
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  });
+  return pdfLogoPromessa;
+}
+function pdfData(iso){ return new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }); }
+function pdfCor(doc, qual, c){ doc['set' + qual + 'Color'](c[0], c[1], c[2]); }
 function baixarRecibo(r){
-  carregaJsPdf().then(function(jsPDF){
+  Promise.all([carregaJsPdf().then(function(jsPDF){
     return carregaScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js', function(){ return !!(jsPDF.API && jsPDF.API.autoTable); }).then(function(){ return jsPDF; });
-  }).then(function(jsPDF){
-    var doc = new jsPDF({ unit: 'mm', format: 'a4' });
-    var L = 20, W = 170, navy = [31, 58, 95], y = 18;
-    doc.setFillColor(navy[0], navy[1], navy[2]); doc.rect(L, y - 8, W, 16, 'F');
-    doc.setTextColor(255); doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.text('Centro Médico Judithe Ferreira', L + 4, y);
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text('Anápolis / GO • Recibo de Repasse — ' + r.mes_nome, L + 4, y + 5.5);
-    doc.setTextColor(0); y += 14;
+  }), pdfLogo()]).then(function(x){
+    var jsPDF = x[0], logo = x[1], doc = new jsPDF({ unit: 'mm', format: 'a4' }), M = 16, L = 194, feitas = {};
+    var cab = function(){
+      var pg = doc.internal.getCurrentPageInfo().pageNumber; if(feitas[pg]) return null; feitas[pg] = true;
+      var um = pg === 1, y0 = 12;
+      if(logo) doc.addImage(logo, 'PNG', M, y0, um ? 14 : 8.5, um ? 13.1 : 8);
+      var xx = M + (um ? 18 : 11.5);
+      pdfCor(doc, 'Text', PDF_COR.indigo); doc.setFont('helvetica', 'bold'); doc.setFontSize(um ? 13 : 9.5);
+      doc.text('Centro Médico Judithe Ferreira', xx, y0 + (um ? 5.6 : 3.6));
+      pdfCor(doc, 'Text', PDF_COR.cinza); doc.setFont('helvetica', 'normal'); doc.setFontSize(um ? 8.5 : 7.5);
+      doc.text(um ? 'Anápolis / GO · Área dos profissionais · Lev Soul' : 'Recibo de repasse · ' + r.mes_nome, xx, y0 + (um ? 10.6 : 7.4));
+      if(um){
+        pdfCor(doc, 'Text', PDF_COR.indigo); doc.setFont('helvetica', 'bold'); doc.setFontSize(12.5); doc.text('Recibo de repasse', L, y0 + 5.6, { align: 'right' });
+        pdfCor(doc, 'Text', PDF_COR.cinza); doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.text(String(r.mes_nome), L, y0 + 10.6, { align: 'right' });
+      }
+      var yl = y0 + (um ? 16.5 : 11); pdfCor(doc, 'Draw', PDF_COR.orq); doc.setLineWidth(0.6); doc.line(M, yl, L, yl); pdfCor(doc, 'Text', PDF_COR.tinta);
+      return yl + 7;
+    };
+    var tabela = function(op){
+      op.margin = { left: M, right: 210 - L, top: 31, bottom: 20 };
+      op.willDrawPage = function(){ cab(); };
+      op.didParseCell = function(dd){ if(dd.section !== 'head') return; var cs = (op.columnStyles || {})[dd.column.index]; if(cs && cs.halign) dd.cell.styles.halign = cs.halign; };
+      doc.autoTable(op); return doc.lastAutoTable.finalY;
+    };
+    var titulo = function(t, y){ if(y > 258){ doc.addPage(); y = cab(); } doc.setFont('helvetica', 'bold'); doc.setFontSize(11.5); pdfCor(doc, 'Text', PDF_COR.indigo); doc.text(t, M, y); pdfCor(doc, 'Text', PDF_COR.tinta); return y + 3; };
+    var y = cab();
     var info = [['Profissional', r.profissional], ['Período', dmy(r.periodo_inicio) + ' a ' + dmy(r.periodo_fim)],
-                ['Data de emissão', (r.emitido_em ? fmtTs(r.emitido_em).slice(0,10) : '—') + (r.versao > 1 ? ' (versão ' + r.versao + ')' : '')],
+                ['Data de emissão', (r.emitido_em ? pdfData(r.emitido_em) : '—') + (r.versao > 1 ? ' (versão ' + r.versao + ')' : '')],
                 ['Consultas finalizadas', String(r.finalizadas)]];
     if(r.mostra_pct) info.push(['Porcentagem de agenda', r.pct_texto]);
-    doc.autoTable({ startY: y, margin: { left: L, right: 20 }, body: info, theme: 'grid',
-      styles: { fontSize: 9.5, cellPadding: 2, lineColor: [204, 204, 204], lineWidth: 0.2, textColor: 20 },
-      columnStyles: { 0: { cellWidth: 45, fontStyle: 'bold', fillColor: [243, 246, 250] } }, alternateRowStyles: { fillColor: [255, 255, 255] } });
-    y = doc.lastAutoTable.finalY + 8;
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(navy[0], navy[1], navy[2]); doc.text('Resumo', L, y); y += 3;
-    var body = (r.resumo || []).map(function(x){ return [x.descricao, String(x.quantidade), brl(x.valor)]; });
-    body.push([{ content: 'TOTAL A RECEBER', styles: { fontStyle: 'bold', fillColor: [233, 238, 245] } }, { content: '', styles: { fillColor: [233, 238, 245] } }, { content: brl(r.total), styles: { fontStyle: 'bold', fillColor: [233, 238, 245], halign: 'right' } }]);
-    doc.autoTable({ startY: y, margin: { left: L, right: 20 }, head: [['Descrição', 'Quantidade', 'Valor Total']], body: body, theme: 'grid',
-      headStyles: { fillColor: navy, textColor: 255, fontStyle: 'bold', fontSize: 9.5 },
-      styles: { fontSize: 9.5, cellPadding: 2, lineColor: [204, 204, 204], lineWidth: 0.2, textColor: 20 },
-      columnStyles: { 0: { cellWidth: 95 }, 1: { cellWidth: 30, halign: 'right' }, 2: { cellWidth: 45, halign: 'right' } } });
-    y = doc.lastAutoTable.finalY + 8;
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(navy[0], navy[1], navy[2]); doc.text('Detalhamento por paciente', L, y); y += 3;
+    y = tabela({ startY: y, theme: 'grid', body: info, styles: { fontSize: 9.5, cellPadding: 2, lineColor: PDF_COR.linha, lineWidth: 0.2, textColor: PDF_COR.tinta },
+      columnStyles: { 0: { cellWidth: 48, fontStyle: 'bold', fillColor: PDF_COR.lavanda, textColor: PDF_COR.indigo } } }) + 10;
+    y = titulo('Resumo', y);
+    var corpo = (r.resumo || []).map(function(z){ return [z.descricao, String(z.quantidade), brl(z.valor)]; });
+    corpo.push([{ content: 'TOTAL A RECEBER', styles: { fontStyle: 'bold', fillColor: PDF_COR.lavanda, textColor: PDF_COR.indigo } }, { content: '', styles: { fillColor: PDF_COR.lavanda } },
+                { content: brl(r.total), styles: { fontStyle: 'bold', fillColor: PDF_COR.lavanda, textColor: PDF_COR.indigo, halign: 'right' } }]);
+    y = tabela({ startY: y, theme: 'grid', head: [['Descrição', 'Quantidade', 'Valor Total']], body: corpo,
+      headStyles: { fillColor: PDF_COR.indigo, textColor: 255, fontStyle: 'bold', fontSize: 9.5 },
+      styles: { fontSize: 9.5, cellPadding: 2, lineColor: PDF_COR.linha, lineWidth: 0.2, textColor: PDF_COR.tinta },
+      columnStyles: { 0: { cellWidth: 98 }, 1: { cellWidth: 30, halign: 'right' }, 2: { cellWidth: 50, halign: 'right' } } }) + 10;
+    y = titulo('Detalhamento por paciente', y);
     var head = r.coluna_descricao ? [['Paciente', 'Data', 'Horário', 'Descrição', 'Status']] : [['Paciente', 'Data', 'Horário', 'Status']];
-    var det = (r.detalhe || []).map(function(x){
-      var st = { content: x.status, styles: { fontStyle: 'bold', textColor: x.status === 'Atendido' ? [31, 122, 58] : [176, 58, 46] } };
-      return r.coluna_descricao ? [x.paciente, dmy(x.data), x.horario, x.descricao || '', st] : [x.paciente, dmy(x.data), x.horario, st];
+    var det = (r.detalhe || []).map(function(z){
+      var st = { content: z.status, styles: { fontStyle: 'bold', textColor: z.status === 'Atendido' ? PDF_COR.verde : PDF_COR.vermelho } };
+      return r.coluna_descricao ? [z.paciente, dmy(z.data), z.horario, z.descricao || '', st] : [z.paciente, dmy(z.data), z.horario, st];
     });
-    var cols = r.coluna_descricao ? { 0: { cellWidth: 70 }, 1: { cellWidth: 24 }, 2: { cellWidth: 20 }, 3: { cellWidth: 30 }, 4: { cellWidth: 26 } }
-                                  : { 0: { cellWidth: 95 }, 1: { cellWidth: 28 }, 2: { cellWidth: 22 }, 3: { cellWidth: 25 } };
-    doc.autoTable({ startY: y, margin: { left: L, right: 20, bottom: 22 }, head: head, body: det, theme: 'grid',
-      headStyles: { fillColor: navy, textColor: 255, fontStyle: 'bold', fontSize: 9 },
-      styles: { fontSize: 8.5, cellPadding: 1.6, lineColor: [204, 204, 204], lineWidth: 0.2, textColor: 20 },
-      alternateRowStyles: { fillColor: [247, 249, 252] }, columnStyles: cols });
-    var pages = doc.internal.getNumberOfPages();
-    for(var i = 1; i <= pages; i++){
-      doc.setPage(i); doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor(110);
-      doc.text(doc.splitTextToSize('Documento interno de repasse. Atendido = sessão realizada (inclui lançamentos em aguardando). Falta = cancelamento, não comparecimento ou agendamento não realizado.', W), L, 285);
+    var cols = r.coluna_descricao ? { 0: { cellWidth: 70 }, 1: { cellWidth: 24 }, 2: { cellWidth: 20 }, 3: { cellWidth: 32 }, 4: { cellWidth: 32 } }
+                                  : { 0: { cellWidth: 96 }, 1: { cellWidth: 28 }, 2: { cellWidth: 22 }, 3: { cellWidth: 32 } };
+    y = tabela({ startY: y, theme: 'grid', head: head, body: det, headStyles: { fillColor: PDF_COR.indigo, textColor: 255, fontStyle: 'bold', fontSize: 9 },
+      styles: { fontSize: 8.5, cellPadding: 1.6, lineColor: PDF_COR.linha, lineWidth: 0.2, textColor: PDF_COR.tinta }, alternateRowStyles: { fillColor: [250, 249, 252] }, columnStyles: cols }) + 7;
+    if(y > 268){ doc.addPage(); y = cab(); }
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(8); pdfCor(doc, 'Text', PDF_COR.cinza);
+    doc.text(doc.splitTextToSize('Documento interno de repasse. Atendido = sessão realizada (inclui lançamentos em aguardando). Falta = cancelamento, não comparecimento ou agendamento não realizado.', L - M), M, y);
+    var n = doc.internal.getNumberOfPages(), agoraTxt = pdfData(new Date().toISOString()) + ' às ' + new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+    for(var i = 1; i <= n; i++){
+      doc.setPage(i); pdfCor(doc, 'Draw', PDF_COR.linha); doc.setLineWidth(0.2); doc.line(M, 283, L, 283);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); pdfCor(doc, 'Text', PDF_COR.cinza);
+      doc.text('Emitido em ' + agoraTxt + ' · Cortex · Centro Médico Judithe Ferreira', M, 288); doc.text('Página ' + i + ' de ' + n, L, 288, { align: 'right' });
     }
-    doc.save('Recibo ' + r.mes_nome.replace(' / ', ' ') + ' - ' + r.profissional + '.pdf');
+    doc.save('Recibo ' + String(r.mes_nome).replace(' / ', ' ') + ' - ' + r.profissional + '.pdf');
   }).catch(function(e){ alert('Não deu para gerar o PDF: ' + e.message); });
 }
 function carregaJsPdf(){
@@ -1081,7 +1121,7 @@ function admin(){
     var tenta = function(){
       var sn = $('#pf-adm-senha', m.el).value; if(!sn) return;
       $('#pf-adm-ok', m.el).disabled = true;
-      rpc('prof_admin_listar', { p_senha_admin: sn }).then(function(d){ adm.senha = sn; adm.dados = d; m.fecha(); desenhaAdmin(); })
+      rpc('prof_admin_listar', { p_senha_admin: sn }).then(function(d){ adm.senha = sn; adm.dados = d; m.fecha(); return juntaEmails().then(desenhaAdmin); })
         .catch(function(e){ erroEm($('#pf-adm-erro', m.el), humano(e)); $('#pf-adm-ok', m.el).disabled = false; });
     };
     $('#pf-adm-ok', m.el).onclick = tenta;
@@ -1107,7 +1147,7 @@ function bootstrapAdmin(){
 function carregaAdmin(){
   var host = document.getElementById('gv-conteudo'); if(!host) return;
   host.innerHTML = '<p class="gv-vazio">Carregando…</p>';
-  rpc('prof_admin_listar', { p_senha_admin: adm.senha }).then(function(d){ adm.dados = d; desenhaAdmin(); })
+  rpc('prof_admin_listar', { p_senha_admin: adm.senha }).then(function(d){ adm.dados = d; return juntaEmails().then(desenhaAdmin); })
     .catch(function(e){ if(e.message === 'SENHA_INVALIDA' || e.message === 'BLOQUEADO_TEMPORARIAMENTE'){ adm.senha = null; admin(); return; } host.innerHTML = '<p class="gv-vazio">⚠️ ' + esc(humano(e)) + '</p>'; });
 }
 function campo(id, label, tipo, valor, extra){
@@ -1120,8 +1160,9 @@ function desenhaAdmin(){
   host.innerHTML = '';
   var topo = document.createElement('div'); topo.className = 'oc-topo';
   topo.innerHTML = '<h2>Profissionais: acessos e configurações</h2>' +
-    '<p>Cada profissional entra na página de confirmação com a própria senha. Telefone é o que recebe os avisos de WhatsApp (só dígitos, com DDD). ' +
-    'Remover um acesso não apaga o histórico de semanas e pedidos.</p>' +
+    (adm.v3 ? '<p>Cada profissional entra em <b>profissionais.levsoul.com.br</b> com o e-mail e a própria senha. Esqueceu a senha? Use <b>Nova senha 0000</b>: ele entra com 0000 e cria outra na hora. ' +
+              'Telefone é o que recebe os avisos de WhatsApp (só dígitos, com DDD). Remover um acesso não apaga o histórico.</p>'
+            : '<p class="pf-adm-msg erro">Falta rodar no Supabase o SQL PROF v3.0 (entrada por e-mail). Sem ele, esta tela não mostra e-mail nem gera a senha provisória.</p>') +
     '<div class="pf-form"><button type="button" class="gv-btn" id="pf-adm-voltar">Voltar para a conferência</button>' +
     '<button type="button" class="gv-btn" id="pf-adm-recarregar">Atualizar</button>' +
     '<button type="button" class="gv-btn verde" id="pf-adm-repasse">Repasse: quanto cada um recebe</button>' +
@@ -1132,7 +1173,7 @@ function desenhaAdmin(){
   $('#pf-adm-repasse', topo).onclick = function(){ carregaRepasse(null); };
   $('#pf-adm-f5', topo).onclick = carregaF5;
 
-  var urlSugerida = P.url_pagina || (location.href.split('?')[0].split('#')[0] + '?conferir=1');
+  var urlSugerida = P.url_pagina || (SITE_PROF + '/');
   var grid = document.createElement('div'); grid.className = 'pf-adm-grid';
   grid.innerHTML =
     '<div class="pf-adm-card"><h3>Configurações do módulo</h3>' +
@@ -1217,19 +1258,19 @@ function desenhaAdmin(){
   var render = function(){
     var f = (adm.filtro || '').toLowerCase();
     var lista = profs.filter(function(p){ return !f || (p.nome_feegow || '').toLowerCase().indexOf(f) >= 0 || (p.nome_exibicao || '').toLowerCase().indexOf(f) >= 0; });
-    var h = '<table class="adm"><tr><th>Profissional (Feegow)</th><th>Consultas 90d</th><th>Acesso</th><th>Nome na página</th><th>Telefone</th><th>1º acesso</th><th>Semana da vez</th><th>Ações</th></tr>';
+    var h = '<table class="adm"><tr><th>Profissional (Feegow)</th><th>Consultas 90d</th><th>Acesso</th><th>Nome na página</th><th>Telefone</th><th>E-mail e senha</th><th>Semana da vez</th><th>Ações</th></tr>';
     if(!lista.length) h += '<tr><td colspan="8">Ninguém com esse nome.</td></tr>';
     lista.forEach(function(p){
       h += '<tr><td><b>' + esc(p.nome_feegow) + '</b>' + (p.situacao_feegow !== 'ativo' ? ' <span class="tag-sit tag-s1">' + esc(p.situacao_feegow) + '</span>' : '') + '</td>' +
         '<td>' + p.consultas_90d + ' <small>(' + p.unimed_90d + ' Unimed)</small></td>' +
         '<td>' + (p.tem_acesso ? (p.ativo ? '<span class="tag-sit" style="background:var(--ok-fundo);color:var(--ok)">sim</span>' : '<span class="tag-sit tag-s1">inativo</span>') + (p.bloqueado ? ' <span class="tag-sit tag-s0">bloqueado 15 min</span>' : '') : '<span class="tag-sit">não</span>') + '</td>' +
         '<td>' + esc(p.nome_exibicao || '—') + '</td><td>' + esc(p.telefone || '—') + '</td>' +
-        '<td style="font-size:12.5px">' + (p.senha_definida_em ? '<span class="tag-sit" style="background:var(--ok-fundo);color:var(--ok)">senha definida ' + fmtTs(p.senha_definida_em) + '</span>'
+        '<td style="font-size:12.5px">' + (adm.v3 ? celulaEntrada(p) : (p.senha_definida_em ? '<span class="tag-sit" style="background:var(--ok-fundo);color:var(--ok)">senha definida ' + fmtTs(p.senha_definida_em) + '</span>'
           : p.convite_token ? '<span class="tag-sit tag-s1">link gerado · vale até ' + fmtTs(p.convite_expira_em) + '</span>'
           : p.aguardando_1o_acesso ? '<span class="tag-sit tag-s0">link vencido — gere outro</span>'
-          : (p.tem_acesso ? '<small>senha criada pelo administrador</small>' : '—')) + '</td>' +
+          : (p.tem_acesso ? '<small>senha criada pelo administrador</small>' : '—'))) + '</td>' +
         '<td style="font-size:12.5px">' + (p.tem_acesso ? ((p.confirmou_em ? '<span class="tag-sit" style="background:var(--ok-fundo);color:var(--ok)">confirmou ' + fmtTs(p.confirmou_em) + '</span>' : '<span class="tag-sit">não confirmou</span>') + (p.teste_ate ? '<br><span class="tag-sit tag-s1">teste até ' + fmtTs(p.teste_ate) + '</span>' : '') + (p.ultimo_acesso_em ? '<br><small>último acesso ' + fmtTs(p.ultimo_acesso_em) + '</small>' : '')) : '—') + '</td>' +
-        '<td style="white-space:nowrap">' + '<button type="button" class="gv-btn verde mini" data-convite="' + p.profissional_id + '" title="Gera (ou copia) o link para o profissional escolher a própria senha">Link de acesso</button> ' + (p.tem_acesso
+        '<td style="white-space:nowrap">' + botoesEntrada(p) + (p.tem_acesso
           ? '<button type="button" class="gv-btn mini" data-edita="' + p.profissional_id + '">Editar</button> <button type="button" class="gv-btn mini" data-remove="' + p.profissional_id + '">Remover</button>' +
             (p.teste_ate ? ' <button type="button" class="gv-btn mini" data-teste="' + p.profissional_id + '" data-min="0">Fechar teste</button>' : ' <button type="button" class="gv-btn mini" data-teste="' + p.profissional_id + '" data-min="120" title="Abre a conferência agora para este profissional, por 2 horas, ignorando o domingo">Abrir p/ teste 2h</button>') +
             (p.confirmou_em ? ' <button type="button" class="gv-btn mini" data-desfaz="' + p.profissional_id + '" title="Apaga a confirmação (e a foto) desta semana para ele poder confirmar de novo">Desfazer confirmação</button>' : '')
@@ -1237,7 +1278,9 @@ function desenhaAdmin(){
     });
     tb.innerHTML = h + '</table>';
     Array.prototype.forEach.call(tb.querySelectorAll('button[data-edita]'), function(b){ b.onclick = function(){ editaAcesso(Number(b.getAttribute('data-edita'))); }; });
-    Array.prototype.forEach.call(tb.querySelectorAll('button[data-convite]'), function(b){ b.onclick = function(){ linkAcesso(Number(b.getAttribute('data-convite'))); }; });
+    Array.prototype.forEach.call(tb.querySelectorAll('button[data-msg]'), function(b){ b.onclick = function(){
+      var p = profDe(Number(b.getAttribute('data-msg'))); if(p) mostraAcesso(p, { email: p.email, provisoria_ate: p.provisoria_ate }); }; });
+    Array.prototype.forEach.call(tb.querySelectorAll('button[data-prov]'), function(b){ b.onclick = function(){ senhaProvisoria(Number(b.getAttribute('data-prov'))); }; });
     Array.prototype.forEach.call(tb.querySelectorAll('button[data-remove]'), function(b){ b.onclick = function(){ removeAcesso(Number(b.getAttribute('data-remove'))); }; });
     Array.prototype.forEach.call(tb.querySelectorAll('button[data-teste]'), function(b){ b.onclick = function(){
       rpc('prof_admin_abrir_teste', { p_senha_admin: adm.senha, p_profissional_id: Number(b.getAttribute('data-teste')), p_minutos: Number(b.getAttribute('data-min')) })
@@ -1250,7 +1293,108 @@ function desenhaAdmin(){
   render();
   $('#pf-adm-busca', sec).addEventListener('input', function(e){ adm.filtro = e.target.value; render(); });
 }
-/* ═══ 🔗 link de 1º acesso (convite) — v2.2 ═══ */
+/* ═══ PROF v3.0 — entrada por e-mail em profissionais.levsoul.com.br (24/10/2026) ═══
+   O profissional entra no site próprio com e-mail e senha. Aqui o administrador cuida do e-mail,
+   volta a senha para a provisória (0000, troca obrigatória no 1º acesso) e copia a mensagem pronta. */
+var SITE_PROF = 'https://profissionais.levsoul.com.br';
+function profDe(id){ return ((adm.dados && adm.dados.profissionais) || []).find(function(x){ return x.profissional_id === id; }); }
+function juntaEmails(){
+  adm.v3 = false;
+  return rpc('prof_admin_acessos_email', { p_senha_admin: adm.senha }).then(function(r){
+    var mapa = {}; (r.acessos || []).forEach(function(x){ mapa[x.profissional_id] = x; });
+    adm.senhaProv = r.senha_provisoria || '0000';
+    ((adm.dados && adm.dados.profissionais) || []).forEach(function(p){
+      var x = mapa[p.profissional_id] || {};
+      p.email = x.email || null; p.email_feegow = x.email_feegow || null; p.trocar_senha = !!x.trocar_senha;
+      p.provisoria_ate = x.provisoria_ate || null; p.tutorial_visto_em = x.tutorial_visto_em || null;
+    });
+    adm.v3 = true;
+  }).catch(function(){ adm.v3 = false; });   /* SQL v3.0 ainda não rodado: a tela segue como era */
+}
+function provVencida(p){ return !!(p.trocar_senha && p.provisoria_ate && new Date(p.provisoria_ate).getTime() < Date.now()); }
+function celulaEntrada(p){
+  if(!p.tem_acesso) return p.email_feegow ? '<small>Feegow: ' + esc(p.email_feegow) + '</small>' : '—';
+  var h = p.email ? '<span style="font-weight:600">' + esc(p.email) + '</span>' : '<span class="tag-sit tag-s0">sem e-mail: não consegue entrar</span>';
+  h += '<br>' + (p.trocar_senha
+    ? (provVencida(p) ? '<span class="tag-sit tag-s0">senha ' + esc(adm.senhaProv) + ' vencida: gere outra</span>'
+                      : '<span class="tag-sit tag-s1">senha provisória ' + esc(adm.senhaProv) + (p.provisoria_ate ? ' · vale até ' + fmtTs(p.provisoria_ate) : '') + '</span>')
+    : (p.senha_definida_em ? '<span class="tag-sit" style="background:var(--ok-fundo);color:var(--ok)">senha própria desde ' + fmtTs(p.senha_definida_em) + '</span>' : '<small>senha própria</small>'));
+  if(p.tem_acesso && !p.trocar_senha && !p.tutorial_visto_em) h += '<br><small>ainda não viu o passo a passo</small>';
+  return h;
+}
+function botoesEntrada(p){
+  if(!adm.v3 || !p.tem_acesso) return '';
+  var h = '';
+  if(p.trocar_senha && !provVencida(p) && p.email) h += '<button type="button" class="gv-btn verde mini" data-msg="' + p.profissional_id + '" title="Mensagem pronta com o endereço, o e-mail e a senha provisória">Mensagem de acesso</button> ';
+  h += '<button type="button" class="gv-btn mini" data-prov="' + p.profissional_id + '"' + (p.email ? ' title="Volta a senha para ' + esc(adm.senhaProv) + '; ele cria outra no primeiro acesso"' : ' disabled title="Cadastre o e-mail em Editar"') + '>Nova senha ' + esc(adm.senhaProv) + '</button> ';
+  return h;
+}
+function senhaProvisoria(id){
+  var p = profDe(id); if(!p) return;
+  if(!confirm('Voltar a senha de ' + (p.nome_exibicao || p.nome_feegow) + ' para ' + adm.senhaProv + '?\n\nA senha que ele usa hoje deixa de valer. No próximo acesso, ele entra com ' + adm.senhaProv + ' e cria outra.')) return;
+  rpc('prof_admin_senha_provisoria', { p_senha_admin: adm.senha, p_profissional_id: id })
+    .then(function(r){ carregaAdmin(); mostraAcesso(p, r); })
+    .catch(function(e){ alert(humano(e)); });
+}
+function horaBr(iso){
+  var t = new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', hour12: false }).split(':');
+  return t[1] === '00' ? Number(t[0]) + 'h' : Number(t[0]) + 'h' + t[1];
+}
+function quandoBr(iso){
+  var dia = new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long', day: '2-digit', month: '2-digit' });
+  var h = horaBr(iso);
+  return h === '12h' ? dia + ', ao meio-dia' : dia + ', às ' + h;
+}
+function diaSemanaBr(iso){ return new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long' }); }
+function diaData(iso){ return diaSemanaBr(iso) + ' (' + new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' }) + ')'; }
+function msgAcesso(nome, email, ate){
+  var J = (adm.dados && adm.dados.janela) || {};
+  var primeiro = String(nome || '').trim().split(/\s+/)[0] || ''; primeiro = primeiro.charAt(0).toUpperCase() + primeiro.slice(1).toLowerCase();
+  var hAbre = J.abre_em ? horaBr(J.abre_em) : '8h', hPrazo = J.prazo ? horaBr(J.prazo) : '22h';
+  var diaAbre = J.abre_em ? diaSemanaBr(J.abre_em) : 'segunda-feira', diaPrazo = J.prazo ? diaSemanaBr(J.prazo) : 'segunda-feira';
+  var rotina = 'toda ' + diaAbre + ', a partir das ' + hAbre + ', a agenda da semana anterior fica disponível, com prazo até ' +
+               (diaAbre === diaPrazo ? 'as ' + hPrazo + ' do mesmo dia.' : diaPrazo + ', às ' + hPrazo + '.');
+  var l = ['Olá, ' + primeiro + '! Tudo bem? 😊',
+    'A conferência da sua agenda agora tem um endereço só dos profissionais da clínica:\n👉 ' + SITE_PROF,
+    '*Para entrar*\n• E-mail: ' + email + '\n• Senha provisória: ' + (adm.senhaProv || '0000') + '\nNo primeiro acesso, você cria a sua senha e vê um passo a passo rápido de como tudo funciona.'];
+  if(J.periodo_especial && J.periodo_inicio && J.periodo_fim && J.abre_em && J.prazo){
+    l.push('*Desta vez é diferente*\nPara colocar a agenda em dia, nesta primeira vez você confere de uma vez os dias *' + ddmm(J.periodo_inicio) + ' a ' + ddmm(J.periodo_fim) +
+           '*. A conferência abre na *' + diaData(J.abre_em) + ', a partir das ' + hAbre + '*, e o prazo para confirmar é *' + diaData(J.prazo) + ', às ' + hPrazo + '*.');
+    l.push('*Depois, toda ' + diaAbre + '*\nA partir daí, a conferência passa a ser semanal: ' + rotina);
+  } else {
+    l.push('*Toda ' + diaAbre + '*\nA conferência é semanal: ' + rotina + (J.abre_em ? ' A próxima abre na ' + diaData(J.abre_em) + '.' : ''));
+  }
+  l.push('No fim de cada mês, a conferência dos últimos dias já abre no dia 1º, a partir das ' + hAbre + '. Para quem recebe repasse, é nessa confirmação que o recibo do mês sai, na hora.');
+  l.push('*Como conferir*\n1️⃣ Confira consulta por consulta: cada uma aparece como Atendido ou Não compareceu.\n' +
+         '2️⃣ Achou algo errado? Avise a recepção por aqui e *não confirme ainda*. A correção aparece no site até a manhã seguinte.\n' +
+         '3️⃣ Tudo certo? Toque em "Está tudo certo — confirmar", marque a declaração e tire uma selfie pelo celular. *A selfie é a sua assinatura.* ✅\n' +
+         '⚠️ Depois de confirmada, a agenda não muda mais. Sem confirmação até o prazo, ela segue para o faturamento como está.');
+  if(ate) l.push('A senha provisória vale até ' + quandoBr(ate) + '.');
+  l.push('Qualquer dúvida, é só chamar. 🤍');
+  return l.join('\n\n');
+}
+function mostraAcesso(p, r){
+  var nome = String(r.nome || p.nome_exibicao || p.nome_feegow || '').trim();
+  var msg = msgAcesso(nome, r.email || p.email, r.provisoria_ate);
+  var tel = String(r.telefone || p.telefone || '').replace(/\D/g, '');
+  var m = modal('Mensagem de acesso — ' + esc(nome),
+    '<p style="font-size:13.5px;color:#555;margin-bottom:8px">Mande pelo WhatsApp da clínica. ' +
+      (r.provisoria_ate ? 'A senha provisória vale até <b>' + fmtTs(r.provisoria_ate) + '</b>. ' : '') + 'No primeiro acesso, ele cria a própria senha.</p>' +
+    '<div class="fg"><label class="fl">Mensagem pronta</label><textarea class="fc" id="pf-ac-msg" rows="20" style="font-family:inherit;font-size:13px">' + esc(msg) + '</textarea></div>' +
+    '<p id="pf-ac-ok" style="display:none;color:var(--ok);font-size:13px">Copiado ✔</p>',
+    (tel ? '<a class="pf-btn" id="pf-ac-wa" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;text-decoration:none">Abrir no WhatsApp</a>' : '') +
+    '<button type="button" class="pf-btn pf-pri" id="pf-ac-cp">Copiar mensagem</button>');
+  var ta = $('#pf-ac-msg', m.el);
+  var wa = $('#pf-ac-wa', m.el);
+  var atualizaWa = function(){ if(wa) wa.href = 'https://wa.me/' + tel + '?text=' + encodeURIComponent(ta.value); };
+  atualizaWa(); ta.addEventListener('input', atualizaWa);
+  $('#pf-ac-cp', m.el).onclick = function(){
+    var feito = function(){ var ok = $('#pf-ac-ok', m.el); ok.style.display = 'block'; setTimeout(function(){ ok.style.display = 'none'; }, 2000); };
+    var manual = function(){ ta.focus(); ta.select(); try{ document.execCommand('copy'); feito(); }catch(e){ alert('Selecione o texto e copie (Ctrl+C).'); } };
+    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(ta.value).then(feito).catch(manual); else manual();
+  };
+}
+/* ═══ 🔗 link de 1º acesso (convite) — v2.2 · substituído pela entrada por e-mail (v3.0); fica só para quem ainda não rodou o SQL ═══ */
 function linkDoConvite(token){ return location.origin + location.pathname + '?conferir=1&convite=' + encodeURIComponent(token); }
 function linkAcesso(profId, forcarNovo){
   var p = (adm.dados.profissionais || []).find(function(x){ return x.profissional_id === profId; }); if(!p) return;
@@ -1320,21 +1464,35 @@ function editaAcesso(profId){
   var m = modal((novo ? 'Criar acesso — ' : 'Editar — ') + esc(p.nome_feegow),
     '<div class="fg"><label class="fl">Nome como aparece para o profissional</label><input type="text" class="fc" id="pf-e-nome" value="' + esc(p.nome_exibicao || p.nome_feegow) + '"></div>' +
     '<div class="fg"><label class="fl">Telefone (DDD + número, só dígitos)</label><input type="text" class="fc" id="pf-e-tel" inputmode="numeric" value="' + esc(p.telefone || '') + '" placeholder="62999990000"></div>' +
-    '<div class="fg"><label class="fl">' + (novo ? 'Senha' : 'Nova senha (vazio = mantém a atual)') + '</label><input type="password" class="fc" id="pf-e-s1" autocomplete="new-password"></div>' +
-    '<div class="fg"><label class="fl">Repita a senha</label><input type="password" class="fc" id="pf-e-s2" autocomplete="new-password"></div>' +
+    (adm.v3 ? '<div class="fg"><label class="fl">E-mail (é com ele que o profissional entra)</label><input type="email" class="fc" id="pf-e-email" value="' + esc(p.email || p.email_feegow || '') + '" placeholder="nome@exemplo.com" autocomplete="off"></div>' +
+              (novo ? '<p class="sub" style="margin:0 0 8px">O acesso nasce com a senha provisória ' + esc(adm.senhaProv || '0000') + '. Ao criar, aparece a mensagem pronta para mandar ao profissional.</p>' : '')
+            : '<div class="fg"><label class="fl">' + (novo ? 'Senha' : 'Nova senha (vazio = mantém a atual)') + '</label><input type="password" class="fc" id="pf-e-s1" autocomplete="new-password"></div>' +
+              '<div class="fg"><label class="fl">Repita a senha</label><input type="password" class="fc" id="pf-e-s2" autocomplete="new-password"></div>') +
     (novo ? '' : '<label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="pf-e-ativo"' + (p.ativo ? ' checked' : '') + '> acesso ativo</label>') +
     '<p class="pf-erro" id="pf-e-erro" style="display:none"></p>',
     '<button type="button" class="pf-btn" data-volta>Voltar</button><button type="button" class="pf-btn pf-pri" id="pf-e-ok">' + (novo ? 'Criar' : 'Salvar') + '</button>');
   $('[data-volta]', m.el).onclick = m.fecha;
   $('#pf-e-ok', m.el).onclick = function(){
-    var s1 = $('#pf-e-s1', m.el).value, s2 = $('#pf-e-s2', m.el).value, err = $('#pf-e-erro', m.el);
-    if(novo && s1.length < 4) return erroEm(err, 'Senha com pelo menos 4 caracteres.');
-    if(s1 !== s2) return erroEm(err, 'As senhas não conferem.');
-    var ativoEl = $('#pf-e-ativo', m.el);
+    var err = $('#pf-e-erro', m.el), ativoEl = $('#pf-e-ativo', m.el), args;
+    if(adm.v3){
+      var em = $('#pf-e-email', m.el).value.trim().toLowerCase();
+      if(!em) return erroEm(err, 'Sem e-mail o profissional não consegue entrar. Preencha o e-mail.');
+      args = { p_senha_admin: adm.senha, p_profissional_id: profId, p_nome: $('#pf-e-nome', m.el).value,
+               p_senha: null, p_telefone: $('#pf-e-tel', m.el).value, p_ativo: ativoEl ? ativoEl.checked : true, p_email: em };
+    } else {
+      var s1 = $('#pf-e-s1', m.el).value, s2 = $('#pf-e-s2', m.el).value;
+      if(novo && s1.length < 4) return erroEm(err, 'Senha com pelo menos 4 caracteres.');
+      if(s1 !== s2) return erroEm(err, 'As senhas não conferem.');
+      args = { p_senha_admin: adm.senha, p_profissional_id: profId, p_nome: $('#pf-e-nome', m.el).value,
+               p_senha: s1 || null, p_telefone: $('#pf-e-tel', m.el).value, p_ativo: ativoEl ? ativoEl.checked : true };
+    }
     $('#pf-e-ok', m.el).disabled = true;
-    rpc('prof_admin_salvar_acesso', { p_senha_admin: adm.senha, p_profissional_id: profId, p_nome: $('#pf-e-nome', m.el).value,
-        p_senha: s1 || null, p_telefone: $('#pf-e-tel', m.el).value, p_ativo: ativoEl ? ativoEl.checked : true })
-      .then(function(){ m.fecha(); carregaAdmin(); })
+    rpc('prof_admin_salvar_acesso', args)
+      .then(function(r){
+        m.fecha(); carregaAdmin();
+        if(adm.v3 && r && r.provisoria) mostraAcesso({ profissional_id: profId, nome_exibicao: $('#pf-e-nome', m.el).value || p.nome_feegow, telefone: $('#pf-e-tel', m.el).value },
+                                                     { email: args.p_email, provisoria_ate: r.provisoria_ate });
+      })
       .catch(function(e){ erroEm(err, humano(e)); $('#pf-e-ok', m.el).disabled = false; });
   };
 }
