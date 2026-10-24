@@ -19,7 +19,10 @@ var LAPI = (function () {
     }).then(function (r) {
       return r.text().then(function (t) {
         var j = null; try { j = JSON.parse(t); } catch (e) {}
-        if (!r.ok) throw new Error((j && (j.message || j.hint || j.details)) || ('O servidor respondeu ' + r.status + '.'));
+        if (!r.ok) {   /* status vai junto: 404 = função ainda não instalada no Supabase */
+          var er = new Error((j && (j.message || j.hint || j.details)) || ('O servidor respondeu ' + r.status + '.'));
+          er.status = r.status; throw er;
+        }
         if (j && j.ok === false) {
           var e = new Error(j.msg || j.erro || 'Não deu certo.'); e.codigo = j.erro;
           /* sessão caiu (12 h sem uso, saiu em outro lugar, PIN trocado pelo administrador): volta para a entrada */
@@ -105,6 +108,14 @@ var LAPI = (function () {
     usuarioCriar: function (nome, pin) { return comSessao('loja_usuario_criar', { p_nome: nome, p_pin: pin }); },
     usuarioSalvar: function (id, nome, pin) { return comSessao('loja_usuario_salvar', { p_id: id, p_nome: nome, p_pin: pin || null }); },
     usuarioAtivo: function (id, ativo) { return comSessao('loja_usuario_ativo', { p_id: id, p_ativo: !!ativo }); },
+
+    /* gaveta (FIN v1.5): contagem às cegas; o esperado nunca vem para o navegador */
+    gavetaEstado: function () { return comSessao('fin_gaveta_estado'); },
+    gavetaContar: function (tipo, cedulas) { return comSessao('fin_gaveta_contar', { p_tipo: tipo, p_cedulas: cedulas }); },
+    gavetaExplicar: function (id, texto) { return comSessao('fin_gaveta_explicar', { p_id: id, p_texto: texto }); },
+    gavetaMov: function (tipo, valor, obs) { return comSessao('fin_gaveta_mov', { p_tipo: tipo, p_valor: valor, p_obs: obs || null }); },
+    gavetaMovErro: function (id, motivo) { return comSessao('fin_gaveta_mov_erro', { p_id: id, p_motivo: motivo }); },
+    gavetaMovs: function (dias) { return comSessao('fin_gaveta_movs', { p_dias: dias || 31 }).then(function (j) { return j.movimentos; }); },
 
     /* migração do Firebase (com a senha de administração) */
     viradaImportar: function (senha, colecao, docs) { return chamar('loja_virada_importar', { p_senha: senha, p_colecao: colecao, p_docs: docs }); },
