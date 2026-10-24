@@ -1965,8 +1965,10 @@ function salvarCorteNota(ref, campos, aoSalvar){
 }
 
 /* ── ✂️ tela — design novo: a tesoura do dia ──
-   Gravações iguais às de antes: salvarCorteNota(ref, {tratamento:"excluido", indulto_ate:null})
-   e salvarCorteNota(ref, {tratamento:"indulto", indulto_ate, nota}) → corte_notas. */
+   Gravações: salvarCorteNota(ref, {tratamento:"excluido", indulto_ate:null}) → corte_notas.
+   v3.7: "Aguardar 20h" grava pela função corte_aguardar (CORTE_v2_2_aguardar.sql): o banco carimba o prazo
+   e recusa a segunda espera para a mesma consulta sem guia. O "Segurar o corte" (indulto) saiu da tela;
+   indulto antigo ainda aparece até vencer. */
 var CORTE_TXT = {
   cortar_hoje:       { label:"Cortar hoje", grupo:"Cortar hoje, até as 21h", cor:"#D70015", ordem:0, sub:"Última consulta viável: corte às 21h (sábado, 11h)",
                        acao:"Hoje é a última consulta que a cobertura alcança. Sem guia nova até as 21h (sábado, 11h), abrir o próximo agendamento no Feegow, apagar “este e os próximos” e assinar aqui." },
@@ -1978,18 +1980,32 @@ var CORTE_TXT = {
                        acao:"Alguém assinou “Excluí”, mas os futuros continuam no Feegow: provavelmente apagou só um. Abrir o Feegow e apagar “este e os próximos”." },
   excluido_conferir: { label:"Excluída, conferindo", grupo:"Excluída, conferindo", cor:"#C93400", ordem:4, sub:"Assinada: some quando o espelho confirmar",
                        acao:"A exclusão foi assinada. A linha some sozinha quando o espelho do Feegow confirmar que os futuros saíram." },
-  aguardando:        { label:"Aguardando guia", grupo:"Aguardando guia", cor:"#636366", ordem:5, sub:"Guia solicitada: prazo máximo de 2 dias",
+  em_espera:         { label:"Aguardando", grupo:"Aguardando", cor:"#636366", ordem:5, sub:"Guia a caminho: volta para a lista se não entrar no sistema",
+                       acao:"A recepção marcou que a guia está a caminho. Se ela não entrar no sistema até o fim do prazo, o paciente volta para a lista e aí é cortar: só se aguarda uma vez." },
+  aguardando:        { label:"Aguardando guia", grupo:"Aguardando guia", cor:"#636366", ordem:6, sub:"Guia solicitada: prazo máximo de 2 dias",
                        acao:"A guia foi solicitada e está segurando o corte por no máximo 2 dias. Venceu o prazo, corta." },
-  indulto:           { label:"Indulto ativo", grupo:"Indulto ativo", cor:"#636366", ordem:6, sub:"Corte segurado por alguns dias, assinado",
+  indulto:           { label:"Indulto ativo", grupo:"Indulto ativo", cor:"#636366", ordem:7, sub:"Corte segurado por alguns dias, assinado",
                        acao:"Alguém segurou o corte por alguns dias, com motivo registrado. Quando o indulto vence, o paciente volta para a tesoura." }
 };
 var MOTIVO_ROT = { guia_vencida:"Guia vencida", sessao_em_feriado:"Cai no feriado", sem_saldo_na_fila:"Fila passa do saldo", saldo_esgotado:"Saldo esgotado", sem_guia:"Sem guia" };
+/* v3.7: motivos da espera (os mesmos códigos que a função corte_aguardar aceita) */
+var ESPERA_MOT = [["guia_em_analise","Guia em análise na Unimed"],
+                  ["guia_autorizada","Guia autorizada, ainda não entrou no sistema"],
+                  ["validade_renovada","Validade renovada, ainda não entrou no sistema"]];
+function esperaMot(k){ var m = ESPERA_MOT.filter(function(x){ return x[0] === k; })[0]; return m ? m[1] : (k || ""); }
+/* horas da espera: vem da corte_fila (chave corte_espera_horas). Sem o SQL v2.2 no banco: null = sem botão */
+function hEsp(){ var r = (estado.corte || []).find(function(x){ return x.espera_horas != null; }); return r ? Number(r.espera_horas) : null; }
 function corteEst(c){ return c.apagou_incompleto ? "incompleto" : c.estado; }
-function corteTxt(e){ return CORTE_TXT[e] || { label:e, grupo:e, cor:"#636366", ordem:9, sub:"", acao:"" }; }
-function motivosTxt(t){ return String(t || "").split(" · ").filter(Boolean).map(function(m){ return MOTIVO_ROT[m] || m; }).join(" · "); }
+function corteTxt(e){
+  if(e === "em_espera"){ var t = Object.assign({}, CORTE_TXT.em_espera); t.label = t.grupo = "Aguardando " + (hEsp() || 20) + "h"; return t; }
+  return CORTE_TXT[e] || { label:e, grupo:e, cor:"#636366", ordem:9, sub:"", acao:"" };
+}
+function motivosTxt(t){ return String(t || "").split(" · ").filter(Boolean).map(function(m){ return MOTIVO_ROT[m] || (SIT[m] && SIT[m].rot) || m; }).join(" · "); }
 function corteAssinatura(c){
   if(c.tratamento === "indulto" && c.indulto_ate) return "Indulto até " + fmtData(c.indulto_ate) + (c.autora ? " · por " + c.autora : "") + (c.nota ? " · " + c.nota : "");
   if(c.tratamento === "excluido" && c.nota_atualizada_em) return "Assinada como excluída" + (c.autora ? " por " + c.autora : "") + " em " + fmtQuando(c.nota_atualizada_em).replace(" ", " às ");
+  if(c.estado === "em_espera") return "Volta " + fmtPrazo(c.aguardar_ate) + " se a guia não entrar · " + esperaMot(c.aguardar_motivo) + (c.autora ? " · por " + c.autora : "");
+  if(c.ja_esperou) return "Já aguardou (" + esperaMot(c.aguardar_motivo) + (c.autora ? ", por " + c.autora : "") + ") e a guia não entrou no sistema: agora é cortar";
   return "";
 }
 function corteOrdenada(){
@@ -2027,7 +2043,7 @@ function desenharCorte(){
   var topo = novo("div", "lista-topo");
   var seg = novo("div", "seg"); seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "Mostrar");
   var defs = [["todos","Todos","#AEAEB2"],["cortar_hoje","Cortar hoje",TOM.r],["cortar_agora","Cortar agora",TOM.r],["incompleto","Apagou incompleto",TOM.r]];
-  ["prazo_vencido","excluido_conferir","aguardando","indulto"].forEach(function(k){ if(cont[k] > 0) defs.push([k, CORTE_TXT[k].label, CORTE_TXT[k].cor]); });
+  ["prazo_vencido","excluido_conferir","em_espera","aguardando","indulto"].forEach(function(k){ if(cont[k] > 0) defs.push([k, corteTxt(k).label, corteTxt(k).cor]); });
   defs.forEach(function(d){
     var on = filtro === d[0];
     var b = botao(on ? "on" : "", '<span class="q" style="background:' + d[2] + '"></span>' + d[1] + ' <span class="n">' + (cont[d[0]] || 0) + '</span>',
@@ -2047,8 +2063,10 @@ function desenharCorte(){
   vis.forEach(function(c){
     var e = corteEst(c), S = corteTxt(e);
     if(grupo !== e){ grupo = e; corpo.appendChild(novo("div", "dia-cab", '<b>' + escapa(S.grupo) + '</b><span>' + (porEst[e] === 1 ? "1 paciente" : porEst[e] + " pacientes") + '</span>')); }
-    var sub = (e === "indulto" || e === "excluido_conferir") ? corteAssinatura(c) : motivosTxt(c.motivos);
-    var b = botao("linha" + (estado._corteAberta === c.oc_ref ? " aberta" : "") + (e === "indulto" ? " apagada" : ""),
+    var sub = (e === "indulto" || e === "excluido_conferir") ? corteAssinatura(c) :
+              e === "em_espera" ? "Volta " + fmtPrazo(c.aguardar_ate) + (c.autora ? " · " + c.autora : "") :
+              motivosTxt(c.motivos) + (c.ja_esperou ? " · já aguardou" : "");
+    var b = botao("linha" + (estado._corteAberta === c.oc_ref ? " aberta" : "") + (e === "indulto" || e === "em_espera" ? " apagada" : ""),
       '<span class="q"><span class="nm">' + escapa(c.paciente || "—") + '</span><span class="mt">' + escapa((ESP_ROT[c.especialidade] || c.especialidade || "—") + " · " + futSemCob(c.n_descobertos) + ": " + (c.datas_fmt || "—")) + '</span></span>' +
       '<span class="dir"><span class="tag" style="color:' + S.cor + '">' + escapa(S.label) + '</span>' + (sub ? '<span class="tr">' + escapa(sub) + '</span>' : '') + '</span>',
       function(){ abrirCorteItem(c.oc_ref); });
@@ -2063,9 +2081,9 @@ function desenharCorte(){
   pn.appendChild(novo("div", "painel-cab", '<h2 id="corte-sit">Situação</h2><span>' + (todas.length === 1 ? "1 paciente" : todas.length + " pacientes") + '</span>'));
   var contT = {}; Object.keys(CORTE_TXT).forEach(function(k){ contT[k] = 0; });
   todas.forEach(function(c){ contT[corteEst(c)] = (contT[corteEst(c)] || 0) + 1; });
-  ["cortar_hoje","prazo_vencido","cortar_agora","incompleto","excluido_conferir","aguardando","indulto"].forEach(function(k){
+  ["cortar_hoje","prazo_vencido","cortar_agora","incompleto","excluido_conferir","em_espera","aguardando","indulto"].forEach(function(k){
     if(!(contT[k] > 0 || k === "cortar_hoje" || k === "cortar_agora" || k === "aguardando")) return;
-    var S = CORTE_TXT[k];
+    var S = corteTxt(k);
     var b = botao("cat", '<span class="q" style="background:' + S.cor + '"></span><span class="t"><b>' + S.label + '</b><small>' + escapa(S.sub) + '</small></span><span class="n">' + contT[k] + '</span>' + ico(IC.dir, 16, 2),
       function(){ abrirCorteCat(k); });
     b.setAttribute("aria-haspopup", "dialog");
@@ -2075,7 +2093,8 @@ function desenharCorte(){
   lado.appendChild(novo("section", "painel nota-lado",
     '<h2>A tesoura do dia</h2><p>Quem está aqui <b>perdeu a cobertura</b>: ou hoje é a última consulta viável (corte às <b>21h</b>, sábado às <b>11h</b>), ou os próximos já estão sem guia.</p>' +
     '<p>O caminho: abrir o <b>próximo</b> agendamento no Feegow e apagar <b>“este e os próximos”</b>, nunca os anteriores. Depois assinar aqui em <b>Excluí no Feegow</b>.</p>' +
-    '<p class="cinza">A linha some sozinha quando o espelho confirmar. Aguardando guia = guia solicitada, prazo máximo de 2 dias; venceu, corta.</p>'));
+    '<p class="cinza">A linha some sozinha quando o espelho confirmar. Aguardando guia = guia solicitada, prazo máximo de 2 dias; venceu, corta.' +
+    (hEsp() ? ' Guia a caminho? <b>Aguardar ' + hEsp() + 'h</b> tira o paciente da lista; se a guia não entrar no sistema nesse prazo, ele volta, e aí é cortar (uma vez só).' : '') + '</p>'));
   wrap.appendChild(lado);
   main.appendChild(wrap);
   ajustaAltura();
@@ -2105,7 +2124,7 @@ function abrirCorteCat(k){
 }
 function abrirCorteItem(ref){
   if(!window.moldura) return;
-  var atual = ref, modo = "acoes", dias = 3, motivo = "", aviso = null;
+  var atual = ref, modo = "acoes", motEsp = null, aviso = null;
   /* v3.6: Anterior/Próxima andam na ordem da lista do momento em que a janela abriu. Assinar muda o estado do
      paciente (e o lugar dele na lista); antes disso o Próxima perdia a referência e travava. Quem chegar
      numa recarga entra no fim. "ultimo" segura o paciente na tela se ele sair da fila com a janela aberta. */
@@ -2115,7 +2134,14 @@ function abrirCorteItem(ref){
     document.querySelectorAll("#gv-conteudo .linha.aberta").forEach(function(x){ x.classList.remove("aberta"); });
     if(estado._corteAberta){ var r = document.querySelector('#gv-conteudo .linha[data-corte="' + CSS.escape(estado._corteAberta) + '"]'); if(r) r.classList.add("aberta"); }
   }
-  function ateIso(d){ var a = new Date(); a.setDate(a.getDate() + d); return a.getFullYear() + "-" + String(a.getMonth()+1).padStart(2,"0") + "-" + String(a.getDate()).padStart(2,"0"); }
+  function isoDia(a){ return a.getFullYear() + "-" + String(a.getMonth()+1).padStart(2,"0") + "-" + String(a.getDate()).padStart(2,"0"); }
+  function erroEspera(err){
+    var m = String((err && err.message) || "");
+    if(m.indexOf("CORTE_JA_ESPEROU") >= 0) return "Este paciente já aguardou por esta consulta sem guia: agora é cortar.";
+    if(m.indexOf("CORTE_SEM_ASSINATURA") >= 0) return "Entre com seu PIN primeiro: a espera é assinada.";
+    if(m.indexOf("CORTE_MOTIVO_INVALIDO") >= 0) return "Escolha o motivo da espera.";
+    return "Não consegui salvar. Recarregue a tela e tente de novo.";
+  }
   /* vizinhos pela ordem guardada: o mais próximo antes/depois que ainda está na lista; i = lugar na lista (-1 = saiu) */
   function vizSeq(L, r){
     var k = seq.indexOf(r);
@@ -2132,6 +2158,7 @@ function abrirCorteItem(ref){
     return { i: pos, ant: ant, prox: prox };
   }
   function pinta(){
+    var rol = P.corpo.scrollTop, mesmo = !!(ultimo && ultimo.oc_ref === atual);   /* v3.7: redesenhar o mesmo paciente não volta a rolagem pro topo */
     var L = corteVisiveis();
     L.forEach(function(x){ if(seq.indexOf(x.oc_ref) < 0) seq.push(x.oc_ref); });
     var i = L.findIndex(function(x){ return x.oc_ref === atual; });
@@ -2185,11 +2212,18 @@ function abrirCorteItem(ref){
         if(!autora()){ aviso = "Entre com seu PIN primeiro: a assinatura precisa de nome."; pinta(); return; }
         modo = "confirma"; aviso = null; pinta();
       }));
-      lb.appendChild(botao("btn btn-s", "Segurar o corte", function(){
-        if(!autora()){ aviso = "Entre com seu PIN primeiro: o indulto é assinado."; pinta(); return; }
-        modo = "indulto"; dias = 3; motivo = ""; aviso = null; pinta();
-      }));
       ac.appendChild(lb);
+      /* v3.7: guia a caminho → Aguardar (uma vez só por consulta sem guia; sem o SQL v2.2 o botão não aparece) */
+      if(hEsp() && !c.ja_esperou && (e === "cortar_hoje" || e === "cortar_agora" || e === "prazo_vencido")){
+        var re = novo("span", "pp-rot", "Guia a caminho?"); re.style.marginTop = "10px";
+        ac.appendChild(re);
+        var le = novo("div", "pp-adm-bt");
+        le.appendChild(botao("btn btn-s", "Aguardar " + hEsp() + "h", function(){
+          if(!autora()){ aviso = "Entre com seu PIN primeiro: a espera é assinada."; pinta(); return; }
+          modo = "espera"; motEsp = null; aviso = null; pinta();
+        }));
+        ac.appendChild(le);
+      }
     } else if(modo === "confirma"){
       ac.classList.add("pp-confirma");
       ac.appendChild(novo("span", "pp-txt", "Confirmar: os agendamentos futuros de <b>" + escapa(c.paciente) + "</b> (" + escapa(ESP_ROT[c.especialidade] || c.especialidade || "—") + ") foram apagados no Feegow?"));
@@ -2205,34 +2239,46 @@ function abrirCorteItem(ref){
       lc.appendChild(bs);
       ac.appendChild(lc);
     } else {
+      /* v3.7: Aguardar — motivo com um clique; quem carimba o prazo é o banco (função corte_aguardar) */
       ac.classList.add("pp-confirma");
-      ac.appendChild(novo("span", "pp-rot", "Não cortar por quantos dias?"));
-      var st = novo("div", "passo");
-      var bm = botao("btn btn-s", "−", function(){ dias = Math.max(1, dias - 1); pinta(); }); bm.setAttribute("aria-label", "Menos um dia"); bm.disabled = dias <= 1;
-      var bp = botao("btn btn-s", "+", function(){ dias = Math.min(14, dias + 1); pinta(); }); bp.setAttribute("aria-label", "Mais um dia"); bp.disabled = dias >= 14;
-      st.appendChild(bm); st.appendChild(novo("b", "passo-n", String(dias))); st.appendChild(bp);
-      st.appendChild(novo("span", "cinza", "De 1 a 14 dias · segura até " + fmtData(ateIso(dias)).slice(0, 5)));
-      ac.appendChild(st);
-      var mi = novo("input", "fc"); mi.placeholder = "Motivo do indulto (fica registrado)"; mi.value = motivo;
-      mi.addEventListener("input", function(){ motivo = mi.value; });
-      ac.appendChild(mi);
-      var li = novo("div", "pp-adm-bt");
-      li.appendChild(botao("btn btn-s", "Cancelar", function(){ modo = "acoes"; pinta(); }));
-      var bi = botao("btn btn-p", "Segurar por " + dias + (dias === 1 ? " dia" : " dias"), function(){
-        bi.disabled = true; bi.textContent = "Salvando…";
-        salvarCorteNota(c.oc_ref, { tratamento: "indulto", indulto_ate: ateIso(dias), nota: motivo || "" }, function(ok){
-          modo = "acoes"; aviso = ok ? "ok:Indulto registrado." : "Não consegui salvar. Tente de novo.";
-          if(P.aberto) pinta();
-        });
+      var h = hEsp() || 20, volta = new Date(Date.now() + h * 3600 * 1000);
+      ac.appendChild(novo("span", "pp-rot", "Por que aguardar?"));
+      var ops = novo("div", "pp-opcoes"); ops.style.gridTemplateColumns = "1fr";
+      ops.setAttribute("role", "group"); ops.setAttribute("aria-label", "Por que aguardar?");
+      ESPERA_MOT.forEach(function(m){
+        var on = motEsp === m[0];
+        var bo = botao("pp-op" + (on ? " on" : ""), '<span class="cx">' + (on ? ico(IC.ok, 12, 3, "#FFFFFF") : "") + '</span>' + escapa(m[1]), function(){ motEsp = m[0]; pinta(); });
+        bo.setAttribute("aria-pressed", on ? "true" : "false");
+        ops.appendChild(bo);
       });
-      li.appendChild(bi);
-      ac.appendChild(li);
+      ac.appendChild(ops);
+      ac.appendChild(novo("span", "pp-txt", "O paciente sai da lista por " + h + " horas. Se a guia não entrar no sistema até <b>" + escapa(fmtPrazo(volta)) +
+        "</b>, ele volta, e aí é cortar: só se aguarda uma vez."));
+      if(c.primeiro_descoberto && c.primeiro_descoberto <= isoDia(volta))
+        ac.appendChild(novo("span", "pp-txt", '<b style="color:#D70015">Atenção:</b> a próxima consulta sem guia é ' + escapa(fmtData(c.primeiro_descoberto).slice(0, 5)) +
+          ', dentro desse prazo. Se a guia não entrar até lá, o paciente pode ser atendido sem guia.'));
+      var lw = novo("div", "pp-adm-bt");
+      lw.appendChild(botao("btn btn-s", "Cancelar", function(){ modo = "acoes"; motEsp = null; pinta(); }));
+      var bw = botao("btn btn-p", "Aguardar " + h + "h", function(){
+        if(!motEsp) return;
+        bw.disabled = true; bw.textContent = "Salvando…";
+        fx4Rpc("corte_aguardar", { p_referencia: c.oc_ref, p_motivo: motEsp, p_primeiro: c.primeiro_descoberto, p_autora: autora() })
+          .then(function(r){
+            modo = "acoes"; motEsp = null;
+            aviso = "ok:Aguardando até " + fmtPrazo((r && r.aguardar_ate) || volta) + ". Se a guia entrar no sistema, o paciente sai da fila sozinho.";
+          }, function(err){ modo = "acoes"; aviso = erroEspera(err); })
+          .then(function(){ loadCorte(); if(P.aberto) pinta(); });
+      });
+      bw.disabled = !motEsp;
+      lw.appendChild(bw);
+      ac.appendChild(lw);
     }
     P.corpo.appendChild(ac);
     if(aviso){
       var ok = aviso.indexOf("ok:") === 0;
       P.corpo.appendChild(novo("div", "pp-salvo", ico(ok ? IC.ok : IC_ALERTA, 14, 2.2, ok ? "#248A3D" : "#D70015") + '<span style="color:' + (ok ? "#248A3D" : "#D70015") + '">' + escapa(ok ? aviso.slice(3) : aviso) + '</span>'));
     }
+    P.corpo.scrollTop = mesmo ? rol : 0;
     P.rodape.hidden = false; P.rodape.innerHTML = "";
     var V = vizSeq(L, c.oc_ref);
     var bA = botao("btn btn-s", ico(IC.esq, 16, 2.2) + "Anterior", function(){ if(V.ant){ atual = V.ant.oc_ref; modo = "acoes"; aviso = null; pinta(); } }); bA.disabled = !V.ant;
