@@ -25,6 +25,7 @@ var moldura = (function () {
     exportar: 'M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14',
     cfg: 'M4 7h9M17 7h3M15 5v4M4 17h3M11 17h9M9 15v4',
     dono: 'M4 8.5l4 3.5 4-6.5 4 6.5 4-3.5-1.8 10H5.8z',
+    extrato: 'M6 3.5h12v17l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4-2 1.4zM9 8h6M9 11.5h6M9 15h3.5',
     venda: 'M6 8h12l-1 12.5H7zM9 8V6.5a3 3 0 0 1 6 0V8',
     fixar: 'M4 5h16v14H4zM9.5 5v14',
     sair: 'M10 4.5H6.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2H10M14.5 8l4 4-4 4M18.5 12h-9',
@@ -55,6 +56,7 @@ var moldura = (function () {
     historico:     { s: 'historico', secao: 'Lojinha', titulo: 'Histórico' },
     venda:         { s: 'venda',     secao: 'Lojinha', titulo: 'Nova venda', semFab: true },
     profissionais: { s: 'profissionais', secao: 'Lojinha', titulo: 'Profissionais', menu: 'notinhas' },
+    extrato:       { s: 'financeiro', secao: 'Financeiro', titulo: 'Extrato' },   /* FIN v1.3: só o administrador, por enquanto */
     visao:         { s: 'dashboard', secao: 'Administração', titulo: 'Visão geral' },
     posicao:       { s: 'posicao',   secao: 'Administração', titulo: 'Estoque atual' },
     exportar:      { s: 'exportar',  secao: 'Administração', titulo: 'Exportar' },
@@ -72,6 +74,7 @@ var moldura = (function () {
       ['malotes', 'Malotes', 'gv-b-malotes']]],
     ['Lojinha', [['notinhas', 'Notinhas'], ['caixa', 'Caixa'], ['estoque', 'Estoque'], ['historico', 'Histórico']]],
     ['Profissionais', [['conferencia', 'Conferência', 'gv-b-prof', true]]],
+    ['Financeiro', [['extrato', 'Extrato']], true],
     ['Administração', [['visao', 'Visão geral'], ['posicao', 'Estoque atual'], ['exportar', 'Exportar'], ['cfg', 'Configurações'],
       ['dono', 'Dono', null, false, 'gv-aba-dono']], true]
   ];
