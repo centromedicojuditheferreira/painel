@@ -16,11 +16,13 @@ var GAVETA = (function () {
   var TZ = 'America/Sao_Paulo';
   var CEDULAS = [200, 100, 50, 20, 10, 5, 2], MOEDAS = [1, 0.5, 0.25, 0.1, 0.05];
   var RITMO = 60 * 1000, RITMO_CONFERINDO = 20 * 1000, RITMO_ESCONDIDO = 3 * 60 * 1000;
+  var OCIOSO = 60 * 60 * 1000;   /* 1 h sem mexer no Cortex: para de perguntar, e a sessão volta a vencer sozinha como antes */
   var SETA = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg>';
   var SEM = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
   var st = {
     estado: null, instalada: true, timer: null, pedido: 0,
+    ativo: false, dormindo: false, mexeu: Date.now(), diaEntrada: null,   /* dia da entrada: virou o dia, a secretária entra de novo */
     vistos: {},                     /* recontar/explicar já abertos sozinhos: não reabre a cada leitura */
     loPainel: null, enviouNaEntrada: false,
     dono: null, donoCarregando: false, donoErro: '', portaErro: '', portaOcupada: false, pedidoDono: 0,
@@ -134,7 +136,7 @@ var GAVETA = (function () {
   function naEntrada(u, seguir) {
     if (!window.LAPI || !LAPI.token() || !caixa) { seguir(); return; }
     LAPI.gavetaEstado().then(function (e) {
-      st.instalada = true; st.estado = e;
+      st.instalada = true; st.estado = e; st.diaEntrada = e && e.hoje;
       var p = e && e.precisa;
       if (p && (p.tipo === 'chegada' || p.tipo === 'recontar')) { painelEntrada(u, p, seguir); return; }
       seguir();
@@ -167,11 +169,11 @@ var GAVETA = (function () {
       if (ocupado) return;
       if (g.centavos() === 0 && !zero) { zero = true; erroLo('A gaveta está vazia? Se estiver, toque em Enviar contagem de novo.'); return; }
       ocupado = true; ok.classList.add('aguarde'); erroLo(''); g.travar(true);
-      LAPI.gavetaContar('chegada', g.cedulas()).then(function () {   /* recontagem: o servidor usa a contagem aberta */
+      LAPI.gavetaContar(recontar ? (p.contagem || 'chegada') : 'chegada', g.cedulas()).then(function () {   /* recontagem: do mesmo tipo da que não bateu */
         limparLo(); st.enviouNaEntrada = true; seguir();
       }, function (er) {
         ocupado = false; ok.classList.remove('aguarde'); g.travar(false);
-        if (er.codigo === 'JA_CONTOU' || er.codigo === 'CONFERINDO') { limparLo(); seguir(); return; }
+        if (er.codigo === 'JA_CONTOU') { limparLo(); seguir(); return; }
         erroLo(er.message || String(er));
       });
     }
@@ -180,6 +182,7 @@ var GAVETA = (function () {
   /* ── dentro do Cortex: leitura periódica, quadrados no topo e janelas ── */
   function iniciar() {
     parar();
+    st.ativo = true; st.dormindo = false; st.mexeu = Date.now();
     if (!st.instalada || !window.LAPI || !LAPI.token()) { chips(); return; }
     if (st.enviouNaEntrada) {
       st.enviouNaEntrada = false;
@@ -190,13 +193,17 @@ var GAVETA = (function () {
   function parar() { if (st.timer) { clearTimeout(st.timer); st.timer = null; } }
   function agendar() {
     parar();
+    if (Date.now() - st.mexeu > OCIOSO) { st.dormindo = true; return; }   /* ninguém mexe há 1 h: volta quando mexerem */
     st.timer = setTimeout(atualizar, document.hidden ? RITMO_ESCONDIDO : (temConferindo() ? RITMO_CONFERINDO : RITMO));
   }
   function atualizar() {
     if (!st.instalada || !window.LAPI || !LAPI.token()) return Promise.resolve();
+    st.dormindo = false;
     var meu = ++st.pedido;
     return LAPI.gavetaEstado().then(function (e) {
       if (meu !== st.pedido || !LAPI.token()) return;
+      if (!st.diaEntrada && e && e.hoje) st.diaEntrada = e.hoje;
+      if (e && e.hoje && st.diaEntrada && e.hoje !== st.diaEntrada && !e.admin) { virouODia(); return; }
       var antes = st.estado;
       st.estado = e;
       notar(antes, e);
@@ -209,7 +216,23 @@ var GAVETA = (function () {
       agendar();
     });
   }
+  /* virou o dia com a secretária ainda dentro: volta para a entrada, para quem chegar entrar com o próprio PIN e contar */
+  function virouODia() {
+    if (typeof doLogout !== 'function') return;
+    Promise.resolve(doLogout()).then(function () {
+      setTimeout(function () {
+        var err = document.getElementById('lo-err');
+        if (err) { err.textContent = 'Virou o dia. Entre com o seu PIN para começar e contar a gaveta.'; err.style.display = 'block'; }
+      }, 0);
+    });
+  }
   document.addEventListener('visibilitychange', function () { if (!document.hidden && st.timer && window.LAPI && LAPI.token()) atualizar(); });
+  ['pointerdown', 'keydown', 'touchstart', 'wheel'].forEach(function (ev) {
+    document.addEventListener(ev, function () {
+      st.mexeu = Date.now();
+      if (st.dormindo && st.ativo && window.LAPI && LAPI.token()) atualizar();
+    }, { capture: true, passive: true });
+  });
 
   /* o que mudou desde a última leitura: "bateu" vira aviso; "conte de novo" e "diferença" abrem a janela uma vez */
   function notar(antes, e) {
@@ -218,6 +241,7 @@ var GAVETA = (function () {
     (antes.contagens || []).forEach(function (c) { velhos[c.id] = c.situacao; });
     (e.contagens || []).forEach(function (c) {
       if (velhos[c.id] === 'aguardando' && (c.situacao === 'ok' || c.situacao === 'abertura')) avisa('Gaveta conferida: a contagem das ' + c.hora + ' bateu.');
+      if (velhos[c.id] === 'aguardando' && c.situacao === 'inconclusiva') avisa('A contagem das ' + c.hora + ' não pôde ser conferida (o Feegow foi lido tarde). A próxima confere.');
     });
     var p = e.precisa;
     if (p && (p.tipo === 'recontar' || p.tipo === 'explicar') && !st.vistos[p.tipo + p.id] && !document.querySelector('.pop')) {
@@ -235,7 +259,8 @@ var GAVETA = (function () {
         L.push({ chave: 'gaveta-recontar', rot: 'Gaveta: contar de novo', dica: 'A contagem das ' + p.hora + ' não bateu. Conte de novo.',
                  acao: function () { abrirContagem('recontar'); } });
       } else if (p && p.tipo === 'explicar') {
-        L.push({ chave: 'gaveta-explicar', rot: 'Gaveta: diferença', dica: 'Veja a diferença e escreva o que você encontrou.',
+        L.push({ chave: 'gaveta-explicar', rot: 'Gaveta: diferença',
+                 dica: p.diferenca == null ? 'A contagem não bateu. Escreva o que houve.' : 'Veja a diferença e escreva o que você encontrou.',
                  acao: function () { abrirExplicar(st.estado && st.estado.precisa); } });
       } else if (p && p.tipo === 'chegada') {
         L.push({ chave: 'gaveta-chegada', rot: 'Contar a gaveta', dica: 'Você ainda não contou a gaveta hoje.',
@@ -272,12 +297,13 @@ var GAVETA = (function () {
       if (ocupado) return;
       if (g.centavos() === 0 && !zero) { zero = true; mostrar('A gaveta está vazia? Se estiver, toque em Enviar contagem de novo.'); return; }
       ocupado = true; ok.disabled = true; ok.textContent = 'Enviando…'; aviso.hidden = true; g.travar(true);
-      LAPI.gavetaContar(fechar ? 'fechamento' : 'chegada', g.cedulas()).then(function () {
+      var tipoEnvio = fechar ? 'fechamento' : (recontar ? ((p && p.contagem) || 'chegada') : 'chegada');   /* recontagem: do mesmo tipo da que não bateu */
+      LAPI.gavetaContar(tipoEnvio, g.cedulas()).then(function () {
         P.fechar(); avisa('Contagem enviada. O Cortex confere em alguns minutos.'); atualizar();
       }, function (er) {
         ocupado = false; ok.disabled = false; ok.textContent = 'Enviar contagem'; g.travar(false);
         mostrar(er.message || String(er));
-        if (er.codigo === 'JA_FECHADA' || er.codigo === 'JA_CONTOU' || er.codigo === 'CONFERINDO') atualizar();
+        if (er.codigo === 'JA_FECHADA' || er.codigo === 'JA_CONTOU' || er.codigo === 'RECONTAR_PRIMEIRO') atualizar();
       });
     }
   }
@@ -288,12 +314,15 @@ var GAVETA = (function () {
     var hoje = st.estado && st.estado.hoje;
     var quando = (p.dia && p.dia !== hoje ? ddmm(p.dia) + ' às ' : 'às ') + p.hora;
     var P = moldura.pop({ largura: '560px', titulo: 'Gaveta', classe: 'gv-pop' });
-    P.corpo.appendChild(el('div', 'pp-cab', '<span class="pp-alerta">A gaveta não bateu</span><h2 class="gv-dif">' + esc(dif(p.diferenca)) + '</h2>' +
+    var semValor = p.diferenca == null;   /* não contou de novo: a diferença fica só com a administração */
+    P.corpo.appendChild(el('div', 'pp-cab', '<span class="pp-alerta">A gaveta não bateu</span><h2 class="gv-dif">' + esc(semValor ? 'Não bateu' : dif(p.diferenca)) + '</h2>' +
       '<span class="pp-sub">' + esc('Contagem ' + (p.contagem === 'fechamento' ? 'de fechamento' : 'de chegada') + ' ' + quando +
         (p.sem_recontagem ? ', sem a segunda contagem.' : ', depois de contar duas vezes.')) + '</span>'));
-    P.corpo.appendChild(el('div', 'pp-caixa', '<span class="pp-rot">O que conferir</span><span class="pp-txt">' + esc(Number(p.diferenca) >= 0
-      ? 'Sobrou dinheiro. Veja se algum pagamento em dinheiro ficou sem lançar no Feegow ou na conveniência, ou se foi lançado como Pix ou cartão.'
-      : 'Faltou dinheiro. Veja se algum lançamento em dinheiro era Pix ou cartão, se algo foi lançado duas vezes ou se o troco saiu errado.') +
+    P.corpo.appendChild(el('div', 'pp-caixa', '<span class="pp-rot">O que conferir</span><span class="pp-txt">' + esc(semValor
+      ? 'A gaveta não foi contada de novo a tempo, então o valor da diferença ficou só com a administração. Veja se algum lançamento em dinheiro ficou errado, sem lançar ou lançado duas vezes.'
+      : (Number(p.diferenca) >= 0
+        ? 'Sobrou dinheiro. Veja se algum pagamento em dinheiro ficou sem lançar no Feegow ou na conveniência, ou se foi lançado como Pix ou cartão.'
+        : 'Faltou dinheiro. Veja se algum lançamento em dinheiro era Pix ou cartão, se algo foi lançado duas vezes ou se o troco saiu errado.')) +
       '</span><span class="pp-txt">' + esc('A administração já foi avisada. Escreva abaixo o que você encontrou; se corrigir o lançamento, a próxima contagem confirma sozinha.') + '</span>'));
     var ta = document.createElement('textarea'); ta.className = 'fc'; ta.rows = 4; ta.maxLength = 1000; ta.placeholder = 'O que você encontrou?';
     ta.setAttribute('aria-label', 'O que você encontrou');
@@ -354,7 +383,8 @@ var GAVETA = (function () {
       case 'recontar': return { rot: 'conte de novo', cls: 'pend', sub: 'Não bateu' };
       case 'recontada': return { rot: 'não bateu', cls: 'espera', sub: 'Você contou de novo' };
       case 'superada': return { rot: 'resolvido', cls: 'espera', sub: 'Outra contagem bateu depois' };
-      case 'pendencia': return { rot: dif(c.diferenca), cls: c.fechada ? 'espera' : 'pend',
+      case 'inconclusiva': return { rot: 'não deu para conferir', cls: 'espera', sub: 'O Feegow foi lido tarde' };
+      case 'pendencia': return { rot: c.diferenca == null ? 'não bateu' : dif(c.diferenca), cls: c.fechada ? 'espera' : 'pend',
                                  sub: c.fechada ? 'Resolvida' : (c.explicada ? 'Explicação enviada' : 'Escreva o que você encontrou') };
     }
     return { rot: c.situacao, cls: 'espera', sub: '' };
@@ -391,7 +421,7 @@ var GAVETA = (function () {
     else if (p && p.tipo === 'chegada') a.appendChild(bt('btn btn-p', 'Contar a gaveta', function () { abrirContagem('chegada'); }));
     if (e && f.feito) a.appendChild(el('p', 'gv-nota', esc('A gaveta foi fechada hoje às ' + f.hora + ' por ' + f.quem + '.')));
     else if (e) {
-      a.appendChild(bt('btn btn-s', 'Fechar a gaveta', function () { abrirContagem('fechamento'); }));
+      if (!(p && p.tipo === 'recontar')) a.appendChild(bt('btn btn-s', 'Fechar a gaveta', function () { abrirContagem('fechamento'); }));   /* com "conte de novo" aberto, recontar primeiro */
       a.appendChild(el('p', 'gv-nota', esc('Quem fecha a clínica conta a gaveta antes de sair. A partir das ' + (f.botao || '21:00') + ' aparece o quadrado no topo.')));
     }
     if (!p && e && !f.feito) a.insertBefore(el('p', 'gv-nota', 'Nada pendente para você agora.'), a.firstChild);
@@ -401,7 +431,7 @@ var GAVETA = (function () {
       '<li>Cada secretária conta a gaveta quando chega; quem fecha conta de novo antes de sair.</li>' +
       '<li>Digite quantas cédulas e moedas há de cada valor. Você não vê quanto deveria ter.</li>' +
       '<li>O Cortex confere sozinho em alguns minutos, depois da próxima leitura do Feegow.</li>' +
-      '<li>Não bateu: conte de novo. Não bateu de novo: você vê a diferença e escreve o que encontrou.</li></ul>'));
+      '<li>Não bateu: conte de novo, em até ' + esc(String((e && e.recontar_min) || 30)) + ' minutos. Não bateu de novo: você vê a diferença e escreve o que encontrou.</li></ul>'));
     return l;
   }
 
@@ -451,7 +481,8 @@ var GAVETA = (function () {
     if (f.feito) a.appendChild(el('p', 'gv-nota', esc('A gaveta foi fechada às ' + f.hora + ' por ' + f.quem + '.')));
     else if (e) {
       a.appendChild(el('p', 'gv-nota', esc('Ainda não fechada. Se ninguém fechar até as ' + (f.aviso || '22:00') + ', o aviso vai para o Telegram.')));
-      a.appendChild(bt('btn btn-s', 'Fechar a gaveta', function () { abrirContagem('fechamento'); }));
+      if (e.precisa && e.precisa.tipo === 'recontar') a.appendChild(bt('btn btn-s', 'Contar de novo', function () { abrirContagem('recontar'); }));
+      else a.appendChild(bt('btn btn-s', 'Fechar a gaveta', function () { abrirContagem('fechamento'); }));
     }
     fc.appendChild(a);
     l.appendChild(fc);
@@ -593,6 +624,7 @@ var GAVETA = (function () {
       case 'recontar': return { rot: 'não bateu · esperando recontagem', cls: 'espera' };
       case 'recontada': return { rot: 'não bateu · recontou', cls: 'espera' };
       case 'superada': return { rot: 'não bateu · outra contagem bateu depois', cls: 'espera' };
+      case 'inconclusiva': return { rot: 'sem conferência · ' + (h.motivo === 'abertura_com_pagamento' ? 'dinheiro do Feegow na hora da 1ª contagem' : 'o robô leu o Feegow tarde'), cls: 'espera' };
       case 'pendencia': return h.fechada_em ? { v: dif(h.diferenca), rot: 'fechada: ' + (COMO[h.fechada_como] || h.fechada_como), cls: 'espera', vcls: '' }
                                           : { v: dif(h.diferenca), rot: 'pendência' + (h.sem_recontagem ? ' · sem recontagem' : ''), cls: 'pend', vcls: 'fin-pend-v' };
     }
@@ -677,6 +709,7 @@ var GAVETA = (function () {
   /* ── saída ── */
   function sair() {
     parar();
+    st.ativo = false; st.dormindo = false; st.diaEntrada = null;
     st.pedido++; st.pedidoDono++;
     st.estado = null; st.vistos = {}; st.dono = null; st.movs = null; st.movsErro = ''; st.donoErro = ''; st.portaErro = '';
     st.enviouNaEntrada = false; st.verTodos = false; st.senhaLocal = null;
