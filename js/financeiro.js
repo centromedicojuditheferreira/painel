@@ -5,9 +5,10 @@
        que confere a senha de administração no servidor (as tabelas fin_* seguem fechadas);
      · vendas e pagamentos de notinha da conveniência, lidos do Firebase (só leitura)
        até a lojinha ir para o Supabase.
-   Sem totais: é a tela que as secretárias vão usar depois. Cada linha mostra a prova
-   de que o dinheiro entrou (Pix → banco, cartão → Cielo, dinheiro → contagem da gaveta);
-   nesta etapa as provas ainda estão em espera.
+   É a tela que as secretárias vão usar depois: cada entrada aparece como OK (a prova bateu),
+   aguardando (a prova ainda não chegou) ou pendência (com o valor e o que houve). Valor só em
+   pendência, porque a contagem da gaveta é às cegas. Provas: Pix → banco, cartão → Cielo,
+   dinheiro → contagem da gaveta; DOC (aluguel) é sempre OK. Nesta etapa as provas ainda não estão ligadas.
    ═══════════════════════════════════════════════════════════════════ */
 var FIN = (function () {
   'use strict';
@@ -49,18 +50,19 @@ var FIN = (function () {
   }
   window.addEventListener('resize', function () { var r = raiz(); if (r && naTela()) altura(r); });
 
-  /* ── as provas (nesta etapa, todas em espera) ── */
+  /* ── a situação de cada entrada: OK, aguardando (a prova ainda não chegou) ou pendência ──
+     Valor só aparece em pendência: é a tela das secretárias, e a contagem da gaveta é às cegas. */
   function provaDe(forma) {
-    if (forma === 15 || forma === 'pix') return { rot: 'aguardando o banco', cls: 'espera',
-      txt: 'Pix: a prova é a entrada no extrato do Inter. Fica em espera até o robô do Inter rodar e a chave CNPJ estar no Inter.' };
-    if (forma === 8 || forma === 9 || forma === 'credito' || forma === 'debito') return { rot: 'aguardando a Cielo', cls: 'espera',
-      txt: 'Cartão: a prova é a venda na Cielo, item por item. Fica em espera até o acesso à Cielo.' };
-    if (forma === 1 || forma === 'dinheiro') return { rot: 'vai para a contagem', cls: 'espera',
-      txt: 'Dinheiro: a prova é a contagem da gaveta, às cegas, na chegada de cada secretária.' };
-    if (forma === 5) return { rot: 'direto ao profissional', cls: 'aluguel',
-      txt: 'DOC é o aluguel: o paciente paga direto ao profissional. Não entra no caixa da clínica e aparece só para conferir.' };
-    return { rot: 'forma fora do combinado', cls: 'fora',
-      txt: 'A recepção recebe em dinheiro, Pix, cartão e DOC. Esta forma não tem prova: confira o lançamento no Feegow.' };
+    if (forma === 15 || forma === 'pix') return { st: 'espera', rot: 'aguardando o banco',
+      txt: 'Pix: a prova é a entrada no extrato do Inter. Fica aguardando até o robô do Inter rodar e a chave CNPJ estar no Inter.' };
+    if (forma === 8 || forma === 9 || forma === 'credito' || forma === 'debito') return { st: 'espera', rot: 'aguardando a Cielo',
+      txt: 'Cartão: a prova é a venda na Cielo, item por item. Fica aguardando até a Cielo estar ligada.' };
+    if (forma === 1 || forma === 'dinheiro') return { st: 'espera', rot: 'aguardando a contagem',
+      txt: 'Dinheiro: a prova é a contagem da gaveta, às cegas, na chegada de cada secretária. Vira OK quando a contagem bate.' };
+    if (forma === 5) return { st: 'ok', rot: 'OK',
+      txt: 'DOC é o aluguel: o paciente paga direto ao profissional e o dinheiro não entra na gaveta. Fica sempre OK; aparece só para conferir que foi lançado.' };
+    return { st: 'pend', rot: 'forma que a recepção não usa',
+      txt: 'A recepção recebe em dinheiro, Pix, cartão e DOC. Conferir e corrigir a forma do pagamento no Feegow.' };
   }
   var FORMA_CONV = { dinheiro: 'Dinheiro', pix: 'Pix', debito: 'Débito', credito: 'Crédito' };
   function formaFeegow(p) {
@@ -199,10 +201,14 @@ var FIN = (function () {
       return;
     }
     var pags = d.pagamentos || [], sem = d.sem_cobranca || [], conv = st.conv || [];
+    function ehPend(x) { return provaDe(x.forma).st === 'pend'; }
+    var pagPend = [], pagOk = [], convPend = [], convOk = [];
+    pags.forEach(function (p, i) { (ehPend(p) ? pagPend : pagOk).push(i); });
+    conv.forEach(function (c, i) { (ehPend(c) ? convPend : convOk).push(i); });
     var n = { atend: pags.length + sem.length, conv: conv.length };
-    var lanc = pags.length + conv.length;
+    var lanc = pags.length + conv.length, npend = sem.length + pagPend.length + convPend.length;
     resumo(diaLongo(d.dia) + (d.dia === d.hoje ? ' (hoje)' : '') + ' · ' + (lanc === 1 ? '1 lançamento' : lanc + ' lançamentos') +
-      (sem.length ? ' · ' + (sem.length === 1 ? '1 atendido sem cobrança' : sem.length + ' atendidos sem cobrança') : '') +
+      (npend ? ' · ' + (npend === 1 ? '1 pendência' : npend + ' pendências') : '') +
       (st.carregadoEm ? ' · carregado às ' + horaBR(st.carregadoEm) : ''));
     var antes = r.querySelector('.lista-corpo'), rolou = antes ? antes.scrollTop : 0, mesmoDia = r.getAttribute('data-dia') === d.dia;
     r.innerHTML = ''; r.setAttribute('data-dia', d.dia);
@@ -213,26 +219,30 @@ var FIN = (function () {
     var topo = el('div', 'lista-topo');
     topo.appendChild(seg([['tudo', 'Tudo', n.atend + n.conv], ['atendimentos', 'Atendimentos', n.atend], ['conveniencia', 'Conveniência', n.conv]], st.filtro,
       function (v) { st.filtro = v; desenhar(); }));
-    topo.appendChild(el('span', 'mostrando', 'Sem totais: cada valor com a sua prova'));
+    topo.appendChild(el('span', 'mostrando', 'Valor só aparece em pendência'));
     sec.appendChild(topo);
 
     var corpo = el('div', 'lista-corpo');
     if (st.erro) corpo.appendChild(el('div', 'lista-vazio erro', esc(st.erro)));
     var verAt = st.filtro !== 'conveniencia', verCv = st.filtro !== 'atendimentos';
-    if (verAt && sem.length) {
-      corpo.appendChild(cab('Atendido sem cobrança', sem.length === 1 ? '1 atendimento' : sem.length + ' atendimentos', 'pend'));
-      sem.forEach(function (s, i) { corpo.appendChild(linhaSem(s, i)); });
+    /* pendências no topo: atendido sem cobrança e entrada que não bateu (com o valor e o que houve) */
+    var np = (verAt ? sem.length + pagPend.length : 0) + (verCv ? convPend.length : 0);
+    if (np) {
+      corpo.appendChild(cab('Pendências', np === 1 ? '1 para resolver' : np + ' para resolver', 'pend'));
+      if (verAt) sem.forEach(function (s, i) { corpo.appendChild(linhaSem(s, i)); });
+      if (verAt) pagPend.forEach(function (i) { corpo.appendChild(linhaPag(pags[i], i)); });
+      if (verCv) convPend.forEach(function (i) { corpo.appendChild(linhaConv(conv[i], i)); });
     }
     if (verAt) {
-      corpo.appendChild(cab('Atendimentos · Feegow', pags.length === 1 ? '1 lançamento' : pags.length + ' lançamentos'));
-      if (!pags.length) corpo.appendChild(el('div', 'lista-vazio', 'Nenhum pagamento lançado no Feegow neste dia.'));
-      pags.forEach(function (p, i) { corpo.appendChild(linhaPag(p, i)); });
+      corpo.appendChild(cab('Atendimentos · Feegow', pagOk.length === 1 ? '1 lançamento' : pagOk.length + ' lançamentos'));
+      if (!pagOk.length) corpo.appendChild(el('div', 'lista-vazio', pags.length ? 'Os lançamentos do Feegow deste dia estão nas pendências.' : 'Nenhum pagamento lançado no Feegow neste dia.'));
+      pagOk.forEach(function (i) { corpo.appendChild(linhaPag(pags[i], i)); });
     }
     if (verCv) {
-      corpo.appendChild(cab('Conveniência', conv.length === 1 ? '1 lançamento' : conv.length + ' lançamentos'));
+      corpo.appendChild(cab('Conveniência', convOk.length === 1 ? '1 lançamento' : convOk.length + ' lançamentos'));
       if (st.convErro) corpo.appendChild(el('div', 'lista-vazio erro', 'Não consegui ler a conveniência: ' + esc(st.convErro)));
-      else if (!conv.length) corpo.appendChild(el('div', 'lista-vazio', 'Nenhuma venda ou pagamento de notinha neste dia.'));
-      conv.forEach(function (c, i) { corpo.appendChild(linhaConv(c, i)); });
+      else if (!convOk.length) corpo.appendChild(el('div', 'lista-vazio', conv.length ? 'Os lançamentos da conveniência deste dia estão nas pendências.' : 'Nenhuma venda ou pagamento de notinha neste dia.'));
+      convOk.forEach(function (i) { corpo.appendChild(linhaConv(conv[i], i)); });
     }
     sec.appendChild(corpo);
     wrap.appendChild(sec);
@@ -296,9 +306,11 @@ var FIN = (function () {
   }
 
   /* ── linhas ── */
-  function dirHtml(valor, forma, prova, extra) {
-    return '<span class="dir"><span class="valor">' + esc(brl(valor)) + '</span><span class="tr">' + esc(forma) +
-      ' · <span class="fin-prova ' + prova.cls + '">' + esc(prova.rot) + '</span>' + (extra || '') + '</span></span>';
+  /* OK e aguardando: só a situação e a forma. Pendência: o valor e o que houve, em vermelho. */
+  function dirHtml(valor, forma, prova) {
+    if (prova.st === 'pend') return '<span class="dir"><span class="valor fin-pend-v">' + esc(brl(valor)) + '</span>' +
+      '<span class="tr fin-pend-t">' + esc(forma + ' · ' + prova.rot) + '</span></span>';
+    return '<span class="dir"><span class="fin-st ' + prova.st + '">' + esc(prova.rot) + '</span><span class="tr">' + esc(forma) + '</span></span>';
   }
   function atendTxt(a) { return [a.profissional, a.procedimento, a.origem].filter(Boolean).join(' · '); }
   function linhaPag(p, i) {
@@ -324,7 +336,8 @@ var FIN = (function () {
   function linhaSem(s, i) {
     var b = bt('linha fin-l', '<span class="h">' + esc(s.horario || '—') + '</span>' +
       '<span class="q"><span class="nm">' + esc(s.paciente) + '</span><span class="mt">' + esc([s.profissional, s.procedimento, s.origem].filter(Boolean).join(' · ')) + '</span></span>' +
-      '<span class="dir"><span class="tag fin-sem">Sem cobrança</span>' + (Number(s.valor_agenda) > 0 ? '<span class="tr">agenda ' + esc(brl(s.valor_agenda)) + '</span>' : '') + '</span>',
+      '<span class="dir">' + (Number(s.valor_agenda) > 0 ? '<span class="valor fin-pend-v">' + esc(brl(s.valor_agenda)) + '</span>' : '') +
+      '<span class="tr fin-pend-t">atendido sem cobrança</span></span>',
       function () { detalhe('sem', i); });
     b.setAttribute('aria-haspopup', 'dialog');
     return b;
@@ -334,10 +347,10 @@ var FIN = (function () {
   function lado(d) {
     var l = el('div', 'lado');
     l.appendChild(el('section', 'painel nota-lado', '<h2>Como ler</h2>' +
-      '<p>Cada linha é um valor lançado no Feegow ou na conveniência, com a prova de que entrou:</p>' +
-      '<ul class="fin-leg"><li><b>Pix</b> → entrada no banco (Inter)</li><li><b>Cartão</b> → venda na Cielo</li>' +
-      '<li><b>Dinheiro</b> → contagem da gaveta</li><li><b>DOC</b> → aluguel, direto ao profissional</li></ul>' +
-      '<p class="cinza">Sem totais: é a tela que as secretárias vão usar. Por enquanto, aberta só para o administrador.</p>'));
+      '<ul class="fin-leg"><li><b class="fin-st ok">OK</b> a prova bateu</li><li><b>Aguardando</b> a prova ainda não chegou</li>' +
+      '<li><b class="fin-pend-t">Pendência</b> não bateu: aparece o valor e o que houve</li></ul>' +
+      '<p>A prova de cada forma: Pix no banco (Inter), cartão na Cielo e dinheiro na contagem da gaveta. DOC é o aluguel, pago direto ao profissional: fica sempre OK.</p>' +
+      '<p class="cinza">Valor só nas pendências: é a tela que as secretárias vão usar. Por enquanto, aberta só para o administrador.</p>'));
     var s = el('section', 'painel fin-provas');
     s.appendChild(el('div', 'painel-cab', '<h2>Provas</h2><span>o que já está ligado</span>'));
     [['Banco (Inter)', d.banco_ligado ? 'Robô ligado; a conferência do Pix entra na etapa 4' : 'Robô do Inter ainda não ligado'],
@@ -357,7 +370,8 @@ var FIN = (function () {
   }
   function caixaProva(forma) {
     var pv = provaDe(forma);
-    return el('div', 'pp-caixa', '<span class="pp-tag fin-tag ' + pv.cls + '">Prova: ' + esc(pv.rot) + '</span><span class="pp-txt">' + esc(pv.txt) + '</span>');
+    var rot = pv.st === 'pend' ? 'Pendência: ' + pv.rot : (pv.st === 'ok' ? 'OK' : 'Aguardando: ' + pv.rot.replace(/^aguardando /, ''));
+    return el('div', 'pp-caixa', '<span class="pp-tag fin-tag ' + pv.st + '">' + esc(rot) + '</span><span class="pp-txt">' + esc(pv.txt) + '</span>');
   }
   function detalhe(tipo, i) {
     if (!window.moldura || !st.dados) return;
@@ -365,12 +379,13 @@ var FIN = (function () {
     var P = moldura.pop({ largura: '560px', titulo: tipo === 'conv' ? 'Conveniência' : (tipo === 'sem' ? 'Atendido sem cobrança' : 'Pagamento no Feegow') });
     if (tipo === 'pag') {
       var p = d.pagamentos[i]; if (!p) { P.fechar(); return; }
-      var at = p.atendimentos || [];
-      P.corpo.appendChild(el('div', 'pp-cab', '<h2>' + esc(p.paciente || 'Recebimento sem paciente') + '</h2><span class="pp-sub">' + esc(formaFeegow(p) + ' · ' + brl(p.valor) + ' · ' + diaLongo(d.dia)) + '</span>'));
+      var at = p.atendimentos || [], comValor = provaDe(p.forma).st === 'pend';   /* valor só em pendência */
+      P.corpo.appendChild(el('div', 'pp-cab', '<h2>' + esc(p.paciente || 'Recebimento sem paciente') + '</h2><span class="pp-sub">' +
+        esc(formaFeegow(p) + (comValor ? ' · ' + brl(p.valor) : '') + ' · ' + diaLongo(d.dia)) + '</span>'));
       P.corpo.appendChild(campos([
-        ['Valor', brl(p.valor)], ['Forma', p.forma_nome], ['Parcelas', p.parcelas || p.transacao_parcelas],
+        ['Valor', comValor ? brl(p.valor) : ''], ['Forma', p.forma_nome], ['Parcelas', p.parcelas || p.transacao_parcelas],
         ['Autorização do cartão', p.transacao_autorizacao], ['Número da transação', p.transacao_numero], ['Descrição', p.descricao],
-        ['Conta no Feegow', 'nº ' + p.invoice_id + ' · ' + ddmm(p.conta_data) + ' · ' + brl(p.conta_valor)], ['Pagamento no Feegow', 'nº ' + p.pagamento_id]
+        ['Conta no Feegow', 'nº ' + p.invoice_id + ' · ' + ddmm(p.conta_data) + (comValor ? ' · ' + brl(p.conta_valor) : '')], ['Pagamento no Feegow', 'nº ' + p.pagamento_id]
       ]));
       var bl = el('div', 'pp-bloco');
       bl.appendChild(el('span', 'pp-rot', p.ligacao === 'feegow' ? 'Atendimento ligado na conta' : (at.length ? 'Atendimentos do paciente no dia da conta' : 'Atendimento')));
@@ -381,16 +396,17 @@ var FIN = (function () {
       P.corpo.appendChild(caixaProva(p.forma));
     } else if (tipo === 'conv') {
       var c = st.conv[i]; if (!c) { P.fechar(); return; }
+      var cv = provaDe(c.forma).st === 'pend';                                    /* valor só em pendência */
       P.corpo.appendChild(el('div', 'pp-cab', '<h2>' + (c.tipo === 'venda' ? 'Venda' : 'Pagamento de notinha') + '</h2><span class="pp-sub">' +
-        esc(FORMA_CONV[c.forma] + ' · ' + brl(c.valor) + ' · ' + diaLongo(d.dia) + ' às ' + horaBR(c.quando)) + '</span>'));
-      var lista = [['Valor', brl(c.valor)], ['Forma', FORMA_CONV[c.forma]]];
+        esc(FORMA_CONV[c.forma] + (cv ? ' · ' + brl(c.valor) : '') + ' · ' + diaLongo(d.dia) + ' às ' + horaBR(c.quando)) + '</span>'));
+      var lista = [['Valor', cv ? brl(c.valor) : ''], ['Forma', FORMA_CONV[c.forma]]];
       if (c.tipo === 'venda') lista.push(['Cliente', c.cliente + (c.profissional ? ' (pagou na hora)' : '')]);
       else lista.push(['Profissional', c.profissional_nome], ['Descrição', c.descricao]);
       lista.push(['Registrado por', c.secretaria]);
       P.corpo.appendChild(campos(lista));
       if (c.tipo === 'venda') {
         var it = el('div', 'pp-bloco'); it.appendChild(el('span', 'pp-rot', c.itens.length === 1 ? 'Produto' : 'Produtos'));
-        c.itens.forEach(function (x) { it.appendChild(el('span', 'pp-txt', esc(x.nome + (x.qtd > 1 ? ' ×' + x.qtd : '') + ' · ' + brl(x.valor)))); });
+        c.itens.forEach(function (x) { it.appendChild(el('span', 'pp-txt', esc(x.nome + (x.qtd > 1 ? ' ×' + x.qtd : '') + (cv ? ' · ' + brl(x.valor) : '')))); });
         P.corpo.appendChild(it);
       }
       P.corpo.appendChild(caixaProva(c.forma));
