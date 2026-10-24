@@ -1,0 +1,128 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Entrada do Cortex (login) e a saudação depois do PIN
+   Fundo rosa em degradê vivo, nomes empilhados com bolinha, PIN embaixo,
+   "Cortex" no canto inferior esquerdo. Comportamento em js/entrada.js.
+   Cantos retos como o resto do Cortex — só as bolinhas são redondas.
+   ═══════════════════════════════════════════════════════════════════ */
+#lo{
+  --lo-base:#C65C9F; --lo-tinta:#2C2D6E; --lo-tinta2:#24255C; --lo-orq:#B6569C; --lo-erro:#B3261E;
+  --lo-sombra:74,20,66;
+  --lo-display:'Bricolage Grotesque',var(--fn);
+  position:fixed;inset:0;z-index:9999;display:flex;overflow:hidden;background:var(--lo-base);color:#fff;
+  -webkit-tap-highlight-color:transparent
+}
+#lo .lo-sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+/* ── fundo: manchas de cor que derivam devagar + grão fino ── */
+.lo-fundo{position:absolute;inset:0;overflow:hidden;background:var(--lo-base);transition:transform 3s cubic-bezier(.2,.8,.2,1)}
+.lo-fundo i{position:absolute;display:block;will-change:transform}
+.lo-fundo i:nth-child(1){width:100vmax;height:100vmax;left:-40vmax;top:-52vmax;background:radial-gradient(closest-side,rgba(248,196,224,.95),rgba(248,196,224,0));animation:lo-d1 26s ease-in-out infinite alternate}
+.lo-fundo i:nth-child(2){width:74vmax;height:74vmax;right:-24vmax;top:-30vmax;background:radial-gradient(closest-side,rgba(238,138,196,.9),rgba(238,138,196,0));animation:lo-d2 32s ease-in-out infinite alternate}
+.lo-fundo i:nth-child(3){width:88vmax;height:88vmax;right:-32vmax;bottom:-46vmax;background:radial-gradient(closest-side,rgba(140,52,132,.9),rgba(140,52,132,0));animation:lo-d3 29s ease-in-out infinite alternate}
+.lo-fundo i:nth-child(4){width:80vmax;height:80vmax;left:-34vmax;bottom:-44vmax;background:radial-gradient(closest-side,rgba(92,44,122,.82),rgba(92,44,122,0));animation:lo-d4 37s ease-in-out infinite alternate}
+.lo-fundo i:nth-child(5){width:50vmax;height:50vmax;left:22%;top:14%;background:radial-gradient(closest-side,rgba(255,214,234,.5),rgba(255,214,234,0));animation:lo-d5 23s ease-in-out infinite alternate}
+.lo-fundo::after{content:"";position:absolute;inset:0;opacity:.11;mix-blend-mode:overlay;pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E")}
+@keyframes lo-d1{to{transform:translate(9vmax,7vmax) scale(1.08)}}
+@keyframes lo-d2{to{transform:translate(-8vmax,10vmax) scale(.92)}}
+@keyframes lo-d3{to{transform:translate(-10vmax,-6vmax) scale(1.1)}}
+@keyframes lo-d4{to{transform:translate(8vmax,-8vmax) scale(.94)}}
+@keyframes lo-d5{to{transform:translate(-12vmax,8vmax) scale(1.2)}}
+
+/* ── composição: nomes à esquerda, logo à direita, Cortex no canto inferior esquerdo ── */
+.lo-cena{position:relative;z-index:1;flex:1;min-width:0;height:100%;overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.lo-grade{min-height:100%;display:grid;grid-template-columns:minmax(0,clamp(340px,27vw,460px)) minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto;
+  grid-template-areas:"caixa logo" "cortex logo";column-gap:clamp(40px,7vw,140px);
+  padding:clamp(28px,6vh,72px) clamp(24px,7vw,120px);transition:opacity .45s ease,transform .7s cubic-bezier(.2,.8,.2,1)}
+.lo-caixa{grid-area:caixa;align-self:center;width:100%;padding:24px 0}
+.lo-logo{grid-area:logo;align-self:center;justify-self:center;display:block;width:min(100%,620px);height:auto;opacity:.4;user-select:none;-webkit-user-drag:none}
+.lo-cortex{grid-area:cortex;align-self:end;margin:0;font-family:var(--lo-display);font-weight:600;font-variation-settings:'opsz' 96;
+  font-size:clamp(64px,7.4vw,124px);line-height:.82;letter-spacing:-.045em;color:#fff;user-select:none}
+
+/* ── os nomes ── */
+.lo-ops{display:flex;flex-direction:column;gap:10px}
+.lo-op{display:flex;align-items:center;gap:14px;width:100%;min-height:58px;padding:0 20px;border:1px solid rgba(255,255,255,.55);
+  background:rgba(255,255,255,.56);-webkit-backdrop-filter:blur(18px) saturate(1.35);backdrop-filter:blur(18px) saturate(1.35);
+  box-shadow:0 1px 2px rgba(var(--lo-sombra),.08),0 12px 28px -10px rgba(var(--lo-sombra),.34);
+  font:500 16px var(--fn);color:var(--lo-tinta);text-align:left;cursor:pointer;
+  transition:background .2s ease,box-shadow .25s ease,transform .25s cubic-bezier(.2,.8,.2,1)}
+.lo-op span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (hover:hover){.lo-op:hover{background:rgba(255,255,255,.74);transform:translateY(-1px)}}
+.lo-op:active{transform:translateY(0) scale(.995)}
+.lo-op[aria-checked="true"]{background:#fff;font-weight:600;box-shadow:0 1px 2px rgba(var(--lo-sombra),.1),0 18px 40px -12px rgba(var(--lo-sombra),.5)}
+.lo-op:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.lo-op i{flex:none;position:relative;display:block;width:20px;height:20px;border:1.5px solid rgba(44,45,110,.32);background:#fff;transition:border-color .2s ease}
+.lo-op i::after{content:"";position:absolute;inset:3.5px;background:var(--lo-orq);transform:scale(0);transition:transform .25s cubic-bezier(.3,1.5,.5,1)}
+#lo .lo-op i,#lo .lo-op i::after{border-radius:50%!important}
+.lo-op[aria-checked="true"] i{border-color:var(--lo-orq)}
+.lo-op[aria-checked="true"] i::after{transform:scale(1)}
+.lo-vazio{margin:0;padding:18px 0;font:500 16px var(--fn);color:rgba(255,255,255,.9)}
+
+/* ── PIN, embaixo dos nomes ── */
+.lo-senha{display:flex;gap:10px;margin-top:22px}
+.lo-senha[hidden]{display:none!important}
+.lo-senha.surge{animation:lo-surge .35s cubic-bezier(.2,.8,.2,1)}
+.lo-senha input{flex:1;min-width:0;height:58px;padding:0 20px;border:1px solid rgba(255,255,255,.7);background:rgba(255,255,255,.9);
+  box-shadow:0 1px 2px rgba(var(--lo-sombra),.08),0 12px 28px -10px rgba(var(--lo-sombra),.34);
+  font:600 20px var(--fn);letter-spacing:.24em;color:var(--lo-tinta);outline:none;transition:background .2s ease,box-shadow .2s ease}
+.lo-senha input::placeholder{font-weight:400;font-size:16px;letter-spacing:0;color:rgba(44,45,110,.5)}
+.lo-senha input:focus{background:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.5),0 12px 28px -10px rgba(var(--lo-sombra),.4)}
+#lo .btn-lo{flex:none;display:flex;align-items:center;gap:8px;height:58px;padding:0 24px;border:0;background:var(--lo-tinta);color:#fff;
+  font:600 16px var(--fn);cursor:pointer;box-shadow:0 12px 28px -10px rgba(24,24,70,.55);transition:background .2s ease,transform .2s ease}
+#lo .btn-lo:active{transform:scale(.98)}
+#lo .btn-lo:focus-visible{outline:2px solid #fff;outline-offset:2px}
+#lo .btn-lo svg{transition:transform .2s ease}
+@media (hover:hover){#lo .btn-lo:hover{background:var(--lo-tinta2)}#lo .btn-lo:hover svg{transform:translateX(2px)}}
+#lo .btn-lo.aguarde{pointer-events:none;background:var(--lo-tinta2)}
+#lo .btn-lo.aguarde svg{animation:lo-seta .8s ease-in-out infinite}
+#lo .lerr{display:none;margin-top:12px;padding:11px 16px;background:rgba(255,255,255,.94);color:var(--lo-erro);font:500 14px/1.35 var(--fn);
+  box-shadow:0 12px 28px -12px rgba(var(--lo-sombra),.4)}
+.lo-senha.treme{animation:lo-treme .45s cubic-bezier(.36,.07,.19,.97)}
+@keyframes lo-surge{from{opacity:0;transform:translateY(-6px)}}
+@keyframes lo-seta{50%{transform:translateX(4px)}}
+@keyframes lo-treme{10%,90%{transform:translateX(-1px)}20%,80%{transform:translateX(3px)}30%,50%,70%{transform:translateX(-6px)}40%,60%{transform:translateX(6px)}}
+
+/* ── saudação depois do PIN ── */
+.lo-bv{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(22px,4.5vh,40px);
+  padding:24px;text-align:center;visibility:hidden;pointer-events:none}
+#lo.bv .lo-bv{visibility:visible;pointer-events:auto;cursor:pointer}
+#lo.bv .lo-grade{opacity:0;transform:scale(.96);pointer-events:none}
+#lo.bv .lo-fundo{transform:scale(1.18) rotate(-4deg)}
+.lo-bv-luas{display:block;width:clamp(112px,17vmin,172px);height:auto;overflow:visible}
+.lo-bv-luas path{fill:#fff;transform-box:view-box;transform-origin:677px 629px}   /* centro da lua pequena: a grande gira em volta dela */
+.lo-bv-luas .lua-menor{opacity:0}
+.lo-bv-luas .lua-maior{opacity:0}
+#lo.bv .lua-menor{animation:lo-menor .8s cubic-bezier(.2,.9,.25,1) .1s both}
+#lo.bv .lua-maior{animation:lo-maior 1.3s cubic-bezier(.16,.84,.26,1) .18s both}
+.lo-bv-txt{margin:0;max-width:18ch;font-family:var(--lo-display);font-weight:600;font-variation-settings:'opsz' 96;
+  font-size:clamp(38px,6.2vw,80px);line-height:1.02;letter-spacing:-.035em;color:#fff}
+.lo-bv-txt span{display:inline-block;opacity:0}
+#lo.bv .lo-bv-txt span{animation:lo-palavra .85s cubic-bezier(.2,.8,.2,1) both}   /* atraso de cada palavra vem do js */
+/* saída: a saudação sobe e some primeiro, depois o rosa se desfaz e mostra o Cortex */
+.lo-bv{transition:opacity .32s ease,transform .5s cubic-bezier(.4,0,.2,1)}
+#lo.saindo .lo-bv{opacity:0;transform:translateY(-14px)}
+#lo.saindo{opacity:0;transition:opacity .5s ease .14s}
+@keyframes lo-menor{from{opacity:0;transform:scale(.35)}to{opacity:.88;transform:none}}
+@keyframes lo-maior{from{opacity:0;transform:rotate(-210deg) scale(.72)}55%{opacity:1}to{opacity:1;transform:none}}
+@keyframes lo-palavra{from{opacity:0;transform:translateY(.45em);filter:blur(10px)}to{opacity:1;transform:none;filter:none}}
+
+/* ── celular: mesma pegada, empilhado ── */
+@media (max-width:760px){
+  .lo-grade{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;grid-template-areas:"logo" "caixa" "cortex";
+    row-gap:18px;padding:max(28px,env(safe-area-inset-top)) 20px max(22px,env(safe-area-inset-bottom))}
+  .lo-logo{justify-self:start;width:min(62vw,240px);opacity:.55}
+  .lo-caixa{padding:12px 0}
+  .lo-op{min-height:56px;font-size:17px}
+  .lo-senha input,#lo .btn-lo{height:56px}
+  .lo-cortex{font-size:clamp(52px,15vw,72px)}
+}
+
+/* ── quem pede menos movimento no aparelho ── */
+@media (prefers-reduced-motion:reduce){
+  .lo-fundo i{animation:none}
+  .lo-fundo,.lo-grade,.lo-op,#lo.saindo{transition:none}
+  #lo.bv .lo-fundo{transform:none}
+  .lo-senha,.lo-senha.treme{animation:none}
+  #lo.bv .lua-menor,#lo.bv .lua-maior,#lo.bv .lo-bv-txt span{animation:none;opacity:1}
+  #lo.saindo .lo-bv{transform:none}
+}
