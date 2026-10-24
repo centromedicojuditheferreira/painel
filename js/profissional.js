@@ -1402,7 +1402,7 @@ function msgAcesso(nome, email, ate){
   } else {
     l.push('*Toda ' + diaAbre + '*\nA conferência é semanal: ' + rotina + (J.abre_em ? ' A próxima abre na ' + diaData(J.abre_em) + '.' : ''));
   }
-  l.push('No fim de cada mês, a conferência dos últimos dias já abre no dia 1º, a partir das ' + hAbre + '. Para quem recebe repasse, é nessa confirmação que o recibo do mês sai, na hora.');
+  l.push('No fim de cada mês, a conferência dos últimos dias já abre no dia 1º, a partir das ' + hAbre + '. Para quem recebe repasse, a tela mostra toda segunda o valor do mês até ali, e o recibo sai na hora, nessa confirmação do dia 1º.');
   l.push('*Como conferir*\n1️⃣ Confira consulta por consulta: cada uma aparece como Atendido ou Não compareceu.\n' +
          '2️⃣ Achou algo errado? Avise a recepção por aqui e *não confirme ainda*. A correção aparece no site até a manhã seguinte.\n' +
          '3️⃣ Tudo certo? Toque em "Está tudo certo — confirmar", marque a declaração e tire uma selfie pelo celular. *A selfie é a sua assinatura.* ✅\n' +
