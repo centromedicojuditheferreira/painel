@@ -2263,6 +2263,23 @@ function loadFalhas(){
     .catch(function(e){ estado.falhasErro = String(e.message||e);
                         if(estado.tela === "falhas") desenharFalhas(); });
 }
+/* v3.6 · "Mandei" (COB v1.0): a recepção avisa que mandou a mensagem pelo WhatsApp Web. Grava em oc_notas
+   (tipo falha_mandada); a view conf_falhas tira a falha da lista e o Telegram para de cobrar. Se o robô falhar
+   de novo depois, ela volta. */
+function marcarMandei(x, aoSalvar){
+  fetch(GCFG.url + "/rest/v1/oc_notas?on_conflict=tipo,referencia", {
+    method: "POST",
+    headers: cab({ "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal" }),
+    body: JSON.stringify([{ tipo: "falha_mandada", referencia: x.agendamento_id + ":" + x.tipo, tratamento: null, nota: "mandei", autora: autora() || null }])
+  }).then(function(r){
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    estado.falhas = (estado.falhas || []).filter(function(y){ return y.chave !== x.chave; });
+    badgesTopo();
+    if(estado.tela === "falhas") desenharFalhas();
+    aoSalvar(true);
+    loadFalhas();
+  }).catch(function(e){ aoSalvar(false, e.message); });
+}
 function falhaDePaciente(f){ var x = Object.assign({}, f); x.origem = "paciente"; x.chave = "pac:" + f.agendamento_id + ":" + f.tipo; return x; }
 function falhaDeProf(p){
   return { origem:"profissional", chave:"prof:" + p.id, tipo:"prof", prof_tipo:p.tipo, nome_paciente:p.nome, telefone:p.telefone,
@@ -2337,19 +2354,19 @@ var FALHA_TXT = {
   sem_celular:  { label:"Sem celular", cor:"#D70015", sub:"Corrigir o cadastro e depois mandar",
                   porque:"O cadastro não tem um número de celular que sirva para WhatsApp.",
                   corrigir:"Cadastrar o celular do paciente no Feegow.",
-                  passo:"Depois de corrigir, abra o WhatsApp com a mensagem pronta e envie." },
+                  passo:"Depois de corrigir, abra o WhatsApp com a mensagem pronta, envie e aperte Mandei." },
   guia_vencida: { label:"Guia vencida", cor:"#C93400", sub:"Avisar que a consulta não vai acontecer",
                   porque:"O robô não manda confirmação quando a guia está vencida.",
-                  passo:"Abra o WhatsApp com a mensagem pronta e envie: ela avisa que a consulta não vai acontecer porque a guia venceu." },
+                  passo:"Abra o WhatsApp com a mensagem pronta e envie: ela avisa que a consulta não vai acontecer porque a guia venceu. Depois, aperte Mandei." },
   sem_guia:     { label:"Sem guia", cor:"#C93400", sub:"Avisar que a consulta não vai acontecer",
                   porque:"O robô não manda confirmação de consulta sem guia Unimed.",
-                  passo:"Abra o WhatsApp com a mensagem pronta e envie: ela avisa que a consulta não vai acontecer porque não tem guia." },
+                  passo:"Abra o WhatsApp com a mensagem pronta e envie: ela avisa que a consulta não vai acontecer porque não tem guia. Depois, aperte Mandei." },
   erro_envio:   { label:"Erro no envio", cor:"#636366", sub:"Não tem o que corrigir: é só mandar",
                   porque:"A plataforma de WhatsApp recusou ou caiu na hora do envio.",
-                  passo:"Não tem o que corrigir. Abra o WhatsApp com a mensagem pronta e envie." },
+                  passo:"Não tem o que corrigir. Abra o WhatsApp com a mensagem pronta, envie e aperte Mandei." },
   nao_enviado:  { label:"Não enviado", cor:"#636366", sub:"Mandar a mensagem pronta",
                   porque:"O robô não mandou esta mensagem.",
-                  passo:"Abra o WhatsApp com a mensagem pronta e envie." },
+                  passo:"Abra o WhatsApp com a mensagem pronta, envie e aperte Mandei." },
   prof:         { label:"Aviso ao profissional", cor:"#2C2D6E", sub:"Mandar o aviso para o profissional",
                   porque:"O robô tentou mandar o aviso da conferência da agenda e a plataforma não entregou.",
                   passo:"Não tem o que corrigir. Abra o WhatsApp com a mensagem pronta e envie para o profissional." }
@@ -2490,8 +2507,8 @@ function desenharFalhas(){
   lado.appendChild(pn);
   lado.appendChild(novo("section", "painel nota-lado",
     '<h2>Regra da casa</h2><p>São as mensagens de WhatsApp que <b>não saíram</b>: confirmação, lembrete e aviso de guia dos pacientes (consultas de hoje em diante) e os avisos aos profissionais.</p>' +
-    '<p><b>Ninguém fica sem aviso.</b> Quando o erro tem correção, corrija primeiro. Depois, abra o WhatsApp com a mensagem pronta e envie.</p>' +
-    '<p class="cinza">O item sai sozinho quando o dia da consulta passa ou quando o robô consegue mandar.</p>'));
+    '<p><b>Ninguém fica sem aviso.</b> Quando o erro tem correção, corrija primeiro. Depois, abra o WhatsApp com a mensagem pronta, envie e aperte <b>Mandei</b>.</p>' +
+    '<p class="cinza">O item sai quando a recepção aperta <b>Mandei</b>, quando o dia da consulta passa ou quando o robô consegue mandar. Enquanto estiver aqui há mais de 2 horas, o Telegram cobra.</p>'));
   wrap.appendChild(lado);
   main.appendChild(wrap);
   ajustaAltura();
@@ -2565,7 +2582,7 @@ function abrirFalhaItem(chave){
       (x.erro_detalhe && m === "erro_envio" || x.origem === "profissional" ? " · " + escapa(String(x.erro_detalhe || "").slice(0, 90)) : "") +
       (x.ultima_tentativa ? " · tentativa em " + escapa(fmtQuando(x.ultima_tentativa).replace(" ", " às ")) : "")));
     P.corpo.appendChild(cx);
-    var passo = falhaCorrigida(x) ? "Já corrigido no cadastro: abra o WhatsApp com a mensagem pronta e envie." : S.passo;
+    var passo = falhaCorrigida(x) ? "Já corrigido no cadastro: abra o WhatsApp com a mensagem pronta, envie e aperte Mandei." : S.passo;
     P.corpo.appendChild(novo("div", "pp-bloco", '<span class="pp-rot">O que fazer</span><span class="pp-txt">' + escapa(passo) + '</span>'));
     /* número */
     var fone = novo("div", "pp-fone");
@@ -2594,6 +2611,23 @@ function abrirFalhaItem(chave){
       var off = botao("btn btn-p btn-sm", "Abrir no WhatsApp"); off.disabled = true;
       off.title = cel ? "Sem mensagem pronta" : "Sem celular válido: corrija o cadastro primeiro";
       acoes.appendChild(off);
+    }
+    if(x.origem !== "profissional"){   /* v3.6: depois de mandar, a recepção aperta Mandei */
+      var bMandei = botao("btn btn-s btn-sm falha-mandei", ico(IC.ok, 14, 2.4) + "Mandei", function(){
+        var prox = V.prox;
+        bMandei.disabled = true; bMandei.textContent = "Salvando…";
+        marcarMandei(x, function(ok, erro){
+          if(!ok){
+            bMandei.disabled = false; bMandei.innerHTML = ico(IC.ok, 14, 2.4) + "Mandei";
+            alert("Não consegui marcar como mandada: " + (erro || "erro") + ". Tente de novo.");
+            return;
+          }
+          if(prox){ atual = k(prox); pinta(); } else P.fechar();
+        });
+      });
+      bMandei.title = "Aperte depois de mandar a mensagem no WhatsApp: ela sai desta lista e para de ser cobrada";
+      acoes.appendChild(bMandei);
+      if(a) a.addEventListener("click", function(){ bMandei.className = "btn btn-p btn-sm falha-mandei"; });
     }
     cab2.appendChild(acoes);
     bm.appendChild(cab2);
