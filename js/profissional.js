@@ -425,20 +425,49 @@ function abreConfirmacao(d){
   };
 }
 /* ═══ relatório em PDF do que foi confirmado (jsPDF carregado só na hora) ═══ */
+/* recibo (PROF v3.1) — o mesmo do site dos profissionais: valor unitário e regra em cada linha, presença com a conta,
+   convênio em toda consulta, "Não compareceu" como na conferência e as conferências assinadas do mês.
+   Recibo antigo (gerado antes do v3.1) sai com o que ele tem. */
+var RC_RODAPE = 'Documento interno de repasse. Atendido: sessão realizada (inclui as lançadas como aguardando). Não compareceu: falta, desmarcação pelo paciente, cancelamento pelo profissional ou agendamento que não foi realizado. Remarcações não entram na conta.';
+function rcPct(p){ return p == null ? '—' : Number(p).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%'; }
+function rcUnit(v){ v = Number(v) || 0; return Math.abs(v * 100 - Math.round(v * 100)) > 1e-6 ? 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) : brl(v); }
+function rcDdmmTs(iso){ return iso ? new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' }) : ''; }
+function reciboModelo(r){
+  var novo = !!r.versao_calculo, so = r.so_unimed ? ' (somente Unimed)' : '', t = r.meta;
+  var at = r.atendidos != null ? r.atendidos : r.finalizadas, fa = r.faltas || 0;
+  var info = [['Profissional', r.profissional], ['Período', dmy(r.periodo_inicio) + ' a ' + dmy(r.periodo_fim)],
+              ['Data de emissão', (r.emitido_em ? pdfData(r.emitido_em) : '—') + (r.versao > 1 ? ' (versão ' + r.versao + ')' : '')],
+              ['Atendidos', String(at) + so]];
+  if(r.faltas != null) info.push(['Não compareceu', String(fa) + so]);
+  if(novo && t && t.tipo === 'presenca') info.push(['Presença', rcPct(r.pct) + ' (' + at + ' de ' + (at + fa) + ' sessões) · mínimo de ' + t.corte_pct + '%: ' + (t.atingiu ? 'atingido' : 'não atingido')]);
+  else if(!novo && r.mostra_pct) info.push(['Porcentagem de agenda', r.pct_texto]);
+  var conf = (r.conferencias || []).map(function(c){ return ddmm(c.inicio) + ' a ' + ddmm(c.fim) + ' (' + (c.com_foto ? 'assinada' : 'confirmada') + ' em ' + rcDdmmTs(c.confirmado_em) + ')'; });
+  if(conf.length) info.push(['Agenda conferida', conf.join(' · ')]);
+  var resumo = (r.resumo || []).map(function(x){
+    var un = x.valor_unit != null ? rcUnit(x.valor_unit)
+           : (x.quantidade > 0 && x.descricao !== 'Particular' && Math.round(x.valor * 100) % x.quantidade === 0 ? brl(x.valor / x.quantidade) : '—');
+    return { descricao: x.descricao, regra: x.regra || '', quantidade: String(x.quantidade), unitario: un, valor: brl(x.valor) };
+  });
+  var detalhe = (r.detalhe || []).map(function(x){
+    var conv = x.convenio != null ? x.convenio + (x.categoria === 'ABA' && !/aba/i.test(x.convenio) ? ' · ABA' : '') : (x.descricao || '');
+    return { data: dmy(x.data), horario: x.horario || '', paciente: x.paciente, convenio: conv, atendido: x.status === 'Atendido', situacao: x.status === 'Atendido' ? 'Atendido' : 'Não compareceu' };
+  });
+  return { info: info, resumo: resumo, detalhe: detalhe, total: brl(r.total) };
+}
 function reciboHtml(r){
+  var M = reciboModelo(r);
   var h = '<div class="rc-card"><div class="rc-head"><b>Centro Médico Judithe Ferreira</b><span>Anápolis / GO • Recibo de Repasse — ' + esc(r.mes_nome) + '</span></div>' +
-    '<div class="rc-info"><div>Profissional</div><div>' + esc(r.profissional) + '</div>' +
-    '<div>Período</div><div>' + dmy(r.periodo_inicio) + ' a ' + dmy(r.periodo_fim) + '</div>' +
-    '<div>Data de emissão</div><div>' + (r.emitido_em ? fmtTs(r.emitido_em).slice(0,10) : '—') + (r.versao > 1 ? ' (versão ' + r.versao + ')' : '') + '</div>' +
-    '<div>Consultas finalizadas</div><div>' + r.finalizadas + '</div>' +
-    (r.mostra_pct ? '<div>Porcentagem de agenda</div><div>' + esc(r.pct_texto) + '</div>' : '') + '</div>' +
-    '<div class="rc-sec">Resumo</div><table class="rc-t"><tr><th>Descrição</th><th>Quantidade</th><th>Valor Total</th></tr>';
-  (r.resumo || []).forEach(function(x){ h += '<tr><td>' + esc(x.descricao) + '</td><td class="num">' + x.quantidade + '</td><td class="num">' + brl(x.valor) + '</td></tr>'; });
-  h += '<tr class="tot"><td>TOTAL A RECEBER</td><td></td><td class="num">' + brl(r.total) + '</td></tr></table>';
-  h += '<div class="rc-sec">Detalhamento por paciente</div><table class="rc-t"><tr><th>Paciente</th><th>Data</th><th>Horário</th>' + (r.coluna_descricao ? '<th>Descrição</th>' : '') + '<th>Status</th></tr>';
-  (r.detalhe || []).forEach(function(x){ h += '<tr><td>' + esc(x.paciente) + '</td><td>' + dmy(x.data) + '</td><td>' + esc(x.horario) + '</td>' + (r.coluna_descricao ? '<td>' + esc(x.descricao || '') + '</td>' : '') + '<td class="' + (x.status === 'Atendido' ? 'ok' : 'falta') + '">' + esc(x.status) + '</td></tr>'; });
-  h += '</table><div class="rc-foot">Documento interno de repasse. Atendido = sessão realizada (inclui lançamentos em aguardando). Falta = cancelamento, não comparecimento ou agendamento não realizado.</div></div>';
-  return h;
+    '<div class="rc-info">' + M.info.map(function(i){ return '<div>' + esc(i[0]) + '</div><div>' + esc(i[1]) + '</div>'; }).join('') + '</div>' +
+    '<div class="rc-sec">Resumo</div><table class="rc-t"><tr><th>Descrição</th><th class="num">Qtd.</th><th class="num">Valor unit.</th><th class="num">Valor</th></tr>';
+  M.resumo.forEach(function(x){
+    h += '<tr><td>' + esc(x.descricao) + (x.regra ? '<small>' + esc(x.regra) + '</small>' : '') + '</td><td class="num">' + esc(x.quantidade) + '</td><td class="num">' + esc(x.unitario) + '</td><td class="num">' + x.valor + '</td></tr>';
+  });
+  h += '<tr class="tot"><td>TOTAL A RECEBER</td><td></td><td></td><td class="num">' + M.total + '</td></tr></table>';
+  h += '<div class="rc-sec">Detalhamento por paciente</div><table class="rc-t"><tr><th>Data</th><th>Horário</th><th>Paciente</th><th>Convênio</th><th>Situação</th></tr>';
+  M.detalhe.forEach(function(x){
+    h += '<tr><td>' + x.data + '</td><td>' + esc(x.horario) + '</td><td>' + esc(x.paciente) + '</td><td>' + esc(x.convenio) + '</td><td class="' + (x.atendido ? 'ok' : 'falta') + '">' + x.situacao + '</td></tr>';
+  });
+  return h + '</table><div class="rc-foot">' + RC_RODAPE + '</div></div>';
 }
 function carregaScript(src, pronto){
   return new Promise(function(resolve, reject){
@@ -492,38 +521,47 @@ function baixarRecibo(r){
     var tabela = function(op){
       op.margin = { left: M, right: 210 - L, top: 31, bottom: 20 };
       op.willDrawPage = function(){ cab(); };
-      op.didParseCell = function(dd){ if(dd.section !== 'head') return; var cs = (op.columnStyles || {})[dd.column.index]; if(cs && cs.halign) dd.cell.styles.halign = cs.halign; };
+      var antes = op.didParseCell;
+      op.didParseCell = function(dd){ if(dd.section === 'head'){ var cs = (op.columnStyles || {})[dd.column.index]; if(cs && cs.halign) dd.cell.styles.halign = cs.halign; } if(antes) antes(dd); };
       doc.autoTable(op); return doc.lastAutoTable.finalY;
     };
     var titulo = function(t, y){ if(y > 258){ doc.addPage(); y = cab(); } doc.setFont('helvetica', 'bold'); doc.setFontSize(11.5); pdfCor(doc, 'Text', PDF_COR.indigo); doc.text(t, M, y); pdfCor(doc, 'Text', PDF_COR.tinta); return y + 3; };
     var y = cab();
-    var info = [['Profissional', r.profissional], ['Período', dmy(r.periodo_inicio) + ' a ' + dmy(r.periodo_fim)],
-                ['Data de emissão', (r.emitido_em ? pdfData(r.emitido_em) : '—') + (r.versao > 1 ? ' (versão ' + r.versao + ')' : '')],
-                ['Consultas finalizadas', String(r.finalizadas)]];
-    if(r.mostra_pct) info.push(['Porcentagem de agenda', r.pct_texto]);
-    y = tabela({ startY: y, theme: 'grid', body: info, styles: { fontSize: 9.5, cellPadding: 2, lineColor: PDF_COR.linha, lineWidth: 0.2, textColor: PDF_COR.tinta },
-      columnStyles: { 0: { cellWidth: 48, fontStyle: 'bold', fillColor: PDF_COR.lavanda, textColor: PDF_COR.indigo } } }) + 10;
+    var R = reciboModelo(r);
+    y = tabela({ startY: y, theme: 'grid', body: R.info, styles: { fontSize: 9.5, cellPadding: 2, lineColor: PDF_COR.linha, lineWidth: 0.2, textColor: PDF_COR.tinta },
+      columnStyles: { 0: { cellWidth: 44, fontStyle: 'bold', fillColor: PDF_COR.lavanda, textColor: PDF_COR.indigo } } }) + 10;
     y = titulo('Resumo', y);
-    var corpo = (r.resumo || []).map(function(z){ return [z.descricao, String(z.quantidade), brl(z.valor)]; });
+    var LH = 9.5 * 1.15 * 25.4 / 72, LHr = 7.6 * 1.2 * 25.4 / 72, larg = 92;
+    var regras = R.resumo.map(function(z){ doc.setFontSize(7.6); return z.regra ? doc.splitTextToSize(z.regra, larg) : []; });
+    var corpo = R.resumo.map(function(z){ return [z.descricao, z.quantidade, z.unitario, z.valor]; });
     corpo.push([{ content: 'TOTAL A RECEBER', styles: { fontStyle: 'bold', fillColor: PDF_COR.lavanda, textColor: PDF_COR.indigo } }, { content: '', styles: { fillColor: PDF_COR.lavanda } },
-                { content: brl(r.total), styles: { fontStyle: 'bold', fillColor: PDF_COR.lavanda, textColor: PDF_COR.indigo, halign: 'right' } }]);
-    y = tabela({ startY: y, theme: 'grid', head: [['Descrição', 'Quantidade', 'Valor Total']], body: corpo,
+                { content: '', styles: { fillColor: PDF_COR.lavanda } }, { content: R.total, styles: { fontStyle: 'bold', fillColor: PDF_COR.lavanda, textColor: PDF_COR.indigo, halign: 'right' } }]);
+    y = tabela({ startY: y, theme: 'grid', head: [['Descrição', 'Qtd.', 'Valor unit.', 'Valor']], body: corpo,
       headStyles: { fillColor: PDF_COR.indigo, textColor: 255, fontStyle: 'bold', fontSize: 9.5 },
-      styles: { fontSize: 9.5, cellPadding: 2, lineColor: PDF_COR.linha, lineWidth: 0.2, textColor: PDF_COR.tinta },
-      columnStyles: { 0: { cellWidth: 98 }, 1: { cellWidth: 30, halign: 'right' }, 2: { cellWidth: 50, halign: 'right' } } }) + 10;
+      styles: { fontSize: 9.5, cellPadding: 2, lineColor: PDF_COR.linha, lineWidth: 0.2, textColor: PDF_COR.tinta, valign: 'top' },
+      columnStyles: { 0: { cellWidth: 96 }, 1: { cellWidth: 18, halign: 'right' }, 2: { cellWidth: 30, halign: 'right' }, 3: { cellWidth: 34, halign: 'right' } },
+      didParseCell: function(dd){   /* a regra do preço vai em letra menor, embaixo da descrição */
+        if(dd.section !== 'body' || dd.column.index !== 0 || !regras[dd.row.index] || !regras[dd.row.index].length) return;
+        var desc = doc.splitTextToSize(String(R.resumo[dd.row.index].descricao), larg);
+        dd.cell.text = desc; dd.cell.styles.minCellHeight = 4 + desc.length * LH + regras[dd.row.index].length * LHr + 0.8;
+      },
+      didDrawCell: function(dd){
+        if(dd.section !== 'body' || dd.column.index !== 0 || !regras[dd.row.index] || !regras[dd.row.index].length) return;
+        var desc = doc.splitTextToSize(String(R.resumo[dd.row.index].descricao), larg);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7.6); pdfCor(doc, 'Text', PDF_COR.cinza);
+        doc.text(regras[dd.row.index], dd.cell.x + 2, dd.cell.y + 2 + desc.length * LH + LHr * 0.85);
+        doc.setFontSize(9.5); pdfCor(doc, 'Text', PDF_COR.tinta);
+      } }) + 10;
     y = titulo('Detalhamento por paciente', y);
-    var head = r.coluna_descricao ? [['Paciente', 'Data', 'Horário', 'Descrição', 'Status']] : [['Paciente', 'Data', 'Horário', 'Status']];
-    var det = (r.detalhe || []).map(function(z){
-      var st = { content: z.status, styles: { fontStyle: 'bold', textColor: z.status === 'Atendido' ? PDF_COR.verde : PDF_COR.vermelho } };
-      return r.coluna_descricao ? [z.paciente, dmy(z.data), z.horario, z.descricao || '', st] : [z.paciente, dmy(z.data), z.horario, st];
+    var det = R.detalhe.map(function(z){
+      return [z.data, z.horario, z.paciente, z.convenio, { content: z.situacao, styles: { fontStyle: 'bold', textColor: z.atendido ? PDF_COR.verde : PDF_COR.vermelho } }];
     });
-    var cols = r.coluna_descricao ? { 0: { cellWidth: 70 }, 1: { cellWidth: 24 }, 2: { cellWidth: 20 }, 3: { cellWidth: 32 }, 4: { cellWidth: 32 } }
-                                  : { 0: { cellWidth: 96 }, 1: { cellWidth: 28 }, 2: { cellWidth: 22 }, 3: { cellWidth: 32 } };
-    y = tabela({ startY: y, theme: 'grid', head: head, body: det, headStyles: { fillColor: PDF_COR.indigo, textColor: 255, fontStyle: 'bold', fontSize: 9 },
-      styles: { fontSize: 8.5, cellPadding: 1.6, lineColor: PDF_COR.linha, lineWidth: 0.2, textColor: PDF_COR.tinta }, alternateRowStyles: { fillColor: [250, 249, 252] }, columnStyles: cols }) + 7;
-    if(y > 268){ doc.addPage(); y = cab(); }
+    y = tabela({ startY: y, theme: 'grid', head: [['Data', 'Horário', 'Paciente', 'Convênio', 'Situação']], body: det, headStyles: { fillColor: PDF_COR.indigo, textColor: 255, fontStyle: 'bold', fontSize: 9 },
+      styles: { fontSize: 8.5, cellPadding: 1.6, lineColor: PDF_COR.linha, lineWidth: 0.2, textColor: PDF_COR.tinta }, alternateRowStyles: { fillColor: [250, 249, 252] },
+      columnStyles: { 0: { cellWidth: 21 }, 1: { cellWidth: 16 }, 2: { cellWidth: 70 }, 3: { cellWidth: 42 }, 4: { cellWidth: 29 } } }) + 7;
+    if(y > 266){ doc.addPage(); y = cab(); }
     doc.setFont('helvetica', 'italic'); doc.setFontSize(8); pdfCor(doc, 'Text', PDF_COR.cinza);
-    doc.text(doc.splitTextToSize('Documento interno de repasse. Atendido = sessão realizada (inclui lançamentos em aguardando). Falta = cancelamento, não comparecimento ou agendamento não realizado.', L - M), M, y);
+    doc.text(doc.splitTextToSize(RC_RODAPE, L - M), M, y);
     var n = doc.internal.getNumberOfPages(), agoraTxt = pdfData(new Date().toISOString()) + ' às ' + new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
     for(var i = 1; i <= n; i++){
       doc.setPage(i); pdfCor(doc, 'Draw', PDF_COR.linha); doc.setLineWidth(0.2); doc.line(M, 283, L, 283);
@@ -1759,24 +1797,23 @@ function desenhaRepasse(d){
   var tb = document.createElement('div'); tb.className = 'adm-rolagem'; host.appendChild(tb);
   var profs = d.profissionais || [], regs = d.regimes || [];
   var opts = function(sel){ return '<option value=""' + (!sel ? ' selected' : '') + '>— sem regime —</option>' + regs.map(function(g){ return '<option value="' + g.codigo + '"' + (g.codigo === sel ? ' selected' : '') + '>' + esc(g.nome) + '</option>'; }).join(''); };
-  var h = '<table class="adm"><tr><th>Profissional</th><th>Regime</th><th>Descrição no detalhe</th><th>Recibo do mês</th><th>Ações</th></tr>';
+  var h = '<table class="adm"><tr><th>Profissional</th><th>Regime</th><th>Recibo do mês</th><th>Ações</th></tr>';
   profs.forEach(function(p){
     var r = p.recibo;
     h += '<tr><td><b>' + esc(p.nome) + '</b>' + (p.situacao !== 'ativo' ? ' <span class="tag-sit tag-s1">' + esc(p.situacao) + '</span>' : '') + (!p.tem_acesso ? ' <small>(sem acesso)</small>' : '') + '</td>' +
       '<td><select data-regime="' + p.profissional_id + '" class="pf-adm-busca" style="width:auto;max-width:280px">' + opts(p.regime) + '</select></td>' +
-      '<td><input type="checkbox" data-coldesc="' + p.profissional_id + '"' + (p.coluna_descricao ? ' checked' : '') + '></td>' +
       '<td>' + (r ? '<b>' + brl(r.total) + '</b> · ' + esc(r.pct_texto || '') + ' · ' + (r.finalizadas || 0) + ' consultas<br><small>v' + r.versao + ' · ' + fmtTs(r.gerado_em) + ' · ' + esc(r.gerado_por) + '</small>' : (p.gera_recibo === false ? '<span class="tag-sit">sem recibo</span>' : (p.regime ? '<span class="tag-sit tag-s1">não gerado</span>' : '<span class="tag-sit tag-s0">defina o regime</span>'))) + '</td>' +
       '<td style="white-space:nowrap">' + (p.regime && p.gera_recibo !== false ? '<button type="button" class="gv-btn mini" data-gerar="' + p.profissional_id + '">' + (r ? 'Regerar' : 'Gerar') + '</button>' : '') +
       (r ? ' <button type="button" class="gv-btn mini" data-ver="' + p.profissional_id + '">Ver</button> <button type="button" class="gv-btn mini" data-pdf="' + p.profissional_id + '">PDF</button>' : '') + '</td></tr>';
   });
   tb.innerHTML = h + '</table><div id="rp-recibo-area"></div>';
   var salvaRegime = function(id){
-    var sel = tb.querySelector('select[data-regime="' + id + '"]'), chk = tb.querySelector('input[data-coldesc="' + id + '"]');
-    rpc('rep_admin_definir_regime', { p_senha_admin: adm.senha, p_profissional_id: id, p_regime: sel.value || null, p_coluna_descricao: chk.checked })
+    var sel = tb.querySelector('select[data-regime="' + id + '"]'), pr = profs.filter(function(x){ return x.profissional_id === id; })[0];
+    /* v3.1: o recibo sempre mostra o convênio de cada consulta; a antiga opção "Descrição no detalhe" fica como estava no banco */
+    rpc('rep_admin_definir_regime', { p_senha_admin: adm.senha, p_profissional_id: id, p_regime: sel.value || null, p_coluna_descricao: !!(pr && pr.coluna_descricao) })
       .then(function(r){ if(r && r.ok === false) alert(humano(new Error(r.erro))); else carregaRepasse(d.competencia); }).catch(function(e){ alert(humano(e)); });
   };
   Array.prototype.forEach.call(tb.querySelectorAll('select[data-regime]'), function(el){ el.onchange = function(){ salvaRegime(Number(el.getAttribute('data-regime'))); }; });
-  Array.prototype.forEach.call(tb.querySelectorAll('input[data-coldesc]'), function(el){ el.onchange = function(){ salvaRegime(Number(el.getAttribute('data-coldesc'))); }; });
   Array.prototype.forEach.call(tb.querySelectorAll('button[data-gerar]'), function(b){ b.onclick = function(){
     rpc('rep_admin_gerar', { p_senha_admin: adm.senha, p_competencia: d.competencia, p_profissional_id: Number(b.getAttribute('data-gerar')) })
       .then(function(r){ if(r.erros) alert('Não gerado: ' + (r.detalhe[0] && humano(new Error(r.detalhe[0].erro)))); carregaRepasse(d.competencia); }).catch(function(e){ alert(humano(e)); }); }; });
