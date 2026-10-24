@@ -19,6 +19,7 @@ if(/[?&](conferir|convite)=/.test(location.search))location.replace('https://pro
 <link rel="stylesheet" href="css/guias.css?v=8">
 <link rel="stylesheet" href="css/profissional.css?v=8">
 <link rel="stylesheet" href="css/financeiro.css?v=2">
+<link rel="stylesheet" href="css/gaveta.css?v=1">
 </head>
 <body>
 <div class="toast" id="toast"></div>
@@ -248,8 +249,9 @@ if(/[?&](conferir|convite)=/.test(location.search))location.replace('https://pro
   </div></div>
 </div>
 
-<!-- FINANCEIRO · Extrato (js/financeiro.js monta a tela aqui; só o administrador) -->
+<!-- FINANCEIRO · Extrato (js/financeiro.js monta a tela aqui; só o administrador) e Gaveta (js/gaveta.js: contagem às cegas) -->
 <div class="sec" id="s-financeiro"></div>
+<div class="sec" id="s-gaveta"></div>
 
 <!-- CONFIG -->
 <div class="sec" id="s-cfg">
@@ -333,13 +335,14 @@ if(/[?&](conferir|convite)=/.test(location.search))location.replace('https://pro
 </div></div>
 
 <!-- conveniência e login: Supabase pelas funções loja_* (LOJA v1.0); o Firebase saiu -->
-<script src="js/loja_api.js?v=1"></script>
-<script src="js/lojinha.js?v=13"></script>
+<script src="js/loja_api.js?v=2"></script>
+<script src="js/lojinha.js?v=14"></script>
 <script src="js/guias.js?v=14"></script>
 <script src="js/profissional.js?v=9"></script>
 <script src="js/loja_nova.js?v=10"></script>
-<script src="js/financeiro.js?v=4"></script>
-<script src="js/moldura.js?v=11"></script>
+<script src="js/financeiro.js?v=5"></script>
+<script src="js/gaveta.js?v=1"></script>
+<script src="js/moldura.js?v=12"></script>
 <script src="js/entrada.js?v=1"></script>
 <script src="js/loja_login.js?v=2"></script>
 </body>

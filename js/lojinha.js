@@ -194,8 +194,10 @@ async function doLogin(){
   catch(e){err.textContent=e.message||String(e);err.style.display='block';if(e.codigo==='PIN_INCORRETO')document.getElementById('lo-pin').value='';return;}
   LAPI.definirToken(r.token);
   const u={id:r.usuario.id,nome:r.usuario.nome,admin:r.usuario.admin===true};
-  if(r.pin_trocar&&window.LOGIN_LOJA){LOGIN_LOJA.trocarPin(u,pin,function(){CU=u;entrarApp();});return;}   /* PIN provisório: cria o seu antes de entrar */
-  CU=u;entrarApp();
+  const seguir=()=>{CU=u;entrarApp();};
+  const gaveta=()=>{if(window.GAVETA)GAVETA.naEntrada(u,seguir);else seguir();};   /* FIN v1.5: primeira entrada do dia conta a gaveta antes de abrir o Cortex */
+  if(r.pin_trocar&&window.LOGIN_LOJA){LOGIN_LOJA.trocarPin(u,pin,gaveta);return;}   /* PIN provisório: cria o seu antes de entrar */
+  gaveta();
 }
 document.getElementById('lo-pin').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 
@@ -207,6 +209,7 @@ function entrarApp(){
   aplicarPermissoes();
   setDatas();updateDate();setInterval(updateDate,60000);loadCaches();loadCfg();
   nav('guias');GV.startTimers();
+  if(window.GAVETA)GAVETA.iniciar();
 }
 function aplicarPermissoes(){
   const admin=isAdmin();
@@ -215,7 +218,7 @@ function aplicarPermissoes(){
   ['cx-detalhes-fis','cx-detalhes-ban'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display=admin?'':'none';});
   const cxa=document.getElementById('cx-acoes');if(cxa)cxa.style.display=admin?'flex':'none';
 }
-function doLogout(){try{GV.stopTimers();}catch(e){}try{LJ.sair();}catch(e){}try{FIN.sair();}catch(e){}LAPI.sair();CU=null;PC=[];PRC=[];document.getElementById('app').style.display='none';document.getElementById('lo').style.display='flex';document.getElementById('lo-pin').value='';return loadLoginUsers();}
+function doLogout(){try{GV.stopTimers();}catch(e){}try{LJ.sair();}catch(e){}try{FIN.sair();}catch(e){}try{GAVETA.sair();}catch(e){}LAPI.sair();CU=null;PC=[];PRC=[];document.getElementById('app').style.display='none';document.getElementById('lo').style.display='flex';document.getElementById('lo-pin').value='';return loadLoginUsers();}
 LAPI.aoCair(function(codigo,msg){   /* sessão caiu no meio do uso: volta para a entrada e diz por quê (depois que a lista de nomes recarrega) */
   if(!CU)return;
   const txt=codigo==='TROCAR_PIN'?'O administrador definiu um PIN novo para você. Entre com ele.':(msg||'Sua sessão terminou. Entre de novo.');
@@ -232,7 +235,7 @@ function nav(s,sub){
   document.getElementById('s-'+s).classList.add('active');
   document.getElementById('tb-ttl').textContent=TTLS[s]||s;
   if(window.moldura)moldura.aoNavegar(s,sub);
-  const fn={guias:function(){GV.boot(sub);},dashboard:loadDashboard,estoque:function(){LJ.estoque();},balanco:loadBalanco,notinhas:function(){LJ.notinhas();},caixa:function(){LJ.caixa();},posicao:loadPosicao,profissionais:loadProfTable,historico:function(){LJ.historico();},cfg:loadCfg,financeiro:function(){if(window.FIN)FIN.abrir();}};
+  const fn={guias:function(){GV.boot(sub);},dashboard:loadDashboard,estoque:function(){LJ.estoque();},balanco:loadBalanco,notinhas:function(){LJ.notinhas();},caixa:function(){LJ.caixa();},posicao:loadPosicao,profissionais:loadProfTable,historico:function(){LJ.historico();},cfg:loadCfg,financeiro:function(){if(window.FIN)FIN.abrir();},gaveta:function(){if(window.GAVETA)GAVETA.abrir();}};
   if(fn[s])fn[s]();
 }
 

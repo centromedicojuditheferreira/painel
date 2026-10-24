@@ -26,6 +26,7 @@ var moldura = (function () {
     cfg: 'M4 7h9M17 7h3M15 5v4M4 17h3M11 17h9M9 15v4',
     dono: 'M4 8.5l4 3.5 4-6.5 4 6.5 4-3.5-1.8 10H5.8z',
     extrato: 'M6 3.5h12v17l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4-2 1.4zM9 8h6M9 11.5h6M9 15h3.5',
+    gaveta: 'M3.5 9.5h17v9h-17zM3.5 9.5l2-4h13l2 4M10 13.5h4M7 7.5h10',
     venda: 'M6 8h12l-1 12.5H7zM9 8V6.5a3 3 0 0 1 6 0V8',
     fixar: 'M4 5h16v14H4zM9.5 5v14',
     sair: 'M10 4.5H6.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2H10M14.5 8l4 4-4 4M18.5 12h-9',
@@ -56,7 +57,8 @@ var moldura = (function () {
     historico:     { s: 'historico', secao: 'Conveniência', titulo: 'Histórico' },
     venda:         { s: 'venda',     secao: 'Conveniência', titulo: 'Nova venda', semFab: true },
     profissionais: { s: 'profissionais', secao: 'Conveniência', titulo: 'Profissionais', menu: 'notinhas' },
-    extrato:       { s: 'financeiro', secao: 'Financeiro', titulo: 'Extrato' },   /* FIN v1.3: só o administrador, por enquanto */
+    extrato:       { s: 'financeiro', secao: 'Financeiro', titulo: 'Extrato', adm: true },   /* FIN v1.3: só o administrador, por enquanto */
+    gaveta:        { s: 'gaveta',     secao: 'Financeiro', titulo: 'Gaveta' },    /* FIN v1.5: contagem às cegas (todos); retirada e histórico (administrador) */
     visao:         { s: 'dashboard', secao: 'Administração', titulo: 'Visão geral' },
     posicao:       { s: 'posicao',   secao: 'Administração', titulo: 'Estoque atual' },
     exportar:      { s: 'exportar',  secao: 'Administração', titulo: 'Exportar' },
@@ -67,14 +69,15 @@ var moldura = (function () {
     if (DEST[k].s === 'guias') TELA_GV[DEST[k].t] = k; else SEC_LOJA[DEST[k].s] = k;
   });
 
-  /* itens do menu: [destino, rótulo, id do contador, contador em vermelho?] */
+  /* itens do menu: [destino, rótulo, id do contador, contador em vermelho?, id do botão]; item só da Administração: adm no DEST
+     grupo: [nome, itens, grupo inteiro só da Administração?] */
   var MENU = [
     ['Faturamento', [['agenda', 'Agenda', 'gv-b-agenda', true], ['cadastros', 'Cadastros', 'gv-b-cad', true],
       ['exclusoes', 'Exclusões', 'gv-b-excl', true], ['corte', 'Corte', 'gv-b-corte', true], ['falhas', 'Falhas', 'gv-b-falhas', true],
       ['malotes', 'Malotes', 'gv-b-malotes']]],
     ['Conveniência', [['notinhas', 'Notinhas'], ['caixa', 'Caixa'], ['estoque', 'Estoque'], ['historico', 'Histórico']]],
     ['Profissionais', [['conferencia', 'Conferência', 'gv-b-prof', true]]],
-    ['Financeiro', [['extrato', 'Extrato']], true],
+    ['Financeiro', [['gaveta', 'Gaveta'], ['extrato', 'Extrato']]],
     ['Administração', [['visao', 'Visão geral'], ['posicao', 'Estoque atual'], ['exportar', 'Exportar'], ['cfg', 'Configurações'],
       ['dono', 'Dono', null, false, 'gv-aba-dono']], true]
   ];
@@ -83,6 +86,7 @@ var moldura = (function () {
   var menu = document.getElementById('menu');
   var atual = null;
   var chipsGV = [];
+  var chipsExtra = [];   /* FIN v1.5: quadrados da gaveta (contar de novo, diferença, fechar), antes dos do GV */
   var resumos = {};
   var fixo = false;
   try { fixo = localStorage.getItem('painel.menuFixo') === '1'; } catch (e) {}
@@ -201,8 +205,10 @@ var moldura = (function () {
      v3.4: sem o rótulo "Resolver agora"; os quadrados começam na margem esquerda. */
   var ra = document.getElementById('ra');
   function alertas(lista) { chipsGV = lista || []; desenharAlertas(); }
+  function alertasExtra(lista) { chipsExtra = lista || []; desenharAlertas(); }
   function desenharAlertas() {
-    if (!chipsGV.length) { ra.hidden = true; ra.innerHTML = ''; return; }
+    var todos = chipsExtra.concat(chipsExtra.length && chipsGV.length ? [{ sep: true }] : [], chipsGV);
+    if (!todos.length) { ra.hidden = true; ra.innerHTML = ''; return; }
     var filtro = (window.GV && GV.filtroTipo) ? GV.filtroTipo() : null;
     ra.hidden = false;
     ra.innerHTML =
@@ -211,13 +217,13 @@ var moldura = (function () {
       '<button type="button" class="ra-seta some" data-l="1" aria-label="Ver mais alertas">' + svg(I.dir, 16, 2.2) + '</button>';
     var tr = ra.querySelector('.ra-trilho');
     var j = 0;
-    chipsGV.forEach(function (c) {
+    todos.forEach(function (c) {
       if (c.sep) { var s = document.createElement('span'); s.className = 'ra-sep'; s.setAttribute('aria-hidden', 'true'); tr.appendChild(s); return; }
       var aqui = c.chave === atual;
       var on = atual === 'agenda' && filtro === c.chave;   /* v3.4: o filtro "Só X" da lista mora no próprio quadrado */
       var b = document.createElement('button'); b.type = 'button';
       b.className = 'ra-chip' + (aqui ? ' aqui' : '') + (on ? ' on' : '');
-      b.innerHTML = esc(c.rot) + ' <b>' + c.n + '</b>' + (on ? svg('M6 6l12 12M18 6 6 18', 12, 2.6) : '');
+      b.innerHTML = esc(c.rot) + (c.n != null && c.n !== '' ? ' <b>' + c.n + '</b>' : '') + (on ? svg('M6 6l12 12M18 6 6 18', 12, 2.6) : '');
       b.title = aqui ? 'Você está nesta tela' : (on ? 'A lista mostra só estes. Clique para tirar o filtro' : (c.dica || ''));
       if (on) b.setAttribute('aria-pressed', 'true');
       if (aqui) b.setAttribute('aria-current', 'page');
@@ -298,6 +304,6 @@ var moldura = (function () {
     rec.classList.add('girando'); setTimeout(function () { rec.classList.remove('girando'); }, 1200);
   });
   window.irPara = irPara;
-  return { aoNavegar: aoNavegar, aoTrocarTela: aoTrocarTela, alertas: alertas, resumo: resumo,
+  return { aoNavegar: aoNavegar, aoTrocarTela: aoTrocarTela, alertas: alertas, alertasExtra: alertasExtra, resumo: resumo,
            irTelaGuias: irTelaGuias, atual: function () { return atual; }, pop: pop, svg: svg, I: I, acoesDe: acoesDe };
 })();

@@ -1,0 +1,95 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Financeiro · Gaveta (FIN v1.5): contagem por cédula e moeda (na entrada, rosa; e nas janelas, claras),
+   tela Gaveta e a conta de uma pendência. Usa as peças do painel; aqui só o que é da gaveta.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── grade da contagem: duas colunas, cédulas e moedas ── */
+.gv-grade{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.gv-col{display:flex;flex-direction:column;min-width:0}
+.gv-l{display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:text}
+.gv-l-v{font-variant-numeric:tabular-nums;white-space:nowrap}
+.gv-q{flex:none;text-align:right;font-variant-numeric:tabular-nums;outline:none}
+.gv-q:disabled{opacity:.6}
+.gv-total{font-variant-numeric:tabular-nums}
+.gv-erro{font-size:14px;font-weight:600;color:var(--vermelho)}
+.gv-erro[hidden]{display:none}
+
+/* na entrada (rosa, como a troca do PIN) */
+#lo .gv-lo .gv-grade{gap:10px}
+#lo .gv-lo .gv-col{gap:6px}
+#lo .gv-lo .gv-col-t{font:600 13px var(--fn);color:rgba(255,255,255,.92);padding:0 2px}
+#lo .gv-lo .gv-l{min-height:48px;padding:0 6px 0 14px;background:rgba(255,255,255,.62);color:var(--lo-tinta);font:500 15px var(--fn)}
+#lo .gv-lo .gv-q{width:68px;height:36px;padding:0 10px;border:1px solid rgba(44,45,110,.22);background:#fff;font:600 17px var(--fn);color:var(--lo-tinta)}
+#lo .gv-lo .gv-q::placeholder{color:rgba(44,45,110,.35)}
+#lo .gv-lo .gv-q:focus{box-shadow:0 0 0 3px rgba(255,255,255,.75)}
+#lo .gv-lo .gv-total{margin:2px 0 0;font:500 15px var(--fn);color:#fff}
+#lo .gv-lo .gv-total b{margin-left:6px;font-size:22px;font-weight:700;letter-spacing:-.01em}
+#lo .gv-lo .gv-enviar{align-self:flex-start}
+
+/* nas janelas do Cortex (claras) */
+.gv-pop .gv-col{box-shadow:inset 0 0 0 1px var(--linha)}
+.gv-pop .gv-col-t{padding:8px 12px;font-size:13px;font-weight:600;color:var(--cinza);background:var(--fundo);border-bottom:1px solid var(--linha)}
+.gv-pop .gv-l{min-height:44px;padding:0 8px 0 12px;border-bottom:1px solid var(--linha);font-size:15px}
+.gv-pop .gv-l:last-child{border-bottom:0}
+.gv-pop .gv-q{width:80px;height:34px;padding:0 10px;border:1px solid var(--linha2);background:var(--branco);font:600 16px var(--fn);color:var(--tinta)}
+.gv-pop .gv-q::placeholder{color:var(--cinza3)}
+.gv-pop .gv-q:focus{border-color:var(--tint)}
+.gv-pop .gv-total{font-size:15px;color:var(--cinza)}
+.gv-pop .gv-total b{margin-left:6px;font-size:22px;font-weight:700;color:var(--tinta);letter-spacing:-.01em}
+.gv-pop .pop-rodape .btn{white-space:nowrap}
+.gv-dif{color:var(--vermelho)}
+.gv-form{display:flex;flex-direction:column;gap:12px}
+.gv-campo{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:var(--cinza)}
+.gv-campo .fc{font-weight:400}
+
+/* ── tela Gaveta ── */
+.gv-raiz .cf-porta{margin-top:4px}
+.gv-lista .lista-corpo{max-height:none}
+.linha.parada{cursor:default}
+.linha.parada:hover{background:var(--branco)}
+.gv-st{font-size:15px;font-weight:600;white-space:nowrap}
+.gv-st.pequeno{font-size:12px;font-weight:500}
+.gv-st.ok{color:var(--verde)}
+.gv-st.espera{color:var(--cinza);font-weight:500}
+.gv-st.pend{color:var(--vermelho)}
+.gv-acoes{display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding:14px 16px}
+.gv-acoes-lin{flex-direction:row;flex-wrap:wrap;border-bottom:1px solid var(--linha)}
+.gv-nota{font-size:14px;color:var(--cinza);line-height:1.45}
+.gv-ul{list-style:none;display:flex;flex-direction:column;gap:6px;font-size:15px;line-height:1.45}
+.gv-ul li{position:relative;padding-left:14px}
+.gv-ul li::before{content:"";position:absolute;left:0;top:.62em;width:5px;height:5px;background:var(--cinza3)}
+.gv-agora .lj-grande-n{font-size:30px}
+.gv-nota-cx{padding:8px 16px 10px;border-bottom:1px solid var(--linha)}
+
+/* retiradas e colocações do Administrador */
+.gv-movs-l{display:flex;flex-direction:column}
+.gv-mov{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--linha)}
+.gv-mov:last-child{border-bottom:0}
+.gv-mov-q{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.gv-mov-q b{font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gv-mov-q small{font-size:13px;color:var(--cinza)}
+.gv-mov-v{flex:none;font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.gv-mov.erro .gv-mov-q b,.gv-mov.erro .gv-mov-v{color:var(--cinza3);text-decoration:line-through}
+.gv-mov-erro{flex:none;height:28px;padding:0 10px;border:0;background:var(--preenche);color:var(--cinza);font:500 13px var(--fn);cursor:pointer}
+.gv-mov-erro:hover{background:var(--preenche2);color:var(--tinta)}
+.gv-mais{display:block;width:100%;height:40px;border:0;border-top:1px solid var(--linha);background:transparent;color:var(--tint);font:600 14px var(--fn);cursor:pointer}
+
+/* a conta de uma pendência */
+.gv-conta{display:flex;flex-direction:column;box-shadow:inset 0 0 0 1px var(--linha)}
+.gv-c{padding:10px 14px;border-bottom:1px solid var(--linha)}
+.gv-c:last-child{border-bottom:0}
+.gv-c-l{display:flex;align-items:baseline;justify-content:space-between;gap:12px;font-size:15px}
+.gv-c-l b{flex:none;font-weight:600;font-variant-numeric:tabular-nums}
+.gv-c-i{display:flex;justify-content:space-between;gap:12px;margin-top:4px;padding-left:12px;font-size:13px;color:var(--cinza);font-variant-numeric:tabular-nums}
+.gv-c-i span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gv-c.soma{background:var(--fundo)}
+.gv-c.soma .gv-c-l{font-weight:600}
+.gv-c.cinza .gv-c-l,.gv-c.cinza .gv-c-l b{color:var(--cinza);font-weight:500}
+
+@media (max-width:560px){
+  .gv-pop .gv-grade,#lo .gv-lo .gv-grade{gap:8px}
+  .gv-pop .gv-l{padding:0 6px 0 10px}
+  .gv-pop .gv-q,#lo .gv-lo .gv-q{width:60px;padding:0 8px}
+  #lo .gv-lo .gv-l{padding:0 6px 0 10px;font-size:14px}
+  .gv-pop .pop-rodape{flex-wrap:wrap}
+}

@@ -8,7 +8,9 @@
    É a tela que as secretárias vão usar depois: cada entrada aparece como OK (a prova bateu),
    aguardando (a prova ainda não chegou) ou pendência (com o valor e o que houve). Valor só em
    pendência, porque a contagem da gaveta é às cegas. Provas: Pix → banco, cartão → Cielo,
-   dinheiro → contagem da gaveta; DOC (aluguel) é sempre OK. Nesta etapa as provas ainda não estão ligadas.
+   dinheiro → contagem da gaveta; DOC (aluguel) é sempre OK.
+   FIN v1.5: o dinheiro vira OK quando uma contagem da gaveta bate depois dele (o servidor manda a cobertura
+   de cada entrada em dinheiro), e a contagem com diferença aberta aparece nas pendências. Banco e Cielo, depois.
    ═══════════════════════════════════════════════════════════════════ */
 var FIN = (function () {
   'use strict';
@@ -52,13 +54,22 @@ var FIN = (function () {
 
   /* ── a situação de cada entrada: OK, aguardando (a prova ainda não chegou) ou pendência ──
      Valor só aparece em pendência: é a tela das secretárias, e a contagem da gaveta é às cegas. */
-  function provaDe(forma) {
+  function provaDe(forma, gaveta) {
     if (forma === 15 || forma === 'pix') return { st: 'espera', rot: 'aguardando o banco',
       txt: 'Pix: a prova é a entrada no extrato do Inter. Fica aguardando até o robô do Inter rodar e a chave CNPJ estar no Inter.' };
     if (forma === 8 || forma === 9 || forma === 'credito' || forma === 'debito') return { st: 'espera', rot: 'aguardando a Cielo',
       txt: 'Cartão: a prova é a venda na Cielo, item por item. Fica aguardando até a Cielo estar ligada.' };
-    if (forma === 1 || forma === 'dinheiro') return { st: 'espera', rot: 'aguardando a contagem',
-      txt: 'Dinheiro: a prova é a contagem da gaveta, às cegas, na chegada de cada secretária. Vira OK quando a contagem bate.' };
+    if (forma === 1 || forma === 'dinheiro') {   /* FIN v1.5: a primeira contagem da gaveta que alcançou esta entrada */
+      var g = gaveta || {}, quando = (g.dia && st.dados && g.dia !== st.dados.dia ? ddmm(g.dia) + ' às ' : 'das ') + (g.hora || '');
+      if (g.st === 'ok') return { st: 'ok', rot: 'OK',
+        txt: 'Dinheiro: a contagem da gaveta ' + quando + (g.quem ? ' (' + g.quem + ')' : '') + ' bateu depois desta entrada.' };
+      if (g.st === 'dif') return { st: 'espera', rot: 'gaveta com diferença',
+        txt: 'Dinheiro: a contagem da gaveta ' + quando + ' não bateu e a diferença ainda está aberta. Veja em Financeiro → Gaveta.' };
+      if (g.st === 'antes') return { st: 'espera', rot: 'antes da 1ª contagem',
+        txt: 'Dinheiro: entrou antes da primeira contagem da gaveta e já estava no valor contado naquela abertura.' };
+      return { st: 'espera', rot: 'aguardando a contagem',
+        txt: 'Dinheiro: a prova é a contagem da gaveta, às cegas, na chegada de cada secretária e no fechamento. Vira OK quando a próxima contagem bate.' };
+    }
     if (forma === 5) return { st: 'ok', rot: 'OK',
       txt: 'DOC é o aluguel: o paciente paga direto ao profissional e o dinheiro não entra na gaveta. Fica sempre OK; aparece só para conferir que foi lançado.' };
     return { st: 'pend', rot: 'forma que a recepção não usa',
@@ -170,12 +181,13 @@ var FIN = (function () {
       return;
     }
     var pags = d.pagamentos || [], sem = d.sem_cobranca || [], conv = st.conv || [];
-    function ehPend(x) { return provaDe(x.forma).st === 'pend'; }
+    var gav = (d.gaveta && d.gaveta.pendencias) || [];   /* FIN v1.5: contagens deste dia com diferença aberta */
+    function ehPend(x) { return provaDe(x.forma, x.gaveta).st === 'pend'; }
     var pagPend = [], pagOk = [], convPend = [], convOk = [];
     pags.forEach(function (p, i) { (ehPend(p) ? pagPend : pagOk).push(i); });
     conv.forEach(function (c, i) { (ehPend(c) ? convPend : convOk).push(i); });
     var n = { atend: pags.length + sem.length, conv: conv.length };
-    var lanc = pags.length + conv.length, npend = sem.length + pagPend.length + convPend.length;
+    var lanc = pags.length + conv.length, npend = sem.length + pagPend.length + convPend.length + gav.length;
     resumo(diaLongo(d.dia) + (d.dia === d.hoje ? ' (hoje)' : '') + ' · ' + (lanc === 1 ? '1 lançamento' : lanc + ' lançamentos') +
       (npend ? ' · ' + (npend === 1 ? '1 pendência' : npend + ' pendências') : '') +
       (st.carregadoEm ? ' · carregado às ' + horaBR(st.carregadoEm) : ''));
@@ -194,10 +206,12 @@ var FIN = (function () {
     var corpo = el('div', 'lista-corpo');
     if (st.erro) corpo.appendChild(el('div', 'lista-vazio erro', esc(st.erro)));
     var verAt = st.filtro !== 'conveniencia', verCv = st.filtro !== 'atendimentos';
-    /* pendências no topo: atendido sem cobrança e entrada que não bateu (com o valor e o que houve) */
-    var np = (verAt ? sem.length + pagPend.length : 0) + (verCv ? convPend.length : 0);
+    /* pendências no topo: atendido sem cobrança, entrada que não bateu (com o valor e o que houve) e a gaveta com diferença */
+    var verGv = st.filtro === 'tudo';
+    var np = (verAt ? sem.length + pagPend.length : 0) + (verCv ? convPend.length : 0) + (verGv ? gav.length : 0);
     if (np) {
       corpo.appendChild(cab('Pendências', np === 1 ? '1 para resolver' : np + ' para resolver', 'pend'));
+      if (verGv) gav.forEach(function (g) { corpo.appendChild(linhaGaveta(g)); });
       if (verAt) sem.forEach(function (s, i) { corpo.appendChild(linhaSem(s, i)); });
       if (verAt) pagPend.forEach(function (i) { corpo.appendChild(linhaPag(pags[i], i)); });
       if (verCv) convPend.forEach(function (i) { corpo.appendChild(linhaConv(conv[i], i)); });
@@ -288,7 +302,7 @@ var FIN = (function () {
     if (p.conta_data && p.conta_data !== d.dia) meta += ' · conta de ' + ddmm(p.conta_data);
     var b = bt('linha fin-l', '<span class="h">' + esc(a0 ? a0.horario : '—') + '</span>' +
       '<span class="q"><span class="nm">' + esc(p.paciente || 'Recebimento sem paciente') + '</span><span class="mt">' + esc(meta) + '</span></span>' +
-      dirHtml(p.valor, formaFeegow(p), provaDe(p.forma)), function () { detalhe('pag', i); });
+      dirHtml(p.valor, formaFeegow(p), provaDe(p.forma, p.gaveta)), function () { detalhe('pag', i); });
     b.setAttribute('aria-haspopup', 'dialog');
     return b;
   }
@@ -298,8 +312,18 @@ var FIN = (function () {
     if (c.secretaria) meta += ' · por ' + c.secretaria;
     var b = bt('linha fin-l', '<span class="h">' + esc(horaBR(c.quando)) + '</span>' +
       '<span class="q"><span class="nm">' + esc(nm) + '</span><span class="mt">' + esc(meta) + '</span></span>' +
-      dirHtml(c.valor, FORMA_CONV[c.forma], provaDe(c.forma)), function () { detalhe('conv', i); });
+      dirHtml(c.valor, FORMA_CONV[c.forma], provaDe(c.forma, c.gaveta)), function () { detalhe('conv', i); });
     b.setAttribute('aria-haspopup', 'dialog');
+    return b;
+  }
+  /* FIN v1.5: contagem da gaveta com diferença aberta; o detalhe e o fechamento ficam em Financeiro → Gaveta */
+  function linhaGaveta(g) {
+    var dv = Number(g.diferenca || 0);
+    var b = bt('linha fin-l', '<span class="h">' + esc(g.hora || '—') + '</span>' +
+      '<span class="q"><span class="nm">Gaveta · contagem ' + (g.tipo === 'fechamento' ? 'de fechamento' : 'de chegada') + '</span>' +
+      '<span class="mt">' + esc('por ' + (g.quem || '—') + ' · abrir em Financeiro → Gaveta') + '</span></span>' +
+      '<span class="dir"><span class="valor fin-pend-v">' + esc(brl(Math.abs(dv))) + '</span><span class="tr fin-pend-t">' + (dv >= 0 ? 'sobraram na gaveta' : 'faltaram na gaveta') + '</span></span>',
+      function () { if (window.irPara) irPara('gaveta'); });
     return b;
   }
   function linhaSem(s, i) {
@@ -322,9 +346,11 @@ var FIN = (function () {
       '<p class="cinza">Valor só nas pendências: é a tela que as secretárias vão usar. Por enquanto, aberta só para o administrador.</p>'));
     var s = el('section', 'painel fin-provas');
     s.appendChild(el('div', 'painel-cab', '<h2>Provas</h2><span>o que já está ligado</span>'));
+    var gv = d.gaveta || null;
     [['Banco (Inter)', d.banco_ligado ? 'Robô ligado; a conferência do Pix entra na etapa 4' : 'Robô do Inter ainda não ligado'],
      ['Cielo', 'Aguardando o acesso à Cielo'],
-     ['Contagem da gaveta', d.loja_migrada ? 'Próxima etapa: a contagem às cegas na chegada' : 'Depois da migração da conveniência para o Supabase']].forEach(function (x) {
+     ['Contagem da gaveta', gv ? (gv.ligada ? 'Ligada: o dinheiro vira OK quando a contagem bate' : 'Ligada; esperando a primeira contagem')
+                              : 'Esperando a instalação da gaveta (FIN v1.5)']].forEach(function (x) {
       s.appendChild(el('div', 'lj-cl', '<span>' + esc(x[0]) + '</span><b>' + esc(x[1]) + '</b>'));
     });
     l.appendChild(s);
@@ -337,8 +363,8 @@ var FIN = (function () {
     lista.forEach(function (x) { if (x && x[1] != null && x[1] !== '') c.appendChild(el('div', 'lj-cl', '<span>' + esc(x[0]) + '</span><b>' + esc(x[1]) + '</b>')); });
     return c;
   }
-  function caixaProva(forma) {
-    var pv = provaDe(forma);
+  function caixaProva(forma, gaveta) {
+    var pv = provaDe(forma, gaveta);
     var rot = pv.st === 'pend' ? 'Pendência: ' + pv.rot : (pv.st === 'ok' ? 'OK' : 'Aguardando: ' + pv.rot.replace(/^aguardando /, ''));
     return el('div', 'pp-caixa', '<span class="pp-tag fin-tag ' + pv.st + '">' + esc(rot) + '</span><span class="pp-txt">' + esc(pv.txt) + '</span>');
   }
@@ -348,7 +374,7 @@ var FIN = (function () {
     var P = moldura.pop({ largura: '560px', titulo: tipo === 'conv' ? 'Conveniência' : (tipo === 'sem' ? 'Atendido sem cobrança' : 'Pagamento no Feegow') });
     if (tipo === 'pag') {
       var p = d.pagamentos[i]; if (!p) { P.fechar(); return; }
-      var at = p.atendimentos || [], comValor = provaDe(p.forma).st === 'pend';   /* valor só em pendência */
+      var at = p.atendimentos || [], comValor = provaDe(p.forma, p.gaveta).st === 'pend';   /* valor só em pendência */
       P.corpo.appendChild(el('div', 'pp-cab', '<h2>' + esc(p.paciente || 'Recebimento sem paciente') + '</h2><span class="pp-sub">' +
         esc(formaFeegow(p) + (comValor ? ' · ' + brl(p.valor) : '') + ' · ' + diaLongo(d.dia)) + '</span>'));
       P.corpo.appendChild(campos([
@@ -362,10 +388,10 @@ var FIN = (function () {
       at.forEach(function (a) { bl.appendChild(el('span', 'pp-txt', esc((a.horario || '—') + ' · ' + atendTxt(a)))); });
       if (p.ligacao === 'dia') bl.appendChild(el('span', 'pp-l2', 'A conta não foi ligada ao atendimento no Feegow; estes são os atendimentos do paciente no dia.'));
       P.corpo.appendChild(bl);
-      P.corpo.appendChild(caixaProva(p.forma));
+      P.corpo.appendChild(caixaProva(p.forma, p.gaveta));
     } else if (tipo === 'conv') {
       var c = st.conv[i]; if (!c) { P.fechar(); return; }
-      var cv = provaDe(c.forma).st === 'pend';                                    /* valor só em pendência */
+      var cv = provaDe(c.forma, c.gaveta).st === 'pend';                          /* valor só em pendência */
       P.corpo.appendChild(el('div', 'pp-cab', '<h2>' + (c.tipo === 'venda' ? 'Venda' : 'Pagamento de notinha') + '</h2><span class="pp-sub">' +
         esc(FORMA_CONV[c.forma] + (cv ? ' · ' + brl(c.valor) : '') + ' · ' + diaLongo(d.dia) + ' às ' + horaBR(c.quando)) + '</span>'));
       var lista = [['Valor', cv ? brl(c.valor) : ''], ['Forma', FORMA_CONV[c.forma]]];
@@ -378,7 +404,7 @@ var FIN = (function () {
         c.itens.forEach(function (x) { it.appendChild(el('span', 'pp-txt', esc(x.nome + (x.qtd > 1 ? ' ×' + x.qtd : '') + (cv ? ' · ' + brl(x.valor) : '')))); });
         P.corpo.appendChild(it);
       }
-      P.corpo.appendChild(caixaProva(c.forma));
+      P.corpo.appendChild(caixaProva(c.forma, c.gaveta));
     } else {
       var s = d.sem_cobranca[i]; if (!s) { P.fechar(); return; }
       P.corpo.appendChild(el('div', 'pp-cab', '<span class="pp-alerta">Sem cobrança no Feegow</span><h2>' + esc(s.paciente) + '</h2><span class="pp-sub">' +
@@ -405,5 +431,8 @@ var FIN = (function () {
     var r = raiz(); if (r) { r.innerHTML = ''; r.removeAttribute('data-dia'); }
   }
 
-  return { abrir: abrir0, sair: sair, recarregar: function () { return carregar(st.dia); } };
+  return { abrir: abrir0, sair: sair, recarregar: function () { return carregar(st.dia); },
+           /* FIN v1.5: a tela Gaveta usa a mesma senha de administração (pedida uma vez por sessão) */
+           senhaAdm: function () { return st.senha; },
+           guardarSenha: function (s) { st.senha = s || null; if (!s) { relogio(false); st.dados = null; } } };
 })();
