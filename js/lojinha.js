@@ -1,5 +1,5 @@
 // ================================================================
-//  Lojinha e login: os dados ficam no Supabase (LOJA v1.0), sempre
+//  Conveniência e login: os dados ficam no Supabase (LOJA v1.0), sempre
 //  pelas funções do servidor em js/loja_api.js (LAPI). O Firebase
 //  saiu do Cortex; só a tela de migração (js/loja_login.js) ainda o lê,
 //  uma vez, para trazer os dados.
@@ -15,6 +15,7 @@ const fmtD=ts=>{if(!ts)return'-';const d=ts.toDate?ts.toDate():new Date(ts);retu
 const tsMs=ts=>{if(!ts)return 0;const d=ts.toDate?ts.toDate():new Date(ts);return d.getTime();};
 const OCULTOS_PADRAO=['gabriel ferreira'];
 const ehOculto=p=>!p?false:(p.oculto===true||(p.oculto==null&&OCULTOS_PADRAO.includes(String(p.nome||'').trim().toLowerCase())));
+const saldoOculto=p=>ehOculto(p)&&!isAdmin();   /* notinha oculta: a secretária vê o nome, nunca o valor (24/10/26) */
 const semErro=m=>m.marcado_erro!==true;
 const ordDesc=(a,b)=>tsMs(b.timestamp)-tsMs(a.timestamp);
 const ordAsc=(a,b)=>tsMs(a.timestamp)-tsMs(b.timestamp);
@@ -226,6 +227,7 @@ function setDatas(){const t=todayISO(),f=firstISO();['cx-ini','h-ini','ex-ini','
 const TTLS={guias:'Guias da Agenda',dashboard:'Dashboard',venda:'Nova Venda',estoque:'Entrada de Estoque',balanco:'Balanço de Estoque',notinhas:'Notinhas',caixa:'Caixa',posicao:'Estoque Atual',profissionais:'Profissionais',historico:'Historico',exportar:'Exportar CSV',cfg:'Configuracoes'};
 function nav(s,sub){
   if(s==='venda'&&window.LJ){LJ.abrirVenda();return;}   /* Nova venda agora é a janela no canto (js/loja_nova.js) */
+  if(s==='caixa'&&!isAdmin()){s='guias';sub=undefined;}   /* Caixa: só a Administração (24/10/26) */
   document.querySelectorAll('.sec').forEach(x=>x.classList.remove('active'));
   document.getElementById('s-'+s).classList.add('active');
   document.getElementById('tb-ttl').textContent=TTLS[s]||s;
@@ -275,10 +277,10 @@ async function loadDashboard(){
 
 function abrirBaixaNotinha(){
   const sel=document.getElementById('baixa-prof');sel.innerHTML='<option value="">Selecione...</option>';
-  PRC.forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.nome+(p.saldo_devedor>0?' — deve '+fmt(p.saldo_devedor):'');sel.appendChild(o);});
+  PRC.forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.nome+(p.saldo_devedor>0&&!saldoOculto(p)?' — deve '+fmt(p.saldo_devedor):'');sel.appendChild(o);});
   document.getElementById('baixa-val').value='';document.getElementById('baixa-obs').value='';
   document.getElementById('baixa-saldo-info').style.display='none';
-  sel.onchange=()=>{const p=PRC.find(x=>x.id===sel.value);const info=document.getElementById('baixa-saldo-info');if(p&&p.saldo_devedor>0){info.textContent='Saldo devedor: '+fmt(p.saldo_devedor);info.style.display='block';}else info.style.display='none';};
+  sel.onchange=()=>{const p=PRC.find(x=>x.id===sel.value);const info=document.getElementById('baixa-saldo-info');if(p&&p.saldo_devedor>0&&!saldoOculto(p)){info.textContent='Saldo devedor: '+fmt(p.saldo_devedor);info.style.display='block';}else info.style.display='none';};
   openM('m-baixa');
 }
 async function confirmarBaixaNotinha(){
@@ -312,8 +314,8 @@ async function loadProfTable(){
   if(!docs.length){tb.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">Nenhum profissional cadastrado</td></tr>';return;}
   docs.forEach(p=>{
     const sd=p.saldo_devedor||0;const tr=document.createElement('tr');
-    const sdTxt=sd>0?fmt(sd):sd<0?'Crédito '+fmt(Math.abs(sd)):'Em dia';
-    const sdClr=sd>0?'var(--red)':sd<0?'var(--grn)':'var(--muted)';
+    const sdTxt=saldoOculto(p)?'—':sd>0?fmt(sd):sd<0?'Crédito '+fmt(Math.abs(sd)):'Em dia';
+    const sdClr=saldoOculto(p)?'var(--muted)':sd>0?'var(--red)':sd<0?'var(--grn)':'var(--muted)';
     const bonif=p.bonificacao_mensal!=null?p.bonificacao_mensal:(CFG.valor_bonificacao_padrao!=null?CFG.valor_bonificacao_padrao:100);
     const be=document.createElement('button');be.className='btn btn-s btn-sm';be.textContent='Editar';be.onclick=()=>editProf(p);
     const bt=document.createElement('button');bt.className='btn btn-s btn-sm';bt.textContent=p.ativo?'Desativar':'Ativar';bt.onclick=()=>toggleProf(p.id,p.ativo);
@@ -344,9 +346,10 @@ function editProf(p){
   document.getElementById('mpr-nm').value=p.nome;
   const bonif=p.bonificacao_mensal!=null?p.bonificacao_mensal:(CFG.valor_bonificacao_padrao!=null?CFG.valor_bonificacao_padrao:100);
   document.getElementById('mpr-bonif').value=bonif;
-  document.getElementById('mpr-saldo-blk').style.display='block';
-  document.getElementById('mpr-saldo').value=p.saldo_devedor||0;
-  document.getElementById('mpr-saldo').dataset.ini=String(p.saldo_devedor||0);   /* só vira correção se a pessoa digitar outro valor */
+  const semSaldo=saldoOculto(p);   /* notinha oculta: a secretária não vê nem corrige o saldo */
+  document.getElementById('mpr-saldo-blk').style.display=semSaldo?'none':'block';
+  document.getElementById('mpr-saldo').value=semSaldo?'':(p.saldo_devedor||0);
+  document.getElementById('mpr-saldo').dataset.ini=semSaldo?'':String(p.saldo_devedor||0);   /* só vira correção se a pessoa digitar outro valor */
   openM('m-prof');
 }
 async function salvarProf(){

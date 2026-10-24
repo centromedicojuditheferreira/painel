@@ -1,5 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════════
-   Lojinha · design novo: Notinhas, Caixa, Estoque, Histórico e a janela de Nova venda.
+   Conveniência · design novo: Notinhas, Caixa, Estoque, Histórico e a janela de Nova venda.
+   Secretária (24/10/26): Caixa só da Administração; Estoque e Histórico sem R$; Notinhas sem os totais;
+   notinha oculta mostra o nome, nunca o valor.
    Usa o mesmo Firestore e as mesmas variáveis de js/lojinha.js (db, CU, PC, PRC, CFG, fmt…).
    Cada gravação repete, campo a campo, a da função antiga citada no comentário ao lado;
    o que mudou foi só a cara (lista à esquerda, painel à direita, detalhe em janela).
@@ -219,10 +221,12 @@ var LJ = (function () {
   function marcarErro(id, mot) {
     return LAPI.marcarErro(id, mot).catch(function (e) { if (e.codigo === 'JA_MARCADO') e.jaMarcado = true; throw e; });
   }
-  function compensaTxt(m) {
+  function compensaTxt(m, semR) {   /* semR: Histórico da secretária, o mesmo aviso sem os valores */
     var p = [], q = m.quantidade || 1;
-    if (m.tipo === 'venda_profissional' && m.profissional_nome) p.push('A notinha de ' + m.profissional_nome + ' diminui ' + fmt(m.valor_total) + '.');
-    if ((m.tipo === 'pagamento_notinha' || m.tipo === 'bonificacao') && m.profissional_nome) p.push('A notinha de ' + m.profissional_nome + ' volta a ter ' + fmt(m.valor_total) + '.');
+    if (m.tipo === 'venda_profissional' && m.profissional_nome) p.push('A notinha de ' + m.profissional_nome + (semR ? ' diminui o valor desta compra.' : ' diminui ' + fmt(m.valor_total) + '.'));
+    if ((m.tipo === 'pagamento_notinha' || m.tipo === 'bonificacao') && m.profissional_nome)
+      p.push(semR ? 'O valor ' + (m.tipo === 'bonificacao' ? 'desta bonificação' : 'deste pagamento') + ' volta para a notinha de ' + m.profissional_nome + '.'
+                  : 'A notinha de ' + m.profissional_nome + ' volta a ter ' + fmt(m.valor_total) + '.');
     if ((m.tipo === 'venda_paciente' || m.tipo === 'venda_profissional') && m.produto_nome) p.push('O estoque de ' + m.produto_nome + ' volta ' + q + ' un.');
     if (m.tipo === 'entrada_estoque' && m.produto_nome) p.push('O estoque de ' + m.produto_nome + ' perde ' + q + ' un.');
     if (m.tipo === 'ajuste_estoque' && m.produto_nome) p.push('O balanço de ' + m.produto_nome + ' é desfeito no estoque.');
@@ -242,8 +246,8 @@ var LJ = (function () {
     var cli = clienteDe(m); if (cli) lista.push(['Cliente', cli]);
     if (m.quantidade) lista.push(['Quantidade', (m.tipo === 'ajuste_estoque' && m.quantidade > 0 ? '+' : '') + m.quantidade + ' un']);
     if (m.forma_pagamento) lista.push(['Pagamento', formaRot(m.forma_pagamento)]);
-    if (!semValor(m.tipo)) lista.push(['Valor', valorTxt(m)]);
-    if ((m.taxa_valor || 0) > 0) { lista.push(['Taxa do cartão', '− ' + fmt(m.taxa_valor)]); lista.push(['Valor líquido', fmt(m.valor_liquido)]); }
+    if (!semValor(m.tipo) && !ctx.semValor) lista.push(['Valor', valorTxt(m)]);
+    if ((m.taxa_valor || 0) > 0 && !ctx.semValor) { lista.push(['Taxa do cartão', '− ' + fmt(m.taxa_valor)]); lista.push(['Valor líquido', fmt(m.valor_liquido)]); }
     if (m.descricao && m.descricao !== 'Entrada de estoque' && m.descricao !== m.tipo && (m.produto_nome || semValor(m.tipo))) lista.push(['Observação', m.descricao]);
     lista.push(['Lançado por', m.secretaria_nome || '—']);
     P.corpo.appendChild(campos(lista));
@@ -256,7 +260,7 @@ var LJ = (function () {
     if (ctx.modo === 'erro') {
       var c = el('div', 'mal-conf lj-conf-erro');
       c.appendChild(el('b', '', 'Marcar como erro'));
-      c.appendChild(el('span', 'pp-txt', 'O lançamento continuará registrado, mas será retirado dos cálculos. ' + esc(compensaTxt(m))));
+      c.appendChild(el('span', 'pp-txt', 'O lançamento continuará registrado, mas será retirado dos cálculos. ' + esc(compensaTxt(m, ctx.semValor))));
       var ta = el('textarea', 'pp-nota'); ta.rows = 2; ta.placeholder = 'Motivo (obrigatório): descreva o erro'; ta.value = ctx.motivo || ''; ta.setAttribute('aria-label', 'Motivo');
       ta.addEventListener('input', function () { ctx.motivo = ta.value; });
       c.appendChild(ta);
@@ -324,7 +328,8 @@ var LJ = (function () {
     var D = ntDados();
     var aberto = 0, nDev = 0;
     nt.profs.forEach(function (p) { var s = p.saldo_devedor || 0; if (s > 0) { aberto += s; } if (s > 0.004) nDev++; });
-    resumo('notinhas', nt.carregado ? fmt(aberto) + ' em aberto · ' + (nDev === 1 ? '1 profissional devendo' : nDev + ' profissionais devendo') + ' · bonificação mensal de ' + fmt(bonifPadrao()) : '');
+    var admin = isAdmin();   /* secretária: sem os totais, só o que cada um deve (24/10/26) */
+    resumo('notinhas', nt.carregado ? (admin ? fmt(aberto) + ' em aberto · ' : '') + (nDev === 1 ? '1 profissional devendo' : nDev + ' profissionais devendo') + ' · bonificação mensal de ' + fmt(bonifPadrao()) : '');
     var antes = r.querySelector('.lista-corpo'), rol = antes && !nt.topo ? antes.scrollTop : 0; nt.topo = false;
     var foco = document.activeElement && document.activeElement.classList.contains('lj-busca-in') ? document.activeElement.selectionStart : null;
     r.innerHTML = '';
@@ -360,10 +365,10 @@ var LJ = (function () {
     sec.appendChild(corpo);
     wrap.appendChild(sec);
     var lado = el('div', 'lado');
-    lado.appendChild(el('section', 'painel lj-grande', '<h2 class="lj-grande-rot">Em aberto hoje</h2><span class="lj-grande-n" style="color:#D70015">' + esc(fmt(aberto)) + '</span>' +
+    if (admin) lado.appendChild(el('section', 'painel lj-grande', '<h2 class="lj-grande-rot">Em aberto hoje</h2><span class="lj-grande-n" style="color:#D70015">' + esc(fmt(aberto)) + '</span>' +
       '<span class="lj-grande-l1">' + esc((nDev === 1 ? '1 profissional devendo' : nDev + ' profissionais devendo') + ' de ' + nt.profs.length) + '</span>' +
       '<span class="lj-grande-l2">' + esc('Em ' + MESES[new Date().getMonth()] + ': ' + fmt(D.comp) + ' em compras e ' + fmt(D.pag) + ' em pagamentos') + '</span>'));
-    var novoP = el('section', 'painel nota-lado', '<h2>Profissional novo na lojinha?</h2><p class="cinza">Cadastre aqui para poder vender na notinha dele.</p>');
+    var novoP = el('section', 'painel nota-lado', '<h2>Profissional novo na conveniência?</h2><p class="cinza">Cadastre aqui para poder vender na notinha dele.</p>');
     novoP.appendChild(bt('btn btn-p lj-alinha', 'Novo profissional', function () { abrirNovoProf(); }));
     lado.appendChild(novoP);
     lado.appendChild(el('section', 'painel nota-lado', '<h2>Como funciona</h2><p>Compra na notinha <b>soma</b> no saldo do profissional. Pagamento e bonificação <b>baixam</b> o saldo; o pagamento entra no caixa.</p>' +
@@ -447,10 +452,12 @@ var LJ = (function () {
         });
         Object.keys(SALDO).forEach(function (k) { if (SALDO[k] > 0 && !OCULTO[k]) ts += SALDO[k]; });
         txt += '\n' + IG + '\n';
-        txt += '  ' + PAD('TOTAL COMPRAS NO PERÍODO', 42) + '+ ' + PADL(fmt(tc), 11) + '\n';
-        txt += '  ' + PAD('TOTAL PAGAMENTOS', 42) + '- ' + PADL(fmt(tp), 11) + '\n';
-        txt += '  ' + PAD('TOTAL BONIFICAÇÕES', 42) + '- ' + PADL(fmt(tb), 11) + '\n';
-        txt += '  ' + PAD('DEVIDO HOJE (TODOS)', 42) + '  ' + PADL(fmt(ts), 11) + '\n';
+        if (isAdmin()) {   /* os totais de todos são só da Administração; a secretária fica com o de cada um (24/10/26) */
+          txt += '  ' + PAD('TOTAL COMPRAS NO PERÍODO', 42) + '+ ' + PADL(fmt(tc), 11) + '\n';
+          txt += '  ' + PAD('TOTAL PAGAMENTOS', 42) + '- ' + PADL(fmt(tp), 11) + '\n';
+          txt += '  ' + PAD('TOTAL BONIFICAÇÕES', 42) + '- ' + PADL(fmt(tb), 11) + '\n';
+          txt += '  ' + PAD('DEVIDO HOJE (TODOS)', 42) + '  ' + PADL(fmt(ts), 11) + '\n';
+        }
       }
       return txt;
     }).catch(function (e) { console.error(e); return 'ERRO AO GERAR EXTRATO\n\n' + (e.message || e); });
@@ -740,7 +747,8 @@ var LJ = (function () {
       PRC.forEach(function (p) {
         var on = !!marc[p.id], s = saldoTxt(p.saldo_devedor || 0);
         var b = bt('pp-linha lj-marca' + (on ? ' on' : ''), '<span class="cx" aria-hidden="true">' + (on ? svg('M5.5 12.5l4.2 4.2 8.8-9.4', 12, 3) : '') + '</span>' +
-          '<span class="q"><b>' + esc(p.nome) + (ehOculto(p) ? ' <small>(oculto)</small>' : '') + '</b></span><span class="tr" style="color:' + s.cor + '">' + esc(s.txt) + '</span>', function () { marc[p.id] = !on; erro = false; pinta(); });
+          '<span class="q"><b>' + esc(p.nome) + (ehOculto(p) ? ' <small>(oculto)</small>' : '') + '</b></span>' +
+          (saldoOculto(p) ? '' : '<span class="tr" style="color:' + s.cor + '">' + esc(s.txt) + '</span>'), function () { marc[p.id] = !on; erro = false; pinta(); });
         b.setAttribute('aria-pressed', on ? 'true' : 'false');
         lista.appendChild(b);
       });
@@ -930,7 +938,8 @@ var LJ = (function () {
       if (!m) { P.fechar(); return; }
       st.aberto = atual; marca();
       P.corpo.innerHTML = '';
-      if (!ctx) ctx = { repinta: function () { if (P.aberto) pinta(); }, depois: function () { ctx = null; (qual === 'caixa' ? caixa : historico)(); } };
+      if (!ctx) ctx = { repinta: function () { if (P.aberto) pinta(); }, depois: function () { ctx = null; (qual === 'caixa' ? caixa : historico)(); },
+                        semValor: qual === 'historico' && !isAdmin() };   /* Histórico da secretária: sem R$ */
       vistaLanc(P, m, ctx);
       var i = ids.indexOf(atual);
       rodapeNav(P, i, ids.length, function (j) { atual = ids[j]; ctx = null; pinta(); });
@@ -994,11 +1003,13 @@ var LJ = (function () {
       if (!visE.length) corpo.appendChild(el('div', 'lista-vazio', 'Nenhuma entrada encontrada.'));
       visE.forEach(function (m) {
         var d = dataDe(m.timestamp), qn = m.quantidade || 0, un = m.preco_unitario || (qn ? (m.valor_total || 0) / qn : 0);
-        var p = prodDe(m.produto_id);
+        var p = prodDe(m.produto_id), uni = (p && p.unidade) || 'un';
+        /* secretária: só as unidades, nenhum R$ (24/10/26) */
+        var nome = admin ? (m.produto_nome || '—') + ' · ' + qn + ' ' + uni : (m.produto_nome || '—');
+        var meta = (admin ? 'custo ' + fmt(un) + ' cada · ' : '') + (m.descricao || 'Entrada de estoque') + ' · por ' + (m.secretaria_nome || '—');
         var b = bt('linha lj-es' + (es.aberto === m.id ? ' aberta' : ''), '<span class="lj-es-d">' + esc(ddmm(d)) + '</span>' +
-          '<span class="q"><span class="nm">' + esc((m.produto_nome || '—') + ' · ' + qn + ' ' + ((p && p.unidade) || 'un')) + '</span><span class="mt">' +
-          esc('custo ' + fmt(un) + ' cada · ' + (m.descricao || 'Entrada de estoque') + ' · por ' + (m.secretaria_nome || '—')) + '</span></span>' +
-          '<span class="dir"><span class="valor">' + esc(fmt(m.valor_total)) + '</span><span class="tr">' + esc(hhmm(d)) + '</span></span>', function () { abrirEs('entradas', m.id, ids); });
+          '<span class="q"><span class="nm">' + esc(nome) + '</span><span class="mt">' + esc(meta) + '</span></span>' +
+          '<span class="dir"><span class="valor">' + esc(admin ? fmt(m.valor_total) : '+' + qn + ' ' + uni) + '</span><span class="tr">' + esc(hhmm(d)) + '</span></span>', function () { abrirEs('entradas', m.id, ids); });
         b.setAttribute('data-id', m.id); b.setAttribute('aria-haspopup', 'dialog');
         corpo.appendChild(b);
       });
@@ -1144,8 +1155,10 @@ var LJ = (function () {
         pr = prodDe(m.produto_id);
         var d = dataDe(m.timestamp), qn = m.quantidade || 0, un = (pr && pr.unidade) || 'un';
         P.corpo.appendChild(el('div', 'pp-cab', '<span class="pp-quando">' + esc(quandoTxt(d) + ' · por ' + (m.secretaria_nome || '—')) + '</span><h2>' + esc(m.produto_nome || '—') + '</h2>'));
-        P.corpo.appendChild(campos([['Quantidade', qn + ' ' + un], ['Custo por unidade', fmt(m.preco_unitario || (qn ? (m.valor_total || 0) / qn : 0))], ['Custo total', fmt(m.valor_total), '', 'f'],
-          ['Observação', m.descricao || '—'], ['Estoque agora', pr ? (pr.estoque_atual || 0) + ' ' + un : '—']]));
+        P.corpo.appendChild(campos(isAdmin()
+          ? [['Quantidade', qn + ' ' + un], ['Custo por unidade', fmt(m.preco_unitario || (qn ? (m.valor_total || 0) / qn : 0))], ['Custo total', fmt(m.valor_total), '', 'f'],
+             ['Observação', m.descricao || '—'], ['Estoque agora', pr ? (pr.estoque_atual || 0) + ' ' + un : '—']]
+          : [['Quantidade', qn + ' ' + un, '', 'f'], ['Observação', m.descricao || '—'], ['Estoque agora', pr ? (pr.estoque_atual || 0) + ' ' + un : '—']]));   /* secretária: sem R$ */
       } else {
         pr = prodDe(atual);
         if (!pr) { P.fechar(); return; }
@@ -1201,6 +1214,7 @@ var LJ = (function () {
   }
   function desenhaHistorico() {
     var r = raiz('historico'); if (!r) return;
+    var admin = isAdmin();   /* secretária: sem nenhum R$ e sem o quadro "No período" (24/10/26) */
     var per = hs.perAtual || periodo(hs), todos = hs.movs;
     var cont = { todos: todos.length, vendas: 0, notinhas: 0, estoque: 0, caixa: 0, erros: 0 };
     todos.forEach(function (m) { cont[grupoHs(m)]++; if (m.marcado_erro === true) cont.erros++; });
@@ -1223,22 +1237,24 @@ var LJ = (function () {
     listaPorDia(corpo, vis, function (m) {
       var err = m.marcado_erro === true;
       return { hora: hhmm(dataDe(m.timestamp)), desc: m.tipo === 'edicao_profissional' || m.tipo === 'edicao_produto' ? (m.descricao || tipoRot(m.tipo)) : descMov(m), meta: metaHs(m),
-        valor: valorTxt(m), cor: m.tipo === 'sangria' ? '#D70015' : '', tag: err ? 'Erro: ' + (m.motivo_erro || '') : tipoRot(m.tipo), tagCor: err ? '#D70015' : (TIPO_COR[m.tipo] || '#636366') };
+        valor: admin ? valorTxt(m) : '', cor: m.tipo === 'sangria' ? '#D70015' : '', tag: err ? 'Erro: ' + (m.motivo_erro || '') : tipoRot(m.tipo), tagCor: err ? '#D70015' : (TIPO_COR[m.tipo] || '#636366') };
     }, 'lançamento', 'lançamentos', hs, function (id) { abrirMov('historico', id); });
     sec.appendChild(corpo);
     wrap.appendChild(sec);
     var lado = el('div', 'lado');
-    var np = el('section', 'painel');
-    np.appendChild(el('div', 'painel-cab', '<h2>No período</h2><span>' + esc(per.curto) + '</span>'));
-    var validos = todos.filter(function (m) { return m.marcado_erro !== true; });
-    CATS.forEach(function (c) {
-      var lista = validos.filter(c[3]);
-      var tot = c[0] === 'caixa' ? validos.filter(function (m) { return m.tipo === 'suprimento'; }).reduce(function (a, m) { return a + (m.valor_total || 0); }, 0) -
-        validos.filter(function (m) { return m.tipo === 'sangria'; }).reduce(function (a, m) { return a + (m.valor_total || 0); }, 0) : lista.reduce(function (a, m) { return a + (m.valor_total || 0); }, 0);
-      np.appendChild(bt('cat', '<span class="q" style="background:' + c[2] + '"></span><span class="t"><b>' + c[1] + '</b><small>' + (lista.length === 1 ? '1 lançamento' : lista.length + ' lançamentos') + '</small></span>' +
-        '<span class="lj-cat-v">' + esc((tot < 0 ? '− ' : '') + fmt(Math.abs(tot))) + '</span>' + svg(IC.dir, 16, 2), function () { abrirCat(c, lista, per); }));
-    });
-    lado.appendChild(np);
+    if (admin) {
+      var np = el('section', 'painel');
+      np.appendChild(el('div', 'painel-cab', '<h2>No período</h2><span>' + esc(per.curto) + '</span>'));
+      var validos = todos.filter(function (m) { return m.marcado_erro !== true; });
+      CATS.forEach(function (c) {
+        var lista = validos.filter(c[3]);
+        var tot = c[0] === 'caixa' ? validos.filter(function (m) { return m.tipo === 'suprimento'; }).reduce(function (a, m) { return a + (m.valor_total || 0); }, 0) -
+          validos.filter(function (m) { return m.tipo === 'sangria'; }).reduce(function (a, m) { return a + (m.valor_total || 0); }, 0) : lista.reduce(function (a, m) { return a + (m.valor_total || 0); }, 0);
+        np.appendChild(bt('cat', '<span class="q" style="background:' + c[2] + '"></span><span class="t"><b>' + c[1] + '</b><small>' + (lista.length === 1 ? '1 lançamento' : lista.length + ' lançamentos') + '</small></span>' +
+          '<span class="lj-cat-v">' + esc((tot < 0 ? '− ' : '') + fmt(Math.abs(tot))) + '</span>' + svg(IC.dir, 16, 2), function () { abrirCat(c, lista, per); }));
+      });
+      lado.appendChild(np);
+    }
     lado.appendChild(el('section', 'painel nota-lado', '<h2>Lançou errado?</h2><p>Abra o lançamento e use <b>Marcar como erro</b>, com o motivo. Ele continua registrado, mas sai de todos os cálculos.</p>' +
       '<p class="cinza">O sistema devolve o que for preciso: o saldo da notinha e o estoque voltam sozinhos.</p>'));
     wrap.appendChild(lado);
@@ -1398,7 +1414,9 @@ var LJ = (function () {
       var pf = el('div', 'nv-bloco');
       var sel = el('select', 'fc'); sel.setAttribute('aria-label', 'Profissional');
       var o0 = el('option', '', 'Selecione…'); o0.value = ''; sel.appendChild(o0);
-      PRC.forEach(function (p) { var o = el('option', '', esc(p.nome + (p.saldo_devedor > 0 ? ' — deve ' + fmt(p.saldo_devedor) : ''))); o.value = p.id; if (p.id === nv.prof) o.selected = true; sel.appendChild(o); });
+      PRC.forEach(function (p) {   /* notinha oculta: o nome aparece, o valor não (secretária) */
+        var o = el('option', '', esc(p.nome + (p.saldo_devedor > 0 && !saldoOculto(p) ? ' — deve ' + fmt(p.saldo_devedor) : ''))); o.value = p.id; if (p.id === nv.prof) o.selected = true; sel.appendChild(o);
+      });
       sel.addEventListener('change', function () { nv.prof = sel.value; nv.erro = ''; nvPinta(); });
       pf.appendChild(campo('Profissional', sel));
       pf.appendChild(el('span', 'nv-rot', 'Como vai pagar?'));

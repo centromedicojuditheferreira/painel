@@ -379,6 +379,55 @@ function fmtQuando(iso){
   return d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"}) + " " +
          d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
 }
+/* ═══ ⏱ desde quando: a hora em que cada pendência apareceu no Cortex (24/10/26) ═══
+   Vem da view cob_desde (SQL "horário das pendências"): o mesmo registro (cob_vista) que o Telegram usa para
+   contar os 30 min e as 6 h. Chave = aba + "|" + chave do registro: agenda → agendamento_id · corte → oc_ref ·
+   falhas → agendamento_id:tipo · cad → oc_ref. Sem a view no banco, a tela segue igual, só sem a hora
+   (tenta de novo a cada 10 min). Pendência que já existia quando o registro começou mostra a hora do começo. */
+function carregarDesde(forcar){
+  if(estado._desdeVoando) return;
+  if(!forcar && estado._desdeAte && Date.now() < estado._desdeAte) return;
+  estado._desdeVoando = true;
+  fetch(GCFG.url + "/rest/v1/cob_desde?select=aba,chave,desde", { headers: cab() })
+    .then(function(r){ return r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status)); })
+    .then(function(d){
+      var m = {};
+      (d || []).forEach(function(x){ m[x.aba + "|" + x.chave] = x.desde; });
+      var json = JSON.stringify(m), mudou = json !== estado._desdeJson;
+      estado.desde = m; estado._desdeJson = json; estado._desdeAte = Date.now() + 50*1000;
+      if(mudou) redesenhaComDesde();
+    })
+    .catch(function(){ estado._desdeAte = Date.now() + 10*60*1000; })
+    .then(function(){ estado._desdeVoando = false; });
+}
+function redesenhaComDesde(){
+  if(estado.tela === "agenda" && estado.linhas.length) desenharAgenda();
+  else if(estado.tela === "cad" && estado.cad) desenharCad();
+  else if(estado.tela === "corte" && estado.corte) desenharCorte();
+  else if(estado.tela === "falhas" && estado.falhas) desenharFalhas();
+}
+function desdeDe(aba, chave){ return (estado.desde && chave != null) ? (estado.desde[aba + "|" + chave] || null) : null; }
+/* "desde 14:32" · "desde ontem 14:32" · "desde 22/10 14:32" */
+function desdeCurto(iso){
+  var d = new Date(iso), h = new Date();
+  var dif = Math.round((new Date(h.getFullYear(), h.getMonth(), h.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+  return "desde " + (dif === 0 ? "" : dif === 1 ? "ontem " : String(d.getDate()).padStart(2,"0") + "/" + String(d.getMonth()+1).padStart(2,"0") + " ") + horaDe(iso);
+}
+function haQuanto(iso){
+  var min = Math.max(0, Math.floor((agoraSrv() - Date.parse(iso)) / 60000));
+  if(min < 1) return "agora há pouco";
+  if(min < 60) return "há " + min + " min";
+  var h = Math.floor(min / 60), r = min % 60;
+  if(h < 24) return "há " + h + " h" + (r ? " " + r + " min" : "");
+  var dd = Math.floor(h / 24); return "há " + dd + (dd === 1 ? " dia" : " dias");
+}
+/* "Pendente desde hoje às 14:32 · há 2 h 10 min" */
+function desdeLongo(iso){
+  var r = diaRotulo(iso);
+  return "Pendente desde " + (r === "Hoje" ? "hoje" : r === "Ontem" ? "ontem" : r.charAt(0).toLowerCase() + r.slice(1)) + " às " + horaDe(iso) + " · " + haQuanto(iso);
+}
+function desdeSpan(iso){ return iso ? '<span class="tr desde" title="' + escapa(desdeLongo(iso)) + '">' + escapa(desdeCurto(iso)) + '</span>' : ""; }   /* nas listas */
+function desdeL2(iso){ return iso ? '<span class="pp-l2 desde">' + escapa(desdeLongo(iso)) + '</span>' : ""; }   /* no topo das janelas */
 /* Blindagem v1 · "Resolvido"/"Desmarcado" vale até tratamento_vale_ate (30 min; consulta além da janela curta do
    espelho: até a completa regravar). Passou o prazo e o problema continua → volta para o mesmo lugar.
    Sem a coluna (SQL da blindagem ainda não rodado), fica como antes. */
@@ -699,7 +748,8 @@ function agLinha(l){
     '<span class="q"><span class="nm">' + escapa(l.paciente) + '</span><span class="mt">' + escapa(metaLinha(l)) + '</span></span>' +
     '<span class="dir"><span class="tag" style="color:' + (tratada(l) ? "#AEAEB2" : (TOM[m.tom] || TOM.c)) + '">' + escapa(m.rot) + '</span>' +
     (voltou(l) ? '<span class="tr" style="color:' + TOM.r + '">' + escapa((TRAT_ROT[t] || t) + " · voltou") + '</span>'   /* Blindagem v1 */
-               : (t !== "pendente" ? '<span class="tr">' + escapa(TRAT_ROT[t] || t) + '</span>' : '')) + '</span>',
+               : (t !== "pendente" ? '<span class="tr">' + escapa(TRAT_ROT[t] || t) + '</span>' : '')) +
+    desdeSpan(desdeDe("agenda", l.agendamento_id)) + '</span>',
     function(){ abrirPacAgenda(l.agendamento_id, "lista"); });
   b.setAttribute("aria-haspopup", "dialog");
   b.setAttribute("data-ag", l.agendamento_id);
@@ -777,7 +827,7 @@ function abrirCatAgenda(k){
   rows.forEach(function(l){
     var t = l.tratamento || "pendente";
     lista.appendChild(botao("pp-linha", '<span class="w">' + escapa(quandoCurto(l)) + '</span><span class="q"><b>' + escapa(l.paciente) + '</b><small>' + escapa(metaLinha(l)) + '</small></span>' +
-      (t !== "pendente" ? '<span class="tr">' + escapa(TRAT_ROT[t] || t) + '</span>' : '') + ico(IC.dir, 14, 2),
+      (t !== "pendente" ? '<span class="tr">' + escapa(TRAT_ROT[t] || t) + '</span>' : '') + desdeSpan(desdeDe("agenda", l.agendamento_id)) + ico(IC.dir, 14, 2),
       function(){ abrirPacAgenda(l.agendamento_id, k); }));
   });
   if(!rows.length) lista.appendChild(novo("div", "lista-vazio", "Nenhuma consulta aqui agora."));
@@ -815,7 +865,8 @@ function abrirPacAgenda(agid, ctx){
       '<span class="pp-quando">' + (l.dias_ate === 0 ? "Hoje, " : "") + escapa(l.dia_semana) + ", " + escapa(l.data_fmt) + " às " + escapa(l.horario) + '</span>' +
       '<h2>' + escapa(l.paciente) + '</h2>' +
       '<span class="pp-l1">' + escapa(ESP_ROT[l.especialidade] || l.especialidade || "—") + " com " + escapa(l.profissional || "—") + '</span>' +
-      '<span class="pp-l2">' + escapa(l.convenio || ("convênio " + l.convenio_id)) + (l.status ? " · " + escapa(l.status) : "") + '</span>'));
+      '<span class="pp-l2">' + escapa(l.convenio || ("convênio " + l.convenio_id)) + (l.status ? " · " + escapa(l.status) : "") + '</span>' +
+      desdeL2(desdeDe("agenda", l.agendamento_id))));
     var cx = novo("div", "pp-caixa", '<span class="pp-tag" style="color:' + (tratada(l) ? TOM.c : (TOM[m.tom] || TOM.c)) + '">' + escapa(m.rot) + '</span>');
     var det = detalheTxt(l);
     if(det) cx.appendChild(novo("span", "pp-txt", escapa(det)));
@@ -1362,7 +1413,7 @@ function desenharCad(){
     var b = botao("linha" + (estado._cadAberta === c.paciente_id ? " aberta" : ""),
       '<span class="q"><span class="nm">' + escapa(c.paciente || "—") + '</span><span class="mt">' + cadFichaTxt(c) + " · " + futTxt(c.futuras) + '</span></span>' +
       '<span class="dir"><span class="tag" style="color:' + (t === "pendente" ? "#D70015" : "#AEAEB2") + '">' + escapa(rot) + '</span>' +
-      (sub ? '<span class="tr" style="color:' + subCor + ';font-weight:600">' + escapa(sub) + '</span>' : '') + '</span>',
+      (sub ? '<span class="tr" style="color:' + subCor + ';font-weight:600">' + escapa(sub) + '</span>' : '') + desdeSpan(desdeDe("cad", c.oc_ref)) + '</span>',
       function(){ abrirCadItem(c.paciente_id); });
     b.setAttribute("aria-haspopup", "dialog"); b.setAttribute("data-cad", c.paciente_id);
     corpo.appendChild(b);
@@ -1417,7 +1468,8 @@ function abrirCadCat(k){
   P.corpo.appendChild(novo("div", "pp-caixa", '<span class="pp-rot">O que fazer</span><span class="pp-txt">' + escapa(T.acao) + '</span>'));
   var ul = novo("div", "pp-lista");
   lista.slice(0, 300).forEach(function(c){
-    ul.appendChild(botao("pp-linha", '<span class="q"><b>' + escapa(c.paciente || "—") + '</b><small>' + cadFichaTxt(c) + " · " + futTxt(c.futuras) + '</small></span>' + ico(IC.dir, 14, 2),
+    ul.appendChild(botao("pp-linha", '<span class="q"><b>' + escapa(c.paciente || "—") + '</b><small>' + cadFichaTxt(c) + " · " + futTxt(c.futuras) + '</small></span>' +
+      desdeSpan(desdeDe("cad", c.oc_ref)) + ico(IC.dir, 14, 2),
       function(){
         estado.cadFiltro = ehLixo ? "todos" : k; estado.cadLixo = ehLixo; estado.cadBusca = "";
         var inp = document.getElementById("cadBusca"); if(inp) inp.value = "";
@@ -1458,7 +1510,7 @@ function abrirCadItem(id){
     if(c.lixo) tags += '<span class="etq vermelho">Não juntar</span>';
     if(c.reincidente) tags += '<span class="etq vermelho" title="Marcou corrigido faz tempo e o problema continua no espelho">Reincidente</span>';
     P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-quando">' + cadFichaTxt(c) + '</span><h2>' + escapa(c.paciente || "—") + '</h2>' +
-      (tags ? '<span class="etqs">' + tags + '</span>' : '')));
+      desdeL2(desdeDe("cad", c.oc_ref)) + (tags ? '<span class="etqs">' + tags + '</span>' : '')));
     c.problemas.forEach(function(p){
       P.corpo.appendChild(novo("div", "pp-caixa", '<span class="pp-tag" style="color:#D70015">' + escapa(cadTxt(p.tipo).titulo) + '</span><span class="pp-txt">' + textoProblema2(p) + '</span>'));
     });
@@ -2118,7 +2170,8 @@ function desenharCorte(){
       '<span class="q"><span class="nm">' + escapa(c.paciente || "—") + '</span><span class="mt">' +
         (c.hoje_sem_guia ? '<b style="color:#D70015">HOJE ' + escapa(c.hoje_horario || "") + ' sem guia · </b>' : '') +   /* Blindagem v1 */
         escapa((ESP_ROT[c.especialidade] || c.especialidade || "—") + " · " + futSemCob(c.n_descobertos) + ": " + (c.datas_fmt || "—")) + '</span></span>' +
-      '<span class="dir"><span class="tag" style="color:' + S.cor + '">' + escapa(S.label) + '</span>' + (sub ? '<span class="tr">' + escapa(sub) + '</span>' : '') + '</span>',
+      '<span class="dir"><span class="tag" style="color:' + S.cor + '">' + escapa(S.label) + '</span>' + (sub ? '<span class="tr">' + escapa(sub) + '</span>' : '') +
+        desdeSpan(desdeDe("corte", c.oc_ref)) + '</span>',
       function(){ abrirCorteItem(c.oc_ref); });
     b.setAttribute("aria-haspopup", "dialog"); b.setAttribute("data-corte", c.oc_ref);
     corpo.appendChild(b);
@@ -2160,7 +2213,8 @@ function abrirCorteCat(k){
   P.corpo.appendChild(novo("div", "pp-caixa", '<span class="pp-rot">O que fazer</span><span class="pp-txt">' + escapa(S.acao) + '</span>'));
   var ul = novo("div", "pp-lista");
   lista.forEach(function(c){
-    ul.appendChild(botao("pp-linha", '<span class="q"><b>' + escapa(c.paciente || "—") + '</b><small>' + escapa((ESP_ROT[c.especialidade] || c.especialidade || "—") + " · " + (c.datas_fmt || "—") + (c.motivos ? " · " + motivosTxt(c.motivos) : "")) + '</small></span>' + ico(IC.dir, 14, 2),
+    ul.appendChild(botao("pp-linha", '<span class="q"><b>' + escapa(c.paciente || "—") + '</b><small>' + escapa((ESP_ROT[c.especialidade] || c.especialidade || "—") + " · " + (c.datas_fmt || "—") + (c.motivos ? " · " + motivosTxt(c.motivos) : "")) + '</small></span>' +
+      desdeSpan(desdeDe("corte", c.oc_ref)) + ico(IC.dir, 14, 2),
       function(){ estado.corteFiltro = k; estado.corteBusca = ""; var i = document.getElementById("corteBusca"); if(i) i.value = ""; desenharCorte(); abrirCorteItem(c.oc_ref); }));
   });
   if(!lista.length) ul.appendChild(novo("div", "lista-vazio", "Ninguém nesta situação agora."));
@@ -2225,7 +2279,8 @@ function abrirCorteItem(ref){
                  e === "cortar_agora" ? "Sem cobertura: cortar agora" : S.sub;
     P.corpo.innerHTML = "";
     P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-quando" style="color:' + (ativo ? "#D70015" : "#636366") + ';font-weight:600">' + escapa(quando) + '</span>' +
-      '<h2>' + escapa(c.paciente || "—") + '</h2><span class="pp-l1">' + escapa(ESP_ROT[c.especialidade] || c.especialidade || "—") + '</span>'));
+      '<h2>' + escapa(c.paciente || "—") + '</h2><span class="pp-l1">' + escapa(ESP_ROT[c.especialidade] || c.especialidade || "—") + '</span>' +
+      (sumiu ? '' : desdeL2(desdeDe("corte", c.oc_ref)))));
     var cx = novo("div", "pp-caixa", '<span class="pp-tag" style="color:' + S.cor + '">' + escapa(S.label) + '</span>' +
       '<span class="pp-txt"><b>' + futSemCob(c.n_descobertos) + ':</b> ' + escapa(c.datas_fmt || "—") + '</span>' +
       (c.motivos ? '<span class="pp-txt cinza">Motivo: ' + escapa(motivosTxt(c.motivos)) + '</span>' : ''));
@@ -2528,6 +2583,7 @@ function falhaVisiveis(){
   });
 }
 function falhaGrupo(x){ return x.origem === "profissional" ? "Avisos aos profissionais" : "Consultas de " + diaConsulta(x.data_atendimento); }
+function falhaDesde(x){ return x.origem === "profissional" ? null : desdeDe("falhas", x.agendamento_id + ":" + x.tipo); }   /* aviso ao profissional não entra no registro */
 function desenharFalhas(){
   var main = document.getElementById("gv-conteudo"); if(!main) return;
   campoBusca("falhas", "falhaBusca", "Buscar nome", estado.falhaBusca, function(v){ estado.falhaBusca = v; estado._falhaTopo = true; desenharFalhas(); });
@@ -2582,7 +2638,8 @@ function desenharFalhas(){
       '<span class="q"><span class="nm">' + escapa(x.nome_paciente || ("ID:" + x.paciente_id)) + '</span><span class="mt">' +
       escapa((x.origem === "profissional" ? "" : (x.profissional || "—") + " · ") + tipoMsgRot(x)) + '</span></span>' +
       '<span class="dir"><span class="tag" style="color:' + S.cor + '">' + escapa(S.label) + '</span>' +
-      (falhaPrecisaCorrigir(x) ? '<span class="falha-corr">Corrigir</span>' : falhaCorrigida(x) ? '<span class="falha-corr ok">Já corrigido</span>' : '') + '</span>',
+      (falhaPrecisaCorrigir(x) ? '<span class="falha-corr">Corrigir</span>' : falhaCorrigida(x) ? '<span class="falha-corr ok">Já corrigido</span>' : '') +
+      desdeSpan(falhaDesde(x)) + '</span>',
       function(){ abrirFalhaItem(x.chave); });
     b.setAttribute("aria-haspopup", "dialog"); b.setAttribute("data-falha", x.chave);
     corpo.appendChild(b);
@@ -2628,7 +2685,7 @@ function abrirFalhaCat(k){
   lista.forEach(function(x){
     var quando = x.origem === "profissional" ? fmtQuando(x.ultima_tentativa) : String(x.data_fmt || "").slice(0,5) + " " + (x.horario || "");
     ul.appendChild(botao("pp-linha", '<span class="w">' + escapa(quando) + '</span><span class="q"><b>' + escapa(x.nome_paciente || "—") + '</b><small>' +
-      escapa((x.origem === "profissional" ? "" : (x.profissional || "—") + " · ") + tipoMsgRot(x)) + '</small></span>' + ico(IC.dir, 14, 2),
+      escapa((x.origem === "profissional" ? "" : (x.profissional || "—") + " · ") + tipoMsgRot(x)) + '</small></span>' + desdeSpan(falhaDesde(x)) + ico(IC.dir, 14, 2),
       function(){ estado.falhaFiltro = k; estado.falhaBusca = ""; var i = document.getElementById("falhaBusca"); if(i) i.value = ""; desenharFalhas(); abrirFalhaItem(x.chave); }));
   });
   if(!lista.length) ul.appendChild(novo("div", "lista-vazio", "Nenhuma mensagem aqui agora."));
@@ -2669,7 +2726,8 @@ function abrirFalhaItem(chave){
       : "Consulta de " + diaConsulta(x.data_atendimento) + " às " + (x.horario || "—");
     P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-quando">' + escapa(quando) + '</span>' +
       '<h2>' + escapa(x.nome_paciente || ("ID:" + x.paciente_id)) + '</h2>' +
-      (x.origem === "profissional" ? "" : '<span class="pp-l1">' + escapa((x.profissional || "—") + (x.especialidade ? " · " + x.especialidade : "")) + '</span>')));
+      (x.origem === "profissional" ? "" : '<span class="pp-l1">' + escapa((x.profissional || "—") + (x.especialidade ? " · " + x.especialidade : "")) + '</span>') +
+      desdeL2(falhaDesde(x))));
     /* motivo + o que corrigir */
     var cx = novo("div", "pp-caixa", '<span class="pp-tag" style="color:' + S.cor + '">' + escapa(S.label) + '</span><span class="pp-txt">' + escapa(S.porque) + '</span>');
     if(S.corrigir){
@@ -3410,7 +3468,7 @@ function abrirMalItem(chave){
 }
 
 function trocaTela(t){
-  if(t === "dono" && !ehDono()) t = "agenda";
+  if((t === "dono" || t === "malotes") && !ehDono()) t = "agenda";   /* Malotes: só a Administração (24/10/26) */
   if(t === "fila"){ t = "agenda"; setTimeout(abrirRenovacoes, 0); }   /* v3.4: Renovações saiu do menu e virou o popup da Agenda */
   estado.tela = t;
   if(window.moldura) moldura.aoTrocarTela(t);      /* cabeçalho primeiro: a tela pode pôr controles nele */
@@ -3422,6 +3480,7 @@ function trocaTela(t){
   if(rg) rg.style.display = (t === "agenda") ? "" : "none";
   var fx = document.getElementById("gv-faixa");
   if(fx && t !== "agenda") fx.hidden = true;
+  if(t === "agenda" || t === "cad" || t === "corte" || t === "falhas") carregarDesde();   /* "desde 14:32" das pendências (no máximo 1 leitura por minuto) */
   if(t === "agenda"){ desenharAgenda(); }      /* a fila do robô só é consultada de 20 em 20 s com o popup aberto */
   else if(t === "cad"){ desenharCad(); loadCad(); }
   else if(t === "excl"){ desenharExcl(); loadExcl(); }
@@ -3435,7 +3494,8 @@ function refreshDonoAba(){
   var el = document.getElementById("gv-aba-dono");
   if(el) el.style.display = ehDono() ? "" : "none";
 }
-function recarregarTudo(){ carregar(); carregarFila(); loadCad(); loadExcl(); loadCorte(); loadFalhas(); loadMalotes();
+function recarregarTudo(){ carregar(); carregarFila(); loadCad(); loadExcl(); loadCorte(); loadFalhas(); carregarDesde(true);
+  if(ehDono()) loadMalotes();   /* a secretária não vê Malotes: nem carrega */
   if(estado.tela === "prof" && window.PF && PF.recarregarSec) PF.recarregarSec(); }
 function boot(t){
   if(!GV._init){

@@ -9,7 +9,7 @@
 var LOGIN_LOJA = (function () {
   'use strict';
 
-  /* Firebase antigo da lojinha: só para a leitura da migração */
+  /* Firebase antigo da conveniência: só para a leitura da migração */
   var FB = {
     versao: '10.12.0',
     config: { apiKey: 'AIzaSyBt4RC-8zLII3KFZJCYIyfGmU1zjTOjkPs', authDomain: 'caixa-conveniencia.firebaseapp.com', projectId: 'caixa-conveniencia',
@@ -124,8 +124,8 @@ var LOGIN_LOJA = (function () {
 
     function passoSenha(msg) {
       st.ocupado = false;
-      P.innerHTML = '<p class="lo-p-tit">Migração da lojinha</p>' +
-        '<p class="lo-p-txt">A lojinha e o login estão saindo do Firebase e indo para o Supabase. Falta trazer os dados, uma vez só. ' +
+      P.innerHTML = '<p class="lo-p-tit">Migração da conveniência</p>' +
+        '<p class="lo-p-txt">A conveniência e o login estão saindo do Firebase e indo para o Supabase. Falta trazer os dados, uma vez só. ' +
         'Quem faz é o administrador, com a senha de administração (a mesma do Acessos).</p>' +
         '<div class="lo-p-linha"><label class="lo-sr" for="lo-vir-senha">Senha de administração</label>' +
         '<input type="password" class="lo-p-in lo-p-senha" id="lo-vir-senha" placeholder="Senha" autocomplete="current-password">' +
@@ -148,7 +148,7 @@ var LOGIN_LOJA = (function () {
     }
     function copiar() {
       st.ocupado = true;
-      P.innerHTML = '<p class="lo-p-tit">Migração da lojinha</p><p class="lo-p-txt">Copiando do Firebase para o Supabase. Não feche esta tela.</p>' +
+      P.innerHTML = '<p class="lo-p-tit">Migração da conveniência</p><p class="lo-p-txt">Copiando do Firebase para o Supabase. Não feche esta tela.</p>' +
         '<ul class="lo-p-lista">' + COLECOES.map(function (c) { return '<li data-c="' + c + '"><span>' + esc(ROT[c]) + '</span><b>aguardando</b></li>'; }).join('') + '</ul>';
       LAPI.viradaImportar(st.senha, 'configuracoes', [])            /* confere a senha antes de ler o Firebase */
         .then(abrirFirebase)
@@ -250,7 +250,7 @@ var LOGIN_LOJA = (function () {
       var aj = (r.ajustes_estoque || []).map(function (a) { return esc(a.produto) + ' (guardado ' + a.guardado + ', lançamentos ' + a.lancamentos + ')'; });
       var an = (r.ajustes_notinha || []).map(function (a) { return esc(a.profissional); });
       P.innerHTML = '<p class="lo-p-tit">Migração concluída.</p>' +
-        '<p class="lo-p-txt">A lojinha e o login agora funcionam pelo Supabase.' +
+        '<p class="lo-p-txt">A conveniência e o login agora funcionam pelo Supabase.' +
         (aj.length ? ' Estoque que não fechava com os lançamentos: ' + aj.join(', ') + '. O estoque ficou como estava; um ajuste da migração no histórico fecha a conta.' : '') +
         (an.length ? ' Notinhas com anotação da migração: ' + an.join(', ') + '.' : '') +
         ' Avise cada pessoa do PIN provisório: no primeiro acesso, ela cria o dela.</p>' +
