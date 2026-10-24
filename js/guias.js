@@ -26,9 +26,11 @@ var SIT = {
   guia_ainda_nao_vale:   {rot:"Guia só vale depois",  cls:"s1", g:"g1", acao:"Conferir a data de autorização com a Unimed."},
   sessao_em_feriado:     {rot:"Cai no feriado",       cls:"sinfo", g:"ginfo", acao:"Remarcar — o sistema não fatura sessão em feriado."},
   ultima_viavel_validade:{rot:"Última viável (validade)", cls:"s1", g:"g1", acao:"A guia ainda tem saldo, mas a VALIDADE morre antes da próxima consulta — esta é a última que ela cobre. Renovar a validade: entrar em contato com o paciente."},
+  hoje_sem_guia:         {rot:"Hoje sem guia",        cls:"s0", g:"g0", acao:"🚫 A consulta é HOJE e nenhuma guia cobre. Sem guia não atende: avisar o paciente agora; se a guia não entrar no sistema antes do horário, desmarcar."},
   coberto:               {rot:"Coberta",              cls:"s2", g:"g2", acao:""}
 };
-var SIT_ORDEM = ["sem_guia","guia_de_outra_terapia","psico_com_guia_aba","guia_vencida","saldo_esgotado","procedimento_errado","aba_intercambio","sem_carteirinha"];
+/* Blindagem v1: "Hoje sem guia" vem primeiro em tudo (quadrados, lista do Resolver agora) */
+var SIT_ORDEM = ["hoje_sem_guia","sem_guia","guia_de_outra_terapia","psico_com_guia_aba","guia_vencida","saldo_esgotado","procedimento_errado","aba_intercambio","sem_carteirinha"];
 var TRATAMENTOS = [["pendente","Pendente"],["guia_solicitada","Guia solicitada"],["resolvido","Resolvido"],["sem_solucao","Sem solução"],["desmarcado","Desmarcado"]];
 var TRAT_CAD  = [["pendente","Pendente"],["corrigido","Corrigido"],["estava_certo","Estava certo"],["sem_solucao","Sem solução"]];
 var TRAT_EXCL = [["pendente","Pendente"],["restaurei","Restaurei no Feegow"],["estava_certo","Estava certo apagar"],["sem_solucao","Sem solução"]];
@@ -68,6 +70,8 @@ function carregar(){
       return r.json();
     })
     .then(function(dados){
+      /* Blindagem v1: relógio do banco (lido_em) — os 30 min do "Resolvido" contam pela hora do servidor, não do PC */
+      estado._offSrv = (dados[0] && dados[0].lido_em) ? (Date.parse(dados[0].lido_em) - Date.now()) : 0;
       estado.linhas = regrasAba(dados); estado._carregouEm = Date.now();
       var tela = new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
       var regua = (dados[0] && dados[0].calculado_em)
@@ -91,7 +95,14 @@ function salvarNota(agid, tratamento, nota, aoSalvar){
   }).then(function(r){
     if(!r.ok) throw new Error("HTTP " + r.status);
     var l = estado.linhas.find(function(x){ return x.agendamento_id === agid; });
-    if(l){ l.tratamento = tratamento; l.nota = nota; l.autora_nota = autora(); }
+    if(l){
+      var antes = marcouResolveu(l);
+      l.tratamento = tratamento; l.nota = nota; l.autora_nota = autora();
+      /* Blindagem v1: marcou "Resolvido"/"Desmarcado" agora → o prazo novo vem na próxima leitura do banco;
+         só editar a anotação não renova os 30 min (o banco guarda a hora da marcação: resolvido_em) */
+      if(marcouResolveu(l) && !antes){ l.tratamento_vale_ate = null; l.nota_atualizada_em = new Date(agoraSrv()).toISOString(); }
+      else if(!marcouResolveu(l)) l.tratamento_vale_ate = null;
+    }
     aoSalvar(true);
   }).catch(function(){ aoSalvar(false); });
 }
@@ -340,6 +351,13 @@ function regrasAba(linhas){
       l.situacao = "psico_com_guia_aba";
       l.gravidade = 0;
     }
+    /* Blindagem v1 · consulta de HOJE sem cobertura (qualquer motivo, inclusive "Depois da última"):
+       vermelho no topo, mesmo que o Corte esteja aguardando. A situação da régua fica guardada para o detalhe. */
+    if(l.hoje_sem_guia === true){
+      l.situacao_regua = l.situacao;
+      l.situacao = "hoje_sem_guia";
+      l.gravidade = 0;
+    }
   });
   return linhas || [];
 }
@@ -347,6 +365,7 @@ function regrasAba(linhas){
    mais a psicologia que está acontecendo por cima de guia de ABA. */
 function ehProblemaAba(l){
   if(tratada(l)) return false;
+  if(l.situacao === "hoje_sem_guia") return false;   /* Blindagem v1: já está no quadrado "Hoje sem guia" */
   if(l.situacao === "psico_com_guia_aba") return true;
   if(l.especialidade !== "aba") return false;
   if(l.gravidade === 3) return false;   /* PRE v3.1: depois da última — o aviso é a Última, o resto é do Corte */
@@ -360,7 +379,24 @@ function fmtQuando(iso){
   return d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"}) + " " +
          d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
 }
-function tratada(l){ return l.tratamento === "resolvido" || l.tratamento === "desmarcado"; }
+/* Blindagem v1 · "Resolvido"/"Desmarcado" vale até tratamento_vale_ate (30 min; consulta além da janela curta do
+   espelho: até a completa regravar). Passou o prazo e o problema continua → volta para o mesmo lugar.
+   Sem a coluna (SQL da blindagem ainda não rodado), fica como antes. */
+function agoraSrv(){ return Date.now() + (estado._offSrv || 0); }
+function marcouResolveu(l){ return l.tratamento === "resolvido" || l.tratamento === "desmarcado"; }
+function tratVenceu(l){ return marcouResolveu(l) && !!l.tratamento_vale_ate && agoraSrv() >= Date.parse(l.tratamento_vale_ate); }
+function tratada(l){ return marcouResolveu(l) && !tratVenceu(l); }
+function voltou(l){ return tratVenceu(l); }
+function horaBR(){
+  try { return new Intl.DateTimeFormat("pt-BR", { timeZone:"America/Sao_Paulo", hour:"2-digit", minute:"2-digit", hourCycle:"h23" }).format(new Date(agoraSrv())); }
+  catch(e){ var d = new Date(); return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0"); }
+}
+function horaPassou(l){ return l.dias_ate === 0 && !!l.horario && l.horario < horaBR(); }
+function voltouTxt(l){
+  return "Marcado como " + (l.tratamento === "desmarcado" ? "desmarcado" : "resolvido") + (l.autora_nota ? " por " + l.autora_nota : "") +
+         (l.nota_atualizada_em ? " em " + fmtQuando(l.nota_atualizada_em).replace(" ", " às ") : "") +
+         ", mas " + (l.tratamento === "desmarcado" ? "a consulta continua no Feegow" : "continua sem cobertura") + ": voltou para a lista.";
+}
 function ehPendencia(l){ return (l.gravidade === 0 || l.corte_hoje === true) && !tratada(l); } /* v2: só o VERMELHO · v2.1: + o amarelo do DIA do corte */
 function ehAviso(l){ return l.situacao !== "coberto" && l.gravidade !== 0 && l.gravidade !== 3 && !tratada(l); }
 function soNoTudo(l){ return l.gravidade === 3 && !tratada(l); }   /* PRE v3.1: "Depois da última" — fora de Pendências e Avisos */
@@ -452,6 +488,7 @@ var TRAT_ROT = { pendente:"Pendente", guia_solicitada:"Guia solicitada", resolvi
 var TOM = { r:"#D70015", o:"#C93400", c:"#636366", v:"#248A3D" };
 /* textos da tela (voz do modelo novo); as regras continuam no SIT lá de cima */
 var SIT_TXT = {
+  hoje_sem_guia:          { rot:"Hoje sem guia", tom:"r", sub:"Não atender: avisar o paciente agora", acao:"A consulta é hoje e nenhuma guia cobre. Regra da casa: sem guia não atende. Avisar o paciente agora; se a guia não entrar no sistema antes do horário, desmarcar no Feegow. Marcar “Resolvido” sem a guia entrar não adianta: em 30 minutos ela volta para cá." },
   sem_guia:               { rot:"Sem guia", tom:"r", sub:"Solicitar a guia agora ou desmarcar", acao:"Regra da casa: consulta não pode estar na agenda sem guia. Solicitar a guia agora ou desmarcar." },
   guia_vencida:           { rot:"Depois da última", tom:"c", sub:"Vai para o Corte se a guia não for renovada", acao:"A guia não alcança esta consulta. O aviso fica na última consulta coberta (Última viável ou Última sessão); se a guia não for renovada até lá, esta vai para o Corte." },
   saldo_esgotado:         { rot:"Saldo esgotado", tom:"r", sub:"Solicitar a renovação agora ou desmarcar", acao:"Sem sessão sobrando é o mesmo que sem guia. Solicitar a renovação agora ou desmarcar." },
@@ -519,8 +556,10 @@ function categorias(){
   var tipos = SIT_ORDEM.filter(function(s){ return cont[s]; });
   Object.keys(cont).forEach(function(s){ if(tipos.indexOf(s) < 0) tipos.push(s); });
   var out = [];
+  function poe(s){ var m = sitTxt(s); out.push({ chave:s, rot:m.rot, sub:m.sub, n:cont[s], cor:TOM[m.tom] || TOM.r }); }
+  if(cont["hoje_sem_guia"]) poe("hoje_sem_guia");   /* Blindagem v1: o mais urgente vem antes de tudo, até do ABA */
   if(abaN) out.push({ chave:"__aba__", rot:"ABA", sub:ABA_TXT.sub, n:abaN, cor:TOM.r });
-  tipos.forEach(function(s){ var m = sitTxt(s); out.push({ chave:s, rot:m.rot, sub:m.sub, n:cont[s], cor:TOM[m.tom] || TOM.r }); });
+  tipos.forEach(function(s){ if(s !== "hoje_sem_guia") poe(s); });
   return out;
 }
 function linhasDaCategoria(k){
@@ -534,6 +573,10 @@ function quandoCurto(l){ return (l.dias_ate === 0 ? "hoje" : String(l.dia_semana
 function detalheTxt(l){
   var g = l.numero_guia || "—", fim = l.guia_fim_fmt || "—";
   switch(l.situacao){
+    case "hoje_sem_guia": {   /* Blindagem v1: o porquê vem da situação original da régua */
+      var base = detalheTxt(Object.assign({}, l, { situacao: l.situacao_regua || "sem_guia" }));
+      return (base ? base + " " : "") + (horaPassou(l) ? "O horário já passou: se foi atendida, avisar a coordenação." : "Não atender sem a guia.");
+    }
     case "coberto": return "Guia " + g + " · " + ses(l.saldo_guia) + " · vence " + fim + ".";
     case "guia_vencida":
       if(typeof l.dias_para_vencer === "number" && l.dias_para_vencer >= 0)   /* PRE v3.0: ainda vale hoje, mas acaba antes desta consulta */
@@ -655,7 +698,8 @@ function agLinha(l){
     '<span class="h">' + escapa(l.horario) + '</span>' +
     '<span class="q"><span class="nm">' + escapa(l.paciente) + '</span><span class="mt">' + escapa(metaLinha(l)) + '</span></span>' +
     '<span class="dir"><span class="tag" style="color:' + (tratada(l) ? "#AEAEB2" : (TOM[m.tom] || TOM.c)) + '">' + escapa(m.rot) + '</span>' +
-    (t !== "pendente" ? '<span class="tr">' + escapa(TRAT_ROT[t] || t) + '</span>' : '') + '</span>',
+    (voltou(l) ? '<span class="tr" style="color:' + TOM.r + '">' + escapa((TRAT_ROT[t] || t) + " · voltou") + '</span>'   /* Blindagem v1 */
+               : (t !== "pendente" ? '<span class="tr">' + escapa(TRAT_ROT[t] || t) + '</span>' : '')) + '</span>',
     function(){ abrirPacAgenda(l.agendamento_id, "lista"); });
   b.setAttribute("aria-haspopup", "dialog");
   b.setAttribute("data-ag", l.agendamento_id);
@@ -775,6 +819,7 @@ function abrirPacAgenda(agid, ctx){
     var cx = novo("div", "pp-caixa", '<span class="pp-tag" style="color:' + (tratada(l) ? TOM.c : (TOM[m.tom] || TOM.c)) + '">' + escapa(m.rot) + '</span>');
     var det = detalheTxt(l);
     if(det) cx.appendChild(novo("span", "pp-txt", escapa(det)));
+    if(voltou(l)) cx.appendChild(novo("span", "pp-txt", '<b style="color:' + TOM.r + '">' + escapa(voltouTxt(l)) + '</b>'));   /* Blindagem v1 */
     if(l.ultima_viavel && l.proximo_agendamento_id){
       var n = l.futuros_apos || 0;
       cx.appendChild(novo("span", "pp-txt", "Última consulta viável: sem guia nova, o corte é às " + (l.dia_semana === "sábado" ? "11h" : "21h") +
@@ -828,7 +873,8 @@ function abrirPacAgenda(agid, ctx){
     var sv = novo("div", "pp-salvo");
     var txt, cor, est = msgId === atualId ? msg : null;
     if(est === "salvando"){ txt = "Salvando…"; cor = "#AEAEB2"; }
-    else if(est === "ok"){ txt = "Salvo agora. Fica registrado quem marcou e quando."; cor = TOM.v; }
+    else if(est === "ok"){ txt = "Salvo agora. Fica registrado quem marcou e quando." +
+      (marcouResolveu(l) ? " Se em 30 minutos o problema continuar, a consulta volta para a lista." : ""); cor = TOM.v; }   /* Blindagem v1 */
     else if(est === "erro"){ txt = "Não consegui salvar. Confira a internet e tente de novo."; cor = TOM.r; }
     else { txt = t !== "pendente" ? "Marcado antes como " + (TRAT_ROT[t] || t).toLowerCase() + (l.autora_nota ? ", por " + l.autora_nota : "") + "." : "Ainda pendente."; cor = "#AEAEB2"; }
     sv.innerHTML = ico(IC.ok, 14, 2.2, cor) + '<span' + (est === "erro" ? ' style="color:' + TOM.r + '"' : '') + '>' + escapa(txt) + '</span>';
@@ -1978,8 +2024,8 @@ var CORTE_TXT = {
                        acao:"Os próximos atendimentos já estão sem cobertura. Abrir o próximo agendamento no Feegow, apagar “este e os próximos” (nunca os anteriores) e assinar aqui." },
   incompleto:        { label:"Apagou incompleto", grupo:"Apagou incompleto", cor:"#D70015", ordem:3, sub:"Assinada como excluída, mas os futuros ainda existem",
                        acao:"Alguém assinou “Excluí”, mas os futuros continuam no Feegow: provavelmente apagou só um. Abrir o Feegow e apagar “este e os próximos”." },
-  excluido_conferir: { label:"Excluída, conferindo", grupo:"Excluída, conferindo", cor:"#C93400", ordem:4, sub:"Assinada: some quando o espelho confirmar",
-                       acao:"A exclusão foi assinada. A linha some sozinha quando o espelho do Feegow confirmar que os futuros saíram." },
+  excluido_conferir: { label:"Excluída, conferindo", grupo:"Excluída, conferindo", cor:"#C93400", ordem:4, sub:"Assinada: some quando o espelho confirmar (até 30 min)",
+                       acao:"A exclusão foi assinada. A linha some sozinha quando o espelho do Feegow confirmar que os futuros saíram. Se em 30 minutos eles continuarem lá, volta como “Apagou incompleto” (assinar de novo não muda o prazo)." },
   em_espera:         { label:"Aguardando", grupo:"Aguardando", cor:"#636366", ordem:5, sub:"Guia a caminho: volta para a lista se não entrar no sistema",
                        acao:"A recepção marcou que a guia está a caminho. Se ela não entrar no sistema até o fim do prazo, o paciente volta para a lista e aí é cortar: só se aguarda uma vez." },
   aguardando:        { label:"Aguardando guia", grupo:"Aguardando guia", cor:"#636366", ordem:6, sub:"Guia solicitada: prazo máximo de 2 dias",
@@ -2002,8 +2048,10 @@ function corteTxt(e){
 }
 function motivosTxt(t){ return String(t || "").split(" · ").filter(Boolean).map(function(m){ return MOTIVO_ROT[m] || (SIT[m] && SIT[m].rot) || m; }).join(" · "); }
 function corteAssinatura(c){
-  if(c.tratamento === "indulto" && c.indulto_ate) return "Indulto até " + fmtData(c.indulto_ate) + (c.autora ? " · por " + c.autora : "") + (c.nota ? " · " + c.nota : "");
-  if(c.tratamento === "excluido" && c.nota_atualizada_em) return "Assinada como excluída" + (c.autora ? " por " + c.autora : "") + " em " + fmtQuando(c.nota_atualizada_em).replace(" ", " às ");
+  /* Blindagem v1: o banco não respeita mais o indulto — só mostra que ele existiu */
+  if(c.tratamento === "indulto" && c.estado === "indulto" && c.indulto_ate) return "Indulto até " + fmtData(c.indulto_ate) + (c.autora ? " · por " + c.autora : "") + (c.nota ? " · " + c.nota : "");
+  if(c.tratamento === "indulto") return "O antigo “Segurar o corte”" + (c.autora ? " de " + c.autora : "") + " não vale mais: é cortar.";
+  if(c.tratamento === "excluido" && (c.excluido_em || c.nota_atualizada_em)) return "Assinada como excluída" + (c.autora ? " por " + c.autora : "") + " em " + fmtQuando(c.excluido_em || c.nota_atualizada_em).replace(" ", " às ");
   if(c.estado === "em_espera") return "Volta " + fmtPrazo(c.aguardar_ate) + " se a guia não entrar · " + esperaMot(c.aguardar_motivo) + (c.autora ? " · por " + c.autora : "");
   if(c.ja_esperou) return "Já aguardou (" + esperaMot(c.aguardar_motivo) + (c.autora ? ", por " + c.autora : "") + ") e a guia não entrou no sistema: agora é cortar";
   return "";
@@ -2067,7 +2115,9 @@ function desenharCorte(){
               e === "em_espera" ? "Volta " + fmtPrazo(c.aguardar_ate) + (c.autora ? " · " + c.autora : "") :
               motivosTxt(c.motivos) + (c.ja_esperou ? " · já aguardou" : "");
     var b = botao("linha" + (estado._corteAberta === c.oc_ref ? " aberta" : "") + (e === "indulto" || e === "em_espera" ? " apagada" : ""),
-      '<span class="q"><span class="nm">' + escapa(c.paciente || "—") + '</span><span class="mt">' + escapa((ESP_ROT[c.especialidade] || c.especialidade || "—") + " · " + futSemCob(c.n_descobertos) + ": " + (c.datas_fmt || "—")) + '</span></span>' +
+      '<span class="q"><span class="nm">' + escapa(c.paciente || "—") + '</span><span class="mt">' +
+        (c.hoje_sem_guia ? '<b style="color:#D70015">HOJE ' + escapa(c.hoje_horario || "") + ' sem guia · </b>' : '') +   /* Blindagem v1 */
+        escapa((ESP_ROT[c.especialidade] || c.especialidade || "—") + " · " + futSemCob(c.n_descobertos) + ": " + (c.datas_fmt || "—")) + '</span></span>' +
       '<span class="dir"><span class="tag" style="color:' + S.cor + '">' + escapa(S.label) + '</span>' + (sub ? '<span class="tr">' + escapa(sub) + '</span>' : '') + '</span>',
       function(){ abrirCorteItem(c.oc_ref); });
     b.setAttribute("aria-haspopup", "dialog"); b.setAttribute("data-corte", c.oc_ref);
@@ -2179,8 +2229,10 @@ function abrirCorteItem(ref){
     var cx = novo("div", "pp-caixa", '<span class="pp-tag" style="color:' + S.cor + '">' + escapa(S.label) + '</span>' +
       '<span class="pp-txt"><b>' + futSemCob(c.n_descobertos) + ':</b> ' + escapa(c.datas_fmt || "—") + '</span>' +
       (c.motivos ? '<span class="pp-txt cinza">Motivo: ' + escapa(motivosTxt(c.motivos)) + '</span>' : ''));
+    if(c.hoje_sem_guia) cx.appendChild(novo("span", "pp-txt", '<b style="color:#D70015">Consulta HOJE' + (c.hoje_horario ? " às " + escapa(c.hoje_horario) : "") +
+      ' sem guia: não atender.</b> Avisar o paciente agora; sem a guia entrar no sistema antes do horário, ela também sai no corte.'));   /* Blindagem v1 */
     if(e === "incompleto") cx.appendChild(novo("span", "pp-txt", '<b style="color:#D70015">Apagou incompleto:</b> foi assinada como excluída, mas os futuros ainda existem. Foi apagado só um? Abrir o Feegow e apagar “este e os próximos”.'));
-    if(e === "aguardando") cx.appendChild(novo("span", "pp-txt", "Guia " + (c.hold_fila_em ? "na fila do robô" : "solicitada no balcão") + ": segurando o corte."));
+    if(e === "aguardando") cx.appendChild(novo("span", "pp-txt", "Guia " + (c.hold_fila_em ? "na fila do robô" : "solicitada no balcão") + ": segurando o corte uma vez só, até o prazo; marcar de novo não estica."));
     var ass = corteAssinatura(c);
     if(ass) cx.appendChild(novo("span", "pp-txt cinza", escapa(ass)));
     P.corpo.appendChild(cx);
@@ -3410,15 +3462,29 @@ function boot(t){
   trocaTela(t || "agenda");
   if(Date.now() - estado._carregouEm > 45*1000) recarregarTudo();
 }
+/* Blindagem v1 · de minuto em minuto: se algum "Resolvido"/"Desmarcado" passou do prazo (30 min), relê a agenda
+   na hora — a consulta volta para o lugar dela sem esperar a recarga de 10 em 10 minutos. Cada prazo dispara uma vez. */
+function checaVolta(){
+  if(typeof CU === "undefined" || !CU) return;
+  var agora = agoraSrv(), vistos = estado._voltas || (estado._voltas = {}), venceu = false;
+  estado.linhas.forEach(function(l){
+    if(!marcouResolveu(l) || !l.tratamento_vale_ate) return;
+    var k = l.agendamento_id + "|" + l.tratamento_vale_ate;
+    if(!vistos[k] && Date.parse(l.tratamento_vale_ate) <= agora){ vistos[k] = true; venceu = true; }
+  });
+  if(venceu){ carregar(); loadCorte(); }
+}
 function startTimers(){
   if(GV._t10) return;
   GV._t10 = setInterval(function(){
     if(typeof CU === "undefined" || !CU) return;   /* deslogado: não faz nada */
     try{ nav("guias"); }catch(e){ boot(); }        /* volta pra tela principal e recarrega */
   }, 10*60*1000);
+  if(!GV._t1) GV._t1 = setInterval(checaVolta, 60*1000);
 }
 function stopTimers(){
   if(GV._t10){ clearInterval(GV._t10); GV._t10 = null; }
+  if(GV._t1){ clearInterval(GV._t1); GV._t1 = null; }
   desligarPollFila();
 }
 
