@@ -2363,12 +2363,14 @@ function loadFalhas(){
 }
 /* v3.6 · "Mandei" (COB v1.0): a recepção avisa que mandou a mensagem pelo WhatsApp Web. Grava em oc_notas
    (tipo falha_mandada); a view conf_falhas tira a falha da lista e o Telegram para de cobrar. Se o robô falhar
-   de novo depois, ela volta. */
+   de novo depois, ela volta.
+   COB v1.1: sem o campo "tratamento" — oc_notas.tratamento não aceita nulo (o banco põe o padrão);
+   mandando null, todo "Mandei" voltava com erro 400. */
 function marcarMandei(x, aoSalvar){
   fetch(GCFG.url + "/rest/v1/oc_notas?on_conflict=tipo,referencia", {
     method: "POST",
     headers: cab({ "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal" }),
-    body: JSON.stringify([{ tipo: "falha_mandada", referencia: x.agendamento_id + ":" + x.tipo, tratamento: null, nota: "mandei", autora: autora() || null }])
+    body: JSON.stringify([{ tipo: "falha_mandada", referencia: x.agendamento_id + ":" + x.tipo, nota: "mandei", autora: autora() || null }])
   }).then(function(r){
     if(!r.ok) throw new Error("HTTP " + r.status);
     estado.falhas = (estado.falhas || []).filter(function(y){ return y.chave !== x.chave; });
