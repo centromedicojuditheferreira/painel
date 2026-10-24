@@ -13,7 +13,7 @@ const fmt=v=>'R$ '+Number(v||0).toFixed(2).replace('.',',').replace(/\B(?=(\d{3}
 const fmtDT=ts=>{if(!ts)return'-';const d=ts.toDate?ts.toDate():new Date(ts);return d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});};
 const fmtD=ts=>{if(!ts)return'-';const d=ts.toDate?ts.toDate():new Date(ts);return d.toLocaleDateString('pt-BR');};
 const tsMs=ts=>{if(!ts)return 0;const d=ts.toDate?ts.toDate():new Date(ts);return d.getTime();};
-const OCULTOS_PADRAO=['gabriel ferreira'];
+const OCULTOS_PADRAO=['gabriel ferreira','marinalva ferreira'];   /* notinhas ocultas por padrão (Marinalva desde 24/10/26) */
 const ehOculto=p=>!p?false:(p.oculto===true||(p.oculto==null&&OCULTOS_PADRAO.includes(String(p.nome||'').trim().toLowerCase())));
 const saldoOculto=p=>ehOculto(p)&&!isAdmin();   /* notinha oculta: a secretária vê o nome, nunca o valor (24/10/26) */
 const semErro=m=>m.marcado_erro!==true;
