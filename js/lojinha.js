@@ -231,7 +231,8 @@ async function doLogin(){
 document.getElementById('lo-pin').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 
 function entrarApp(){
-  document.getElementById('lo').style.display='none';document.getElementById('app').style.display='block';
+  if(window.ENTRADA)ENTRADA.boasVindas(CU);else document.getElementById('lo').style.display='none';   /* saudação (js/entrada.js) esconde a entrada no fim */
+  document.getElementById('app').style.display='block';
   document.getElementById('sb-nm').textContent=CU.nome;document.getElementById('sb-av').textContent=CU.nome[0].toUpperCase();
   const pp=document.getElementById('sb-papel');if(pp)pp.textContent=CU.admin===true?'Administração':'Secretária';
   aplicarPermissoes();
