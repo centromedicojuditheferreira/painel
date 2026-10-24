@@ -110,7 +110,7 @@ var FIN = (function () {
   function completar(d, meu) {
     if (meu !== st.pedido) return;
     st.dados = d; st.dia = d.dia; st.conv = conveniencia(d);
-    st.convErro = d.loja_migrada === false ? 'A lojinha ainda não foi migrada para o Supabase: a conveniência aparece aqui depois da migração.' : '';
+    st.convErro = d.loja_migrada === false ? 'A conveniência ainda não foi migrada para o Supabase: ela aparece aqui depois da migração.' : '';
     st.erro = ''; st.carregando = false; st.carregadoEm = new Date();
     if (naTela()) desenhar();
   }
@@ -324,7 +324,7 @@ var FIN = (function () {
     s.appendChild(el('div', 'painel-cab', '<h2>Provas</h2><span>o que já está ligado</span>'));
     [['Banco (Inter)', d.banco_ligado ? 'Robô ligado; a conferência do Pix entra na etapa 4' : 'Robô do Inter ainda não ligado'],
      ['Cielo', 'Aguardando o acesso à Cielo'],
-     ['Contagem da gaveta', d.loja_migrada ? 'Próxima etapa: a contagem às cegas na chegada' : 'Depois da migração da lojinha para o Supabase']].forEach(function (x) {
+     ['Contagem da gaveta', d.loja_migrada ? 'Próxima etapa: a contagem às cegas na chegada' : 'Depois da migração da conveniência para o Supabase']].forEach(function (x) {
       s.appendChild(el('div', 'lj-cl', '<span>' + esc(x[0]) + '</span><b>' + esc(x[1]) + '</b>'));
     });
     l.appendChild(s);

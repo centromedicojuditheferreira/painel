@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════════
    Moldura do painel (design Lev Soul)
    Menu lateral, cabeçalho da página, barra "Resolver agora" e o botão Nova venda.
-   Não guarda dado nenhum: só chama nav() da lojinha e as telas do GV.
+   Não guarda dado nenhum: só chama nav() da conveniência e as telas do GV.
    ═══════════════════════════════════════════════════════════════════ */
 var moldura = (function () {
   'use strict';
@@ -44,18 +44,18 @@ var moldura = (function () {
     exclusoes:     { s: 'guias', t: 'excl',    secao: 'Faturamento', titulo: 'Exclusões' },
     corte:         { s: 'guias', t: 'corte',   secao: 'Faturamento', titulo: 'Corte' },
     falhas:        { s: 'guias', t: 'falhas',  secao: 'Faturamento', titulo: 'Falhas' },
-    malotes:       { s: 'guias', t: 'malotes', secao: 'Faturamento', titulo: 'Malotes' },
+    malotes:       { s: 'guias', t: 'malotes', secao: 'Faturamento', titulo: 'Malotes', adm: true },   /* adm: só a Administração (24/10/26) */
     conferencia:   { s: 'guias', t: 'prof',    secao: 'Profissionais', titulo: 'Conferência' },
     dono:          { s: 'guias', t: 'dono',    secao: 'Administração', titulo: 'Dono' },
-    notinhas:      { s: 'notinhas',  secao: 'Lojinha', titulo: 'Notinhas',
+    notinhas:      { s: 'notinhas',  secao: 'Conveniência', titulo: 'Notinhas',
                      acoes: [['Profissionais', function () { irPara('profissionais'); }], ['Relatório', function () { if (window.LJ) LJ.relatorio(); else abrirRel(); }],
                              ['Bonificação do mês', function () { if (window.LJ) LJ.bonificacao(); else abrirBonif(); }]] },
-    caixa:         { s: 'caixa',     secao: 'Lojinha', titulo: 'Caixa' },
-    estoque:       { s: 'estoque',   secao: 'Lojinha', titulo: 'Estoque', acoes: [['Balanço', function () { irPara('balanco'); }]] },
-    balanco:       { s: 'balanco',   secao: 'Lojinha', titulo: 'Balanço', menu: 'estoque', acoes: [['Voltar ao estoque', function () { irPara('estoque'); }]] },
-    historico:     { s: 'historico', secao: 'Lojinha', titulo: 'Histórico' },
-    venda:         { s: 'venda',     secao: 'Lojinha', titulo: 'Nova venda', semFab: true },
-    profissionais: { s: 'profissionais', secao: 'Lojinha', titulo: 'Profissionais', menu: 'notinhas' },
+    caixa:         { s: 'caixa',     secao: 'Conveniência', titulo: 'Caixa', adm: true },
+    estoque:       { s: 'estoque',   secao: 'Conveniência', titulo: 'Estoque', acoes: [['Balanço', function () { irPara('balanco'); }]] },
+    balanco:       { s: 'balanco',   secao: 'Conveniência', titulo: 'Balanço', menu: 'estoque', acoes: [['Voltar ao estoque', function () { irPara('estoque'); }]] },
+    historico:     { s: 'historico', secao: 'Conveniência', titulo: 'Histórico' },
+    venda:         { s: 'venda',     secao: 'Conveniência', titulo: 'Nova venda', semFab: true },
+    profissionais: { s: 'profissionais', secao: 'Conveniência', titulo: 'Profissionais', menu: 'notinhas' },
     extrato:       { s: 'financeiro', secao: 'Financeiro', titulo: 'Extrato' },   /* FIN v1.3: só o administrador, por enquanto */
     visao:         { s: 'dashboard', secao: 'Administração', titulo: 'Visão geral' },
     posicao:       { s: 'posicao',   secao: 'Administração', titulo: 'Estoque atual' },
@@ -72,7 +72,7 @@ var moldura = (function () {
     ['Faturamento', [['agenda', 'Agenda', 'gv-b-agenda', true], ['cadastros', 'Cadastros', 'gv-b-cad', true],
       ['exclusoes', 'Exclusões', 'gv-b-excl', true], ['corte', 'Corte', 'gv-b-corte', true], ['falhas', 'Falhas', 'gv-b-falhas', true],
       ['malotes', 'Malotes', 'gv-b-malotes']]],
-    ['Lojinha', [['notinhas', 'Notinhas'], ['caixa', 'Caixa'], ['estoque', 'Estoque'], ['historico', 'Histórico']]],
+    ['Conveniência', [['notinhas', 'Notinhas'], ['caixa', 'Caixa'], ['estoque', 'Estoque'], ['historico', 'Histórico']]],
     ['Profissionais', [['conferencia', 'Conferência', 'gv-b-prof', true]]],
     ['Financeiro', [['extrato', 'Extrato']], true],
     ['Administração', [['visao', 'Visão geral'], ['posicao', 'Estoque atual'], ['exportar', 'Exportar'], ['cfg', 'Configurações'],
@@ -98,7 +98,8 @@ var moldura = (function () {
       var adm = g[2] ? ' menu-admin' : '';
       h += '<div class="menu-grupo' + adm + '"><span>' + g[0] + '</span><i aria-hidden="true"></i></div>';
       g[1].forEach(function (it) {
-        h += '<button type="button" class="menu-item' + adm + (it[3] ? ' urg' : '') + '" data-ir="' + it[0] + '" title="' + it[1] + '"' +
+        var admIt = adm || (DEST[it[0]] && DEST[it[0]].adm ? ' menu-admin' : '');   /* item só da Administração num grupo de todos (Malotes, Caixa) */
+        h += '<button type="button" class="menu-item' + admIt + (it[3] ? ' urg' : '') + '" data-ir="' + it[0] + '" title="' + it[1] + '"' +
           (it[4] ? ' id="' + it[4] + '"' : '') + '>' +
           '<span class="menu-ic">' + svg(I[it[0]]) + '<span class="menu-ponto" aria-hidden="true"></span></span>' +
           '<span class="menu-rot">' + it[1] + '</span>' +
@@ -141,9 +142,11 @@ var moldura = (function () {
 
   /* ── navegação ── */
   function secaoAtual() { var s = document.querySelector('.sec.active'); return s ? s.id.replace('s-', '') : ''; }
+  function ehAdm() { return typeof CU !== 'undefined' && !!CU && CU.admin === true; }
   function irPara(d) {
     if (d === 'venda' && window.LJ) { LJ.abrirVenda(); return; }     /* Nova venda é a janela no canto */
     var x = DEST[d]; if (!x) return;
+    if (x.adm && !ehAdm()) { d = 'agenda'; x = DEST.agenda; }       /* tela só da Administração: a secretária cai na Agenda */
     if (x.s === 'guias') {
       if (secaoAtual() === 'guias' && window.GV && GV.tela) GV.tela(x.t); else nav('guias', x.t);
     } else nav(x.s);
