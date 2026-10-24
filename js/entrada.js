@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════════
    Entrada do Cortex (login) e a saudação depois do PIN
    Não guarda nada nem fala com banco nenhum. O login de sempre continua
-   enchendo o <select id="lo-usr"> (secretárias do Firebase, ou os
+   enchendo o <select id="lo-usr"> (secretárias do Supabase, ou os
    profissionais nos links de conferência) e conferindo o PIN em doLogin();
    aqui só se desenha essa lista como opções clicáveis, se mostra o PIN
    embaixo e, depois que entra, a saudação animada.

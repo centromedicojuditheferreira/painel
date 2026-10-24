@@ -1,10 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════
-   Financeiro · Extrato (FIN v1.3) — por enquanto só no administrador.
-   O que entrou no dia:
-     · pagamentos lançados no Feegow, pela função fin_cortex_extrato do Supabase,
-       que confere a senha de administração no servidor (as tabelas fin_* seguem fechadas);
-     · vendas e pagamentos de notinha da conveniência, lidos do Firebase (só leitura)
-       até a lojinha ir para o Supabase.
+   Financeiro · Extrato (FIN v1.4) — por enquanto só no administrador.
+   O que entrou no dia, tudo pela função fin_cortex_extrato do Supabase, que confere a
+   senha de administração no servidor (as tabelas fin_* e loja_* seguem fechadas):
+     · pagamentos lançados no Feegow;
+     · vendas e pagamentos de notinha da conveniência (loja_movimentos), já agrupados
+       por venda no servidor.
    É a tela que as secretárias vão usar depois: cada entrada aparece como OK (a prova bateu),
    aguardando (a prova ainda não chegou) ou pendência (com o valor e o que houve). Valor só em
    pendência, porque a contagem da gaveta é às cegas. Provas: Pix → banco, cartão → Cielo,
@@ -92,36 +92,9 @@ var FIN = (function () {
     return '';
   }
 
-  /* ── conveniência (Firebase, só leitura) ── */
-  function conveniencia(dia) {
-    if (typeof db === 'undefined' || !db) return Promise.reject(new Error('Firebase da conveniência indisponível.'));
-    var ini = new Date(dia + 'T00:00:00-03:00'), fim = new Date(dia + 'T23:59:59.999-03:00');
-    return db.collection('movimentacoes').where('timestamp', '>=', ini).where('timestamp', '<=', fim).orderBy('timestamp').get()
-      .then(function (snap) { return agruparConv(snap.docs.map(function (d) { var x = d.data(); x.id = d.id; return x; })); });
-  }
-  /* venda com vários produtos vira uma linha (os itens da mesma venda são gravados juntos, com a mesma hora) */
-  function agruparConv(movs) {
-    var out = [], porVenda = {};
-    movs.forEach(function (m) {
-      if (m.marcado_erro === true || !FORMA_CONV[m.forma_pagamento]) return;
-      var d = tsDate(m.timestamp);
-      if (m.tipo === 'venda_paciente') {
-        var k = [d ? d.getTime() : m.id, m.secretaria_id || '', m.forma_pagamento, m.cliente_tipo || '', m.profissional_id || ''].join('|');
-        var v = porVenda[k];
-        if (!v) {
-          v = porVenda[k] = { tipo: 'venda', id: m.id, quando: d, forma: m.forma_pagamento, valor: 0, itens: [],
-                              cliente: m.cliente_tipo === 'profissional' ? (m.profissional_nome || 'Profissional') : 'Paciente',
-                              profissional: m.cliente_tipo === 'profissional', secretaria: m.secretaria_nome || '' };
-          out.push(v);
-        }
-        v.valor += Number(m.valor_total || 0);
-        v.itens.push({ nome: m.produto_nome || m.descricao || 'Produto', qtd: Number(m.quantidade || 1), valor: Number(m.valor_total || 0) });
-      } else if (m.tipo === 'pagamento_notinha') {
-        out.push({ tipo: 'notinha', id: m.id, quando: d, forma: m.forma_pagamento, valor: Number(m.valor_total || 0),
-                   profissional_nome: m.profissional_nome || 'Profissional', secretaria: m.secretaria_nome || '', descricao: m.descricao || '' });
-      }
-    });
-    return out;
+  /* ── conveniência: vem pronta do servidor (uma entrada por venda); aqui só a data vira Date ── */
+  function conveniencia(d) {
+    return (d.conveniencia || []).map(function (c) { var x = {}; Object.keys(c).forEach(function (k) { x[k] = c[k]; }); x.quando = tsDate(c.quando); return x; });
   }
 
   /* ── carga ── */
@@ -133,17 +106,13 @@ var FIN = (function () {
       .then(function (d) { return completar(d, meu); })
       .catch(function (e) { falhou(e, meu); });
   }
-  /* com a resposta do Feegow na mão, lê a conveniência do mesmo dia e desenha */
+  /* a resposta já traz o Feegow e a conveniência do dia */
   function completar(d, meu) {
     if (meu !== st.pedido) return;
-    return conveniencia(d.dia).then(function (c) { return { conv: c, erro: '' }; },
-                                   function (e) { return { conv: [], erro: e.message || String(e) }; })
-      .then(function (cv) {
-        if (meu !== st.pedido) return;
-        st.dados = d; st.dia = d.dia; st.conv = cv.conv; st.convErro = cv.erro; st.erro = '';
-        st.carregando = false; st.carregadoEm = new Date();
-        if (naTela()) desenhar();
-      });
+    st.dados = d; st.dia = d.dia; st.conv = conveniencia(d);
+    st.convErro = d.loja_migrada === false ? 'A lojinha ainda não foi migrada para o Supabase: a conveniência aparece aqui depois da migração.' : '';
+    st.erro = ''; st.carregando = false; st.carregadoEm = new Date();
+    if (naTela()) desenhar();
   }
   function falhou(e, meu) {
     if (meu !== st.pedido) return;
@@ -240,7 +209,7 @@ var FIN = (function () {
     }
     if (verCv) {
       corpo.appendChild(cab('Conveniência', convOk.length === 1 ? '1 lançamento' : convOk.length + ' lançamentos'));
-      if (st.convErro) corpo.appendChild(el('div', 'lista-vazio erro', 'Não consegui ler a conveniência: ' + esc(st.convErro)));
+      if (st.convErro) corpo.appendChild(el('div', 'lista-vazio', esc(st.convErro)));
       else if (!convOk.length) corpo.appendChild(el('div', 'lista-vazio', conv.length ? 'Os lançamentos da conveniência deste dia estão nas pendências.' : 'Nenhuma venda ou pagamento de notinha neste dia.'));
       convOk.forEach(function (i) { corpo.appendChild(linhaConv(conv[i], i)); });
     }
@@ -355,7 +324,7 @@ var FIN = (function () {
     s.appendChild(el('div', 'painel-cab', '<h2>Provas</h2><span>o que já está ligado</span>'));
     [['Banco (Inter)', d.banco_ligado ? 'Robô ligado; a conferência do Pix entra na etapa 4' : 'Robô do Inter ainda não ligado'],
      ['Cielo', 'Aguardando o acesso à Cielo'],
-     ['Contagem da gaveta', 'Depois da conveniência no Supabase (etapas 2 e 3)']].forEach(function (x) {
+     ['Contagem da gaveta', d.loja_migrada ? 'Próxima etapa: a contagem às cegas na chegada' : 'Depois da migração da lojinha para o Supabase']].forEach(function (x) {
       s.appendChild(el('div', 'lj-cl', '<span>' + esc(x[0]) + '</span><b>' + esc(x[1]) + '</b>'));
     });
     l.appendChild(s);

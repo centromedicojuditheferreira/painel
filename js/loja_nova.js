@@ -8,7 +8,6 @@ var LJ = (function () {
   'use strict';
 
   /* ── utilidades ── */
-  function FV() { return firebase.firestore.FieldValue; }
   function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
   function bt(cls, html, fn) { var b = el('button', cls, html); b.type = 'button'; if (fn) b.addEventListener('click', fn); return b; }
   function esc(s) { var d = document.createElement('span'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
@@ -213,39 +212,12 @@ var LJ = (function () {
       box.appendChild(lin);
     }
   }
-  function buscaMovs(per) {
-    return db.collection('movimentacoes').where('timestamp', '>=', per.ini).where('timestamp', '<=', per.fim).orderBy('timestamp', 'desc').get()
-      .then(function (snap) { return snap.docs.map(function (d) { var x = d.data(); x.id = d.id; return x; }); });
-  }
+  function buscaMovs(per) { return LAPI.movimentos({ ini: per.ini, fim: per.fim }); }   /* do mais novo ao mais velho */
 
-  /* ── marcar como erro: a mesma sequência de confirmarErro() ── */
+  /* ── marcar como erro: o servidor marca e devolve saldo e estoque numa operação só (ou não faz nada),
+        guarda quem marcou e quando, e recusa marcar duas vezes ── */
   function marcarErro(id, mot) {
-    var marcou = false;
-    return db.collection('movimentacoes').doc(id).get().then(function (docSnap) {
-      var m = docSnap.data();
-      if (!m) throw new Error('Lançamento não encontrado.');
-      /* já marcado (por outro computador, ou tela desatualizada): não desfaz de novo o saldo e o estoque */
-      if (m.marcado_erro === true) { var j = new Error('Este lançamento já estava marcado como erro.'); j.jaMarcado = true; throw j; }
-      var p = db.collection('movimentacoes').doc(id).update({ marcado_erro: true, motivo_erro: mot });
-      return p.then(function () {
-        marcou = true;
-        if (m.tipo === 'venda_profissional' && m.profissional_id) return db.collection('profissionais').doc(m.profissional_id).update({ saldo_devedor: FV().increment(-(m.valor_total || 0)) });
-      }).then(function () {
-        if (m.tipo === 'pagamento_notinha' && m.profissional_id) return db.collection('profissionais').doc(m.profissional_id).update({ saldo_devedor: FV().increment(m.valor_total || 0) });
-      }).then(function () {
-        if (m.tipo === 'bonificacao' && m.profissional_id) return db.collection('profissionais').doc(m.profissional_id).update({ saldo_devedor: FV().increment(m.valor_total || 0) });
-      }).then(function () {
-        if (['venda_paciente', 'venda_profissional'].indexOf(m.tipo) >= 0 && m.produto_id) return db.collection('produtos').doc(m.produto_id).update({ estoque_atual: FV().increment(m.quantidade || 1) });
-      }).then(function () {
-        if (m.tipo === 'entrada_estoque' && m.produto_id) return db.collection('produtos').doc(m.produto_id).update({ estoque_atual: FV().increment(-(m.quantidade || 1)) });
-      }).then(function () {
-        if (m.tipo === 'ajuste_estoque' && m.produto_id) return db.collection('produtos').doc(m.produto_id).update({ estoque_atual: FV().increment(-(m.quantidade || 0)) });
-      });
-    }).catch(function (e) {
-      if (!marcou) throw e;
-      var x = new Error('Ficou marcado como erro, mas o acerto do saldo ou do estoque não foi feito (' + (e.message || e) + '). Não marque de novo: avise o administrador.');
-      x.marcou = true; throw x;
-    });
+    return LAPI.marcarErro(id, mot).catch(function (e) { if (e.codigo === 'JA_MARCADO') e.jaMarcado = true; throw e; });
   }
   function compensaTxt(m) {
     var p = [], q = m.quantidade || 1;
@@ -277,7 +249,8 @@ var LJ = (function () {
     P.corpo.appendChild(campos(lista));
     if (erro) {
       P.corpo.appendChild(el('div', 'pp-caixa', '<span class="pp-txt txt-vermelho"><b>Marcado como erro</b></span><span class="pp-txt">Motivo: ' + esc(m.motivo_erro || '—') +
-        '. Continua registrado, mas está fora dos cálculos.</span>'));
+        '. Continua registrado, mas está fora dos cálculos.</span>' +
+        (m.erro_por_nome ? '<span class="pp-txt cinza">Marcado por ' + esc(m.erro_por_nome) + (m.erro_em ? ', ' + esc(quandoTxt(dataDe(m.erro_em))) : '') + '.</span>' : '')));
       return;
     }
     if (ctx.modo === 'erro') {
@@ -326,10 +299,10 @@ var LJ = (function () {
     if (!nt.carregado) r.innerHTML = '<div class="lista-vazio">Carregando…</div>';
     var h = new Date(), ini = new Date(h.getFullYear(), h.getMonth(), 1, 0, 0, 0), fim = new Date(h.getFullYear(), h.getMonth(), h.getDate(), 23, 59, 59);
     return Promise.all([
-      db.collection('profissionais').where('ativo', '==', true).get(),
+      LAPI.profissionais(),
       buscaMovs({ ini: ini, fim: fim })
     ]).then(function (res) {
-      nt.profs = res[0].docs.map(function (d) { var x = d.data(); x.id = d.id; return x; }).filter(function (p) { return !ehOculto(p); });
+      nt.profs = res[0].filter(function (p) { return p.ativo === true && !ehOculto(p); });
       nt.mes = res[1].filter(semErro);
       nt.carregado = true; nt.erro = '';
       if (naTela('notinhas')) desenhaNotinhas();
@@ -434,13 +407,13 @@ var LJ = (function () {
     var ini = new Date(vi + 'T00:00:00'), fim = new Date(vf + 'T23:59:59');
     var W = 57, IG = new Array(W + 1).join('='), TR = new Array(W + 1).join('-');
     return Promise.all([
-      db.collection('movimentacoes').where('timestamp', '>=', ini).where('timestamp', '<=', fim).orderBy('timestamp').get(),
-      db.collection('profissionais').get()
+      LAPI.movimentos({ ini: ini, fim: fim, crescente: true }),
+      LAPI.profissionais()
     ]).then(function (res) {
       var SALDO = {}, NOME = {}, OCULTO = {};
-      res[1].forEach(function (d) { var x = d.data(); SALDO[d.id] = x.saldo_devedor || 0; NOME[d.id] = x.nome; OCULTO[d.id] = ehOculto(x); });
+      res[1].forEach(function (x) { SALDO[x.id] = x.saldo_devedor || 0; NOME[x.id] = x.nome; OCULTO[x.id] = ehOculto(x); });
       var TIPOS = ['venda_profissional', 'pagamento_notinha', 'bonificacao', 'venda_paciente'];
-      var movs = res[0].docs.map(function (d) { return d.data(); }).filter(function (m) { return semErro(m) && m.profissional_id && TIPOS.indexOf(m.tipo) >= 0; });
+      var movs = res[0].filter(function (m) { return semErro(m) && m.profissional_id && TIPOS.indexOf(m.tipo) >= 0; });
       if (profId) movs = movs.filter(function (m) { return m.profissional_id === profId; });
       else movs = movs.filter(function (m) { return !OCULTO[m.profissional_id]; });
       movs.sort(ordAsc);
@@ -514,9 +487,9 @@ var LJ = (function () {
     function carregaLanc(p) {
       lanc = null; lancErro = '';
       var quem = p.id;
-      db.collection('movimentacoes').where('profissional_id', '==', p.id).get().then(function (snap) {
+      LAPI.movimentos({ profissional: p.id }).then(function (lista) {
         if (quem !== atual) return;
-        lanc = snap.docs.map(function (d) { var x = d.data(); x.id = d.id; return x; }).sort(ordDesc);
+        lanc = lista.sort(ordDesc);
         if (P.aberto && modo === 'lista') pinta();
       }).catch(function (e) { lancErro = e.message || String(e); if (P.aberto) pinta(); });
     }
@@ -614,28 +587,15 @@ var LJ = (function () {
         if (!(val > 0)) { form.erro = true; pinta(); return; }
         ocupado = true; ok.disabled = true; ok.textContent = 'Salvando…';
         var pag = form.forma, obs = String(form.obs || '').trim();
-        var tx2 = 0, liq = val;
-        if (pag === 'debito') { tx2 = val * (CFG.taxa_debito || 0) / 100; liq = val - tx2; }
-        if (pag === 'credito') { tx2 = val * (CFG.taxa_credito || 0) / 100; liq = val - tx2; }
-        /* = confirmarPgto() / confirmarBaixaNotinha() */
-        var gravou = false;
-        Promise.resolve().then(function () {
-          return db.collection('movimentacoes').add({ tipo: 'pagamento_notinha', profissional_id: p.id, profissional_nome: p.nome, descricao: 'Pagamento de notinha' + (obs ? ' — ' + obs : ''),
-            valor_total: val, valor_liquido: liq, taxa_valor: tx2, forma_pagamento: pag, quantidade: null, produto_id: null, produto_nome: null, produto_grupo: null, preco_unitario: null,
-            cliente_tipo: 'profissional', secretaria_id: CU.id, secretaria_nome: CU.nome, timestamp: FV().serverTimestamp(), marcado_erro: false, motivo_erro: null });
-        })
-          .then(function () { gravou = true; return db.collection('profissionais').doc(p.id).update({ saldo_devedor: FV().increment(-val) }); })
+        /* = confirmarPgto(): o servidor grava o pagamento, a taxa do cartão e a baixa no saldo juntos (ou nada) */
+        LAPI.pagamentoNotinha(p.id, val, pag, obs)
           .then(function () {
             ocupado = false; form = {}; modo = 'lista'; aviso = 'Pagamento de ' + fmt(val) + ' registrado!'; avisoErro = false;
             toast('Pagamento de ' + fmt(val) + ' registrado!', 'ok');
             atualizaDepois();
           }, function (e) {
             ocupado = false; avisoErro = true;
-            if (!gravou) { aviso = 'Não deu certo: ' + (e.message || e); if (P.aberto) pinta(); return; }
-            form = {}; modo = 'lista';
-            aviso = 'O pagamento foi gravado, mas o saldo da notinha não baixou (' + (e.message || e) + '). Não lance de novo: avise o administrador.';
-            var txt = aviso;
-            atualizaDepois().then(function () { alertaFixo(txt); });
+            aviso = 'Não deu certo: ' + (e.message || e); if (P.aberto) pinta();
           });
       });
       box.appendChild(ok);
@@ -679,17 +639,9 @@ var LJ = (function () {
       var bAt = bt('btn btn-s txt-vermelho', 'Desativar profissional', function () {
         if (ocupado) return; ocupado = true; bAt.disabled = true;
         /* = toggleProf() */
-        var pc = PRC.find(function (x) { return x.id === p.id; }) || { nome: 'Profissional' };
-        var ativo = p.ativo !== false, gravou = false;
-        Promise.resolve().then(function () { return db.collection('profissionais').doc(p.id).update({ ativo: !ativo }); })
-          .then(function () {
-            gravou = true;
-            return db.collection('movimentacoes').add({ tipo: 'edicao_profissional', descricao: (ativo ? 'Profissional desativado' : 'Profissional reativado') + ': ' + pc.nome, profissional_id: p.id, profissional_nome: pc.nome,
-              valor_total: 0, valor_liquido: 0, taxa_valor: 0, forma_pagamento: null, produto_id: null, produto_nome: null, produto_grupo: null, quantidade: null, preco_unitario: null, cliente_tipo: null,
-              secretaria_id: CU.id, secretaria_nome: CU.nome, timestamp: FV().serverTimestamp(), marcado_erro: false, motivo_erro: null });
-          })
+        var ativo = p.ativo !== false;
+        LAPI.profissionalAtivo(p.id, !ativo)   /* o servidor registra no histórico */
           .then(function () { fim(''); }, function (e) {
-            if (gravou) { fim(' O registro no histórico falhou (' + (e.message || e) + ').'); return; }
             ocupado = false; aviso = 'Não deu certo: ' + (e.message || e); avisoErro = true; if (P.aberto) pinta();
           });
         function fim(extra) {
@@ -703,7 +655,7 @@ var LJ = (function () {
         var bOc = bt('btn btn-s', oc ? 'Exibir a notinha' : 'Ocultar a notinha', function () {
           if (ocupado) return; ocupado = true; bOc.disabled = true;
           /* = toggleOculto() */
-          Promise.resolve().then(function () { return db.collection('profissionais').doc(p.id).update({ oculto: !oc }); })
+          LAPI.profissionalOculto(p.id, !oc)
             .then(function () {
               ocupado = false; toast(oc ? 'Notinha visível novamente.' : 'Notinha ocultada.', 'ok'); P.fechar();
               semQuebrar(loadCaches().then(function () { return notinhas(); }));
@@ -724,30 +676,15 @@ var LJ = (function () {
         ocupado = true; sv.disabled = true; sv.textContent = 'Salvando…';
         /* = salvarProf() editando */
         var bonif = num(form.bonif);
-        var before = PRC.find(function (x) { return x.id === p.id; });
-        var upd = { nome: nm, bonificacao_mensal: bonif };
         var novoSaldo = mexeuSaldo ? numOuNaN(form.saldo) : NaN;
-        var antes = before ? before.saldo_devedor || 0 : 0;
-        var logs = [];
-        if (!isNaN(novoSaldo) && novoSaldo !== antes) { upd.saldo_devedor = novoSaldo; logs.push('Saldo corrigido manualmente para ' + fmt(novoSaldo)); }
-        if (before && before.nome !== nm) logs.push('Nome alterado de "' + before.nome + '" para "' + nm + '"');
-        var gravou = false;
-        Promise.resolve().then(function () { return db.collection('profissionais').doc(p.id).update(upd); })
-          .then(function () {
-            gravou = true;
-            if (!logs.length) return;
-            return db.collection('movimentacoes').add({ tipo: 'edicao_profissional', descricao: logs.join(' | '), profissional_id: p.id, profissional_nome: nm, valor_total: 0, valor_liquido: 0, taxa_valor: 0,
-              forma_pagamento: null, produto_id: null, produto_nome: null, produto_grupo: null, quantidade: null, preco_unitario: null, cliente_tipo: null,
-              secretaria_id: CU.id, secretaria_nome: CU.nome, timestamp: FV().serverTimestamp(), marcado_erro: false, motivo_erro: null });
-          })
+        /* o servidor só corrige o saldo se for outro valor, e registra "Saldo corrigido manualmente…" / "Nome alterado…" no histórico */
+        LAPI.profissionalSalvar(p.id, nm, bonif, isNaN(novoSaldo) ? null : novoSaldo)
           .then(function () {
             ocupado = false; form = {}; modo = 'lista'; aviso = 'Profissional salvo!'; avisoErro = false; toast('Profissional salvo!', 'ok');
             atualizaDepois();
           }, function (e) {
             ocupado = false; avisoErro = true;
-            if (!gravou) { aviso = 'Não deu certo: ' + (e.message || e); if (P.aberto) pinta(); return; }
-            form = {}; modo = 'lista'; aviso = 'Profissional salvo, mas o registro no histórico falhou (' + (e.message || e) + ').';
-            atualizaDepois();
+            aviso = 'Não deu certo: ' + (e.message || e); if (P.aberto) pinta();
           });
       });
       lin.appendChild(sv);
@@ -781,7 +718,7 @@ var LJ = (function () {
         if (st.erro || st.erroNum) { pinta(); return; }
         st.ocupado = true; sv.disabled = true; sv.textContent = 'Salvando…';
         /* = salvarProf() novo */
-        Promise.resolve().then(function () { return db.collection('profissionais').add({ nome: nm, bonificacao_mensal: num(st.bonif), saldo_devedor: 0, ativo: true, criado_em: FV().serverTimestamp() }); })
+        LAPI.profissionalCriar(nm, num(st.bonif))
           .then(function () {
             toast('Profissional salvo!', 'ok'); P.fechar(); nt.filtro = 'todos';
             semQuebrar(loadCaches().then(function () { return notinhas(); }));
@@ -820,17 +757,7 @@ var LJ = (function () {
         if (!sel.length) { erro = true; pinta(); return; }
         ocupado = true; ap.disabled = true; ap.textContent = 'Salvando…';
         /* = confirmarBonif() */
-        Promise.resolve().then(function () {
-          var batch = db.batch();
-          sel.forEach(function (p) {
-            var ref = db.collection('movimentacoes').doc();
-            batch.set(ref, { tipo: 'bonificacao', profissional_id: p.id, profissional_nome: p.nome, descricao: 'Bonificacao mensal — R$ ' + val.toFixed(2), valor_total: val, valor_liquido: val, taxa_valor: 0,
-              forma_pagamento: null, quantidade: null, produto_id: null, produto_nome: null, produto_grupo: null, preco_unitario: null, cliente_tipo: 'profissional',
-              secretaria_id: CU.id, secretaria_nome: CU.nome, timestamp: FV().serverTimestamp(), marcado_erro: false, motivo_erro: null });
-            batch.update(db.collection('profissionais').doc(p.id), { saldo_devedor: FV().increment(-val) });
-          });
-          return batch.commit();
-        }).then(function () {
+        LAPI.bonificacao(sel.map(function (p) { return p.id; })).then(function () {   /* o valor é a bonificação padrão da configuração */
           toast('Bonificações aplicadas!', 'ok'); P.fechar();
           semQuebrar(loadCaches().then(function () { if (naTela('notinhas')) { nt.filtro = 'todos'; return notinhas(); } }));
         }, function (e) { ocupado = false; toast('Erro: ' + (e.message || e), 'ko'); pinta(); });
@@ -956,11 +883,7 @@ var LJ = (function () {
         if (val <= 0) { st.erro = true; pinta(); return; }
         st.ocupado = true; ok.disabled = true; ok.textContent = 'Salvando…';
         /* = confirmarCxMov() */
-        Promise.resolve().then(function () {
-          return db.collection('movimentacoes').add({ tipo: tipo, descricao: mot || tipo, valor_total: val, valor_liquido: val, taxa_valor: 0, forma_pagamento: 'dinheiro', profissional_id: null, profissional_nome: null,
-            produto_id: null, produto_nome: null, produto_grupo: null, quantidade: null, preco_unitario: null, cliente_tipo: null,
-            secretaria_id: CU.id, secretaria_nome: CU.nome, timestamp: FV().serverTimestamp(), marcado_erro: false, motivo_erro: null });
-        })
+        LAPI.caixaMov(tipo, val, mot)
           .then(function () { toast((tipo === 'sangria' ? 'Sangria' : 'Suprimento') + ' registrada!', 'ok'); P.fechar(); cx.filtro = 'todos'; semQuebrar(caixa()); },
                 function (e) { st.ocupado = false; toast('Erro: ' + (e.message || e), 'ko'); pinta(); });
       });
@@ -1030,11 +953,11 @@ var LJ = (function () {
     }
     if (!es.carregado) r.innerHTML = '<div class="lista-vazio">Carregando…</div>';
     return Promise.all([
-      db.collection('movimentacoes').where('tipo', '==', 'entrada_estoque').get(),
-      db.collection('produtos').get()
+      LAPI.movimentos({ tipo: 'entrada_estoque' }),
+      LAPI.produtos()
     ]).then(function (res) {
-      es.entradas = res[0].docs.map(function (d) { var x = d.data(); x.id = d.id; return x; }).filter(semErro).sort(ordDesc);
-      es.prods = res[1].docs.map(function (d) { var x = d.data(); x.id = d.id; return x; }).filter(function (p) { return p.ativo; })
+      es.entradas = res[0].filter(semErro).sort(ordDesc);
+      es.prods = res[1].filter(function (p) { return p.ativo; })
         .sort(function (a, b) { return String(a.nome).localeCompare(String(b.nome)); });
       es.carregado = true; es.erro = '';
       if (naTela('estoque')) desenhaEstoque();
@@ -1142,9 +1065,8 @@ var LJ = (function () {
           es.criandoProd = true; cr.disabled = true; cr.textContent = 'Salvando…';
           var gr = f.grupoNovo || 'conveniencia', un = String(f.unidadeNovo || '').trim() || 'un';
           /* = criarProdutoInline() */
-          Promise.resolve().then(function () { return db.collection('produtos').add({ nome: nm, grupo: gr, unidade: un, preco_custo: 0, preco_venda: 0, estoque_atual: 0, ativo: true, criado_em: FV().serverTimestamp() }); }).then(function (ref) {
+          LAPI.produtoCriar(nm, gr, un).then(function (p) {
             es.criandoProd = false;
-            var p = { id: ref.id, nome: nm, grupo: gr, unidade: un, preco_custo: 0, preco_venda: 0, estoque_atual: 0, ativo: true };
             PC.push(p); es.prods.push(p);
             f.pid = p.id; f.q = ''; f.criando = false; es.msg = { t: 'Produto criado!', e: false };
             desenhaEstoque();
@@ -1186,31 +1108,15 @@ var LJ = (function () {
       var qtd = parseInt(f.qtd, 10) || 1, cstUn = num(f.custoUn), cstTot = num(f.custoTot), novoPrecoVenda = num(f.preco), obs = String(f.obs || '').trim();
       if (qtd < 1) { es.msg = { t: 'A quantidade precisa ser 1 ou mais.', e: true }; desenhaEstoque(); return; }
       es.salvando = true; rg.disabled = true; rg.textContent = 'Salvando…';
-      var gravou = false;
-      Promise.resolve().then(function () {
-        return db.collection('movimentacoes').add({ tipo: 'entrada_estoque', produto_id: p.id, produto_nome: p.nome, produto_grupo: p.grupo, quantidade: qtd, preco_unitario: cstUn, custo_unitario: cstUn,
-          valor_total: cstTot, valor_liquido: cstTot, taxa_valor: 0, descricao: obs || 'Entrada de estoque', cliente_tipo: null, forma_pagamento: null, profissional_id: null, profissional_nome: null,
-          secretaria_id: CU.id, secretaria_nome: CU.nome, timestamp: FV().serverTimestamp(), marcado_erro: false, motivo_erro: null });
-      })
-        .then(function () {
-          gravou = true;
-          var upd = { estoque_atual: FV().increment(qtd) };
-          if (cstUn > 0) upd.preco_custo = cstUn;
-          if (novoPrecoVenda > 0) upd.preco_venda = novoPrecoVenda;
-          return db.collection('produtos').doc(p.id).update(upd);
-        })
+      /* o servidor grava a entrada e soma no estoque juntos (custo e preço novos só quando informados) */
+      LAPI.entradaEstoque(p.id, qtd, cstUn, cstTot, novoPrecoVenda, obs)
         .then(function () {
           es.salvando = false; es.form = { qtd: '1' }; es.msg = { t: 'Entrada: ' + qtd + '× ' + p.nome, e: false }; toast('Entrada: ' + qtd + 'x ' + p.nome, 'ok'); es.aba = 'entradas';
           desenhaEstoque();
           semQuebrar(loadCaches().then(function () { return estoque(); }));
         }, function (e) {
           es.salvando = false;
-          if (!gravou) { es.msg = { t: 'Não deu certo: ' + (e.message || e), e: true }; desenhaEstoque(); return; }
-          es.form = { qtd: '1' }; es.aba = 'entradas';
-          es.msg = { t: 'A entrada foi gravada, mas o estoque do produto não atualizou (' + (e.message || e) + '). Não lance de novo: avise o administrador.', e: true };
-          desenhaEstoque();
-          var txt = es.msg.t;
-          semQuebrar(loadCaches().then(function () { return estoque(); })).then(function () { alertaFixo(txt); });
+          es.msg = { t: 'Não deu certo: ' + (e.message || e), e: true }; desenhaEstoque();
         });
     });
     rg.disabled = !!es.salvando;   /* a tela pode se redesenhar enquanto grava: o botão continua travado */
@@ -1521,61 +1427,38 @@ var LJ = (function () {
   function nvFechar() { if (nv.ocupado) return; nv.janela = 'fechada'; nvPadrao(); nvPinta(); }
   function nvConfirmar() {
     if (nv.ocupado || nv.carregando) return;
-    /* = confirmarVenda() */
-    var itens = nv.cart.map(function (it) { var p = nvProd(it.pid); return p ? { pid: p.id, pnm: p.nome, grupo: p.grupo, preco: p.preco_venda, qtd: it.qtd } : null; }).filter(Boolean);
+    /* = confirmarVenda(): o servidor confere o preço de cada produto, calcula a taxa do cartão, baixa o estoque
+       e, na notinha, soma no saldo — tudo junto (ou nada) */
+    var itens = nv.cart.map(function (it) { var p = nvProd(it.pid); return p ? { pid: p.id, preco: p.preco_venda, qtd: it.qtd } : null; }).filter(Boolean);
     if (!itens.length) { nv.erro = 'Adicione pelo menos um produto.'; nvPinta(); return; }
     var tipo = nv.cliente === 'prof' ? 'profissional' : 'paciente';
-    var tot = itens.reduce(function (s, x) { return s + x.preco * x.qtd; }, 0);
-    var batch, quem = 'paciente', como;
-    try {   /* um campo inválido faz o Firestore reclamar na hora: vira aviso, nunca botão travado */
-    batch = db.batch();
-    if (tipo === 'paciente') {
-      var pag = nv.pag, tx = 0, liq = tot;
-      if (pag === 'debito') { tx = tot * (CFG.taxa_debito || 0) / 100; liq = tot - tx; }
-      if (pag === 'credito') { tx = tot * (CFG.taxa_credito || 0) / 100; liq = tot - tx; }
-      itens.forEach(function (item) {
-        var ref = db.collection('movimentacoes').doc();
-        batch.set(ref, { tipo: 'venda_paciente', cliente_tipo: 'paciente', produto_id: item.pid, produto_nome: item.pnm, produto_grupo: item.grupo, quantidade: item.qtd, preco_unitario: item.preco,
-          valor_total: item.preco * item.qtd, valor_liquido: (item.preco * item.qtd) * (liq / tot), taxa_valor: (item.preco * item.qtd) * (tx / tot), forma_pagamento: pag,
-          profissional_id: null, profissional_nome: null, secretaria_id: CU.id, secretaria_nome: CU.nome, timestamp: FV().serverTimestamp(), marcado_erro: false, motivo_erro: null });
-        batch.update(db.collection('produtos').doc(item.pid), { estoque_atual: FV().increment(-item.qtd) });
-      });
-      como = formaRot(pag);
-    } else {
-      var profId = nv.prof, prof = PRC.find(function (x) { return x.id === profId; });
+    var quem = 'paciente', como = formaRot(nv.pag), forma = nv.pag, profId = null;
+    if (tipo === 'profissional') {
+      profId = nv.prof;
+      var prof = PRC.find(function (x) { return x.id === profId; });
       if (!profId || !prof) { nv.erro = 'Selecione o profissional.'; nvPinta(); return; }
-      var pgpVal = nv.modo === 'agora' ? 'agora' : 'notinha';
-      itens.forEach(function (item) {
-        var ref = db.collection('movimentacoes').doc(), vt = item.preco * item.qtd;
-        if (pgpVal === 'notinha') {
-          batch.set(ref, { tipo: 'venda_profissional', cliente_tipo: 'profissional', produto_id: item.pid, produto_nome: item.pnm, produto_grupo: item.grupo, quantidade: item.qtd, preco_unitario: item.preco,
-            valor_total: vt, valor_liquido: vt, taxa_valor: 0, forma_pagamento: 'notinha', profissional_id: profId, profissional_nome: prof.nome,
-            secretaria_id: CU.id, secretaria_nome: CU.nome, timestamp: FV().serverTimestamp(), marcado_erro: false, motivo_erro: null });
-        } else {
-          var pag2 = nv.pag, tx2 = 0, liq2 = vt;
-          if (pag2 === 'debito') { tx2 = vt * (CFG.taxa_debito || 0) / 100; liq2 = vt - tx2; }
-          if (pag2 === 'credito') { tx2 = vt * (CFG.taxa_credito || 0) / 100; liq2 = vt - tx2; }
-          batch.set(ref, { tipo: 'venda_paciente', cliente_tipo: 'profissional', produto_id: item.pid, produto_nome: item.pnm, produto_grupo: item.grupo, quantidade: item.qtd, preco_unitario: item.preco,
-            valor_total: vt, valor_liquido: liq2, taxa_valor: tx2, forma_pagamento: pag2, profissional_id: profId, profissional_nome: prof.nome,
-            secretaria_id: CU.id, secretaria_nome: CU.nome, timestamp: FV().serverTimestamp(), marcado_erro: false, motivo_erro: null });
-        }
-        batch.update(db.collection('produtos').doc(item.pid), { estoque_atual: FV().increment(-item.qtd) });
-      });
-      if (pgpVal === 'notinha') batch.update(db.collection('profissionais').doc(profId), { saldo_devedor: FV().increment(tot) });
-      quem = prof.nome; como = pgpVal === 'notinha' ? 'na notinha' : formaRot(nv.pag);
+      if (nv.modo !== 'agora') { forma = 'notinha'; como = 'na notinha'; }
+      quem = prof.nome;
     }
-    } catch (e) { nv.erro = 'Não deu certo: ' + (e.message || e); toast('A venda NÃO foi gravada: ' + (e.message || e), 'ko'); nvPinta(); return; }
     nv.ocupado = true; nvPinta();
-    batch.commit().then(function () {
+    LAPI.venda(tipo, forma, profId, itens.map(function (x) { return { produto_id: x.pid, quantidade: x.qtd, preco: x.preco }; })).then(function (r) {
       nv.ocupado = false;
-      toast('Venda registrada: ' + fmt(tot) + ', ' + quem + ', ' + como + '.', 'ok');
+      toast('Venda registrada: ' + fmt(r.total) + ', ' + quem + ', ' + como + '.', 'ok');
       nv.janela = 'fechada'; nvPadrao();
       nv.topEm = 0;
       nvPinta();
       semQuebrar(loadCaches().then(function () {
         if (naTela('notinhas')) return notinhas(); else if (naTela('caixa')) return caixa(); else if (naTela('historico')) return historico(); else if (naTela('estoque')) return estoque();
       }));
-    }, function (e) { nv.ocupado = false; nv.erro = 'Não deu certo: ' + (e.message || e); toast('A venda NÃO foi gravada: ' + (e.message || e), 'ko'); nvPinta(); });
+    }, function (e) {
+      nv.ocupado = false; nv.erro = 'Não deu certo: ' + (e.message || e); toast('A venda NÃO foi gravada: ' + (e.message || e), 'ko');
+      /* preço mudou ou produto saiu do estoque: atualiza a lista para a pessoa conferir e confirmar de novo */
+      if (e.codigo === 'PRECO_MUDOU' || e.codigo === 'PRODUTO_INVALIDO') {
+        nv.carregando = true;
+        loadCaches().catch(function () {}).then(function () { nv.carregando = false; if (nv.janela !== 'fechada') nvPinta(); });
+      }
+      nvPinta();
+    });
   }
   function sair() { nv.janela = 'fechada'; nvPadrao(); nv.ocupado = false; nv.carregando = false; nv.avisoCarga = ''; if (nvEl) { nvEl.innerHTML = ''; nvEl.className = 'nv nv-fechada'; } var f = document.getElementById('fab'); if (f) f.classList.remove('nv-escondido'); nt.carregado = false; cx.carregado = false; es.carregado = false; hs.carregado = false; }
 

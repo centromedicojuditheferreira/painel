@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&amp;display=swap">
 <link rel="stylesheet" href="css/painel.css?v=11">
 <link rel="stylesheet" href="css/entrada.css?v=1">
+<link rel="stylesheet" href="css/loja_login.css?v=1">
 <link rel="stylesheet" href="css/loja.css?v=8">
 <link rel="stylesheet" href="css/guias.css?v=8">
 <link rel="stylesheet" href="css/profissional.css?v=8">
@@ -63,6 +64,7 @@
 </div>
 <!-- LOGIN (desenho em css/entrada.css · nomes, PIN e saudação em js/entrada.js)
      O <select id="lo-usr"> continua sendo a lista de verdade (lojinha.js e profissional.js enchem ele);
+     troca do PIN provisório e migração do Firebase: js/loja_login.js, que desenha por cima da lista;
      a escolha de Profissional saiu da tela por enquanto — os links ?conferir=1 e ?convite= seguem abrindo a entrada deles. -->
 <div id="lo">
   <div class="lo-fundo" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
@@ -328,16 +330,15 @@
   <div class="mf"><button class="btn btn-s" onclick="closeM('m-baixa')">Cancelar</button><button class="btn btn-p" onclick="confirmarBaixaNotinha()">Confirmar pagamento</button></div>
 </div></div>
 
-<!-- FIREBASE SDK -->
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-<script src="js/lojinha.js?v=10"></script>
+<!-- lojinha e login: Supabase pelas funções loja_* (LOJA v1.0); o Firebase saiu -->
+<script src="js/loja_api.js?v=1"></script>
+<script src="js/lojinha.js?v=11"></script>
 <script src="js/guias.js?v=12"></script>
 <script src="js/profissional.js?v=8"></script>
-<script src="js/loja_nova.js?v=8"></script>
-<script src="js/financeiro.js?v=2"></script>
-<script src="js/migracao.js?v=1"></script>
+<script src="js/loja_nova.js?v=9"></script>
+<script src="js/financeiro.js?v=3"></script>
 <script src="js/moldura.js?v=10"></script>
 <script src="js/entrada.js?v=1"></script>
+<script src="js/loja_login.js?v=1"></script>
 </body>
 </html>
