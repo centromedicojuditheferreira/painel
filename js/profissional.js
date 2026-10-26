@@ -1389,21 +1389,28 @@ function diaData(iso){ return diaSemanaBr(iso) + ' (' + new Date(iso).toLocaleSt
 function msgAcesso(nome, email, ate){
   var J = (adm.dados && adm.dados.janela) || {};
   var primeiro = String(nome || '').trim().split(/\s+/)[0] || ''; primeiro = primeiro.charAt(0).toUpperCase() + primeiro.slice(1).toLowerCase();
-  var hAbre = J.abre_em ? horaBr(J.abre_em) : '8h', hPrazo = J.prazo ? horaBr(J.prazo) : '22h';
-  var diaAbre = J.abre_em ? diaSemanaBr(J.abre_em) : 'segunda-feira', diaPrazo = J.prazo ? diaSemanaBr(J.prazo) : 'segunda-feira';
-  var rotina = 'toda ' + diaAbre + ', a partir das ' + hAbre + ', a agenda da semana anterior fica disponível, com prazo até ' +
-               (diaAbre === diaPrazo ? 'as ' + hPrazo + ' do mesmo dia.' : diaPrazo + ', às ' + hPrazo + '.');
+  /* v3.2: a rotina sai das regras das semanas normais (parâmetros), nunca do prazo de um período especial */
+  var P = (adm.dados && adm.dados.parametros) || {}, H = P.avisos_horas || {};
+  var hh = function(t, padrao){ var p = String(t || padrao).split(':'); return p[1] === '00' ? Number(p[0]) + 'h' : Number(p[0]) + 'h' + p[1]; };
+  var hAbre = hh(H.abertura, '08:00'), hPrazo = hh(P.prazo_profissional_hora, '22:00');
+  var diaAbre = (P.abertura_dia === 'domingo') ? 'domingo' : 'segunda-feira';
+  var toda = (diaAbre === 'domingo' ? 'todo ' : 'toda ');
+  var rotina = toda + diaAbre + ', a partir das ' + hAbre + ', a agenda da semana anterior fica disponível, com prazo até as ' + hPrazo + ' do mesmo dia.';
+  var jaAbriu = J.abre_em && Date.now() >= new Date(J.abre_em).getTime();
   var l = ['Olá, ' + primeiro + '! Tudo bem? 😊',
     'A conferência da sua agenda agora tem um endereço só dos profissionais da clínica:\n👉 ' + SITE_PROF,
     '*Para entrar*\n• E-mail: ' + email + '\n• Senha provisória: ' + (adm.senhaProv || '0000') + '\nNo primeiro acesso, você cria a sua senha e vê um passo a passo rápido de como tudo funciona.'];
   if(J.periodo_especial && J.periodo_inicio && J.periodo_fim && J.abre_em && J.prazo){
+    var outroDia = diaSemanaBr(J.prazo) !== diaSemanaBr(J.abre_em);
     l.push('*Desta vez é diferente*\nPara colocar a agenda em dia, nesta primeira vez você confere de uma vez os dias *' + ddmm(J.periodo_inicio) + ' a ' + ddmm(J.periodo_fim) +
-           '*. A conferência abre na *' + diaData(J.abre_em) + ', a partir das ' + hAbre + '*, e o prazo para confirmar é *' + diaData(J.prazo) + ', às ' + hPrazo + '*.');
-    l.push('*Depois, toda ' + diaAbre + '*\nA partir daí, a conferência passa a ser semanal: ' + rotina);
+           '*. ' + (jaAbriu ? 'A conferência *já está aberta*' : 'A conferência abre na *' + diaData(J.abre_em) + ', a partir das ' + horaBr(J.abre_em) + '*') +
+           ', e o prazo para confirmar é *' + diaData(J.prazo) + ', às ' + horaBr(J.prazo) + '*.' +
+           (outroDia ? ' Esse prazo maior é *só desta vez*.' : ''));
+    l.push('*Depois, ' + toda + diaAbre + '*\nA partir daí, a conferência passa a ser semanal' + (outroDia ? ', e o prazo volta a ser no mesmo dia' : '') + ': ' + rotina);
   } else {
-    l.push('*Toda ' + diaAbre + '*\nA conferência é semanal: ' + rotina + (J.abre_em ? ' A próxima abre na ' + diaData(J.abre_em) + '.' : ''));
+    l.push('*' + capital(toda) + diaAbre + '*\nA conferência é semanal: ' + rotina + (J.abre_em ? ' A próxima abre na ' + diaData(J.abre_em) + '.' : ''));
   }
-  l.push('No fim de cada mês, a conferência dos últimos dias já abre no dia 1º, a partir das ' + hAbre + '. Para quem recebe repasse, a tela mostra toda segunda o valor do mês até ali, e o recibo sai na hora, nessa confirmação do dia 1º.');
+  l.push('*No dia 1º de cada mês*\nAbre a conferência dos últimos dias do mês anterior, a partir das ' + hAbre + '. *É muito importante confirmar no próprio dia 1º, o quanto antes:* para quem recebe repasse, é nessa confirmação que o recibo do mês sai, na hora. E ' + toda + diaAbre + ' a tela mostra o valor do mês até ali.');
   l.push('*Como conferir*\n1️⃣ Confira consulta por consulta: cada uma aparece como Atendido ou Não compareceu.\n' +
          '2️⃣ Achou algo errado? Avise a recepção por aqui e *não confirme ainda*. A correção aparece no site até a manhã seguinte.\n' +
          '3️⃣ Tudo certo? Toque em "Está tudo certo — confirmar", marque a declaração e tire uma selfie pelo celular. *A selfie é a sua assinatura.* ✅\n' +
