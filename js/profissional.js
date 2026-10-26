@@ -778,6 +778,86 @@ function pintaContagem(){
 function iniciarRelogio(){ pintaContagem(); clearInterval(cf.timer); cf.timer = setInterval(pintaContagem, 30000); }
 function pararRelogio(){ clearInterval(cf.timer); cf.timer = null; }
 
+/* ═══ v3.4: guia rápido das secretárias (faixa no topo da Conferência → janela em passos) ═══ */
+var GUIA_V = 'img/guia/';
+function guiaLinha(lista){
+  return '<div class="gd-linha">' + lista.map(function(x){
+    return '<div class="gd-marco' + (x[3] ? ' ' + x[3] : '') + '"><small>' + x[0] + '</small><b>' + x[1] + '</b><span>' + x[2] + '</span></div>';
+  }).join('') + '</div>';
+}
+var GUIA = [
+  { img: '4-agenda', t: 'O que muda',
+    p: 'Cada profissional confere a <b>própria agenda</b> pelo celular, no site <b>profissionais.levsoul.com.br</b>, e confirma que está tudo certo.',
+    e: 'É por essa agenda que a clínica fatura e calcula o repasse. O papel de vocês: <b>tirar dúvidas, corrigir no Feegow e cobrar quem atrasar</b>.' },
+  { img: '1-entrar', t: 'Primeiro acesso',
+    p: 'Ele entra com o <b>e-mail do cadastro no Feegow</b> e a senha <b>0000</b>.',
+    e: 'Não entrou? Quase sempre é o e-mail: confira o do cadastro. O 0000 não vence, vale até ele entrar. Errou a senha 5 vezes seguidas: espera 15 minutos.' },
+  { img: '2-senha', t: 'Ele cria a senha dele',
+    p: 'Na primeira entrada, o site pede uma <b>senha nova</b>, de pelo menos 4 caracteres. Daí em diante ele entra com ela.',
+    e: 'Esqueceu a senha? Por enquanto, quem gera um 0000 novo é a Administração.' },
+  { img: '3-tutorial-dia', t: 'Ele recebe um passo a passo',
+    p: 'Logo depois, aparece um <b>passo a passo de 6 telas</b> explicando tudo, inclusive o prazo.',
+    e: 'Ele pode rever quando quiser em <b>Como funciona</b>, dentro do site.' },
+  { img: '4-agenda', t: 'Ele confere consulta por consulta',
+    p: 'Cada consulta aparece com horário, paciente, convênio e a situação: <b>Atendido</b> ou <b>Não compareceu</b>.',
+    e: 'Viu algo errado? Ele avisa vocês pelo WhatsApp e <b>não confirma ainda</b>. Vocês corrigem no Feegow; a correção aparece no site <b>até a manhã seguinte</b> e ele confere de novo.' },
+  { img: '5-confirmar', t: 'Confirma com uma selfie',
+    p: 'Só pelo <b>celular</b>: ele marca a declaração e tira uma <b>selfie na hora</b>. <b>A selfie é a assinatura dele.</b>',
+    e: 'A câmera não abre? Ele precisa permitir a câmera para o site no navegador do celular. Pelo computador ele vê a agenda, mas não confirma.' },
+  { img: '6-confirmada', t: 'Pronto: agenda confirmada',
+    p: 'Depois de confirmada, a agenda <b>não muda mais</b> pelo site. Ele pode baixar o comprovante em PDF.',
+    e: 'Aqui na Conferência, ele sai de <b>Ainda não</b> e vai para <b>Confirmou</b>, e vocês conseguem ver a selfie. Confirmou errado? Fale com a Administração.' },
+  { vis: function(){ return guiaLinha([['Segunda', '8h', 'abre a semana anterior'], ['Segunda', '22h', 'prazo do profissional', 'quente'],
+                                       ['Terça', '22h', 'última chance; depois trava', 'fim']]); },
+    t: 'As datas',
+    p: 'Toda <b>segunda, às 8h</b>, abre a agenda da semana anterior. O prazo que o profissional vê é <b>segunda, 22h</b>. Até <b>terça, 22h</b> ainda dá para confirmar (fica marcado como atrasado). Depois disso <b>trava</b> e segue para o faturamento como está.',
+    e: '<b>Só nesta semana:</b> a agenda de 01/10 a 24/10 tem prazo <b>terça 27/10, 22h</b> e trava <b>quarta 28/10, 22h</b>.<br><b>Todo dia 1º:</b> abrem os últimos dias do mês anterior. É o que gera o recibo do repasse: confirmar <b>no mesmo dia, o quanto antes</b>.' },
+  { vis: function(){ return guiaLinha([['Segunda', '18h', '1º aviso'], ['Terça', '9h', '2º aviso', 'quente'], ['Terça', '17h', 'último aviso', 'fim']]); },
+    t: 'Os disparos',
+    p: '<b>Hoje:</b> cada profissional recebe a mensagem de acesso pelo WhatsApp da clínica, com o endereço, o e-mail e o 0000.',
+    e: '<b>Toda semana</b>, quem ainda não confirmou recebe um aviso de vocês na <b>segunda às 18h</b>, na <b>terça às 9h</b> e na <b>terça às 17h</b>. Os de terça deixam claro que <b>depois das 22h não dá mais para corrigir</b>.<br><b>Dia 1º:</b> avisos às <b>11h</b> e às <b>15h</b>.<br>Em breve o Cortex mostra um quadradinho vermelho na hora de cada aviso, com a mensagem pronta.' },
+  { vis: function(){ return '<div class="gd-faq"><b>?</b></div>'; },
+    t: 'O que responder ao profissional',
+    p: '<b>"Não consigo entrar."</b> Primeira vez: e-mail do cadastro + 0000. Depois: a senha que ele criou.<br><b>"Tem consulta errada."</b> Anote, corrija no Feegow e peça para ele conferir de novo amanhã cedo, sem confirmar antes.',
+    e: '<b>"Confirmei com erro."</b> Pelo site não muda mais: fale com a Administração.<br><b>"Perdi o prazo de segunda."</b> Ainda dá até terça, 22h. Depois, a agenda segue como está.' }
+];
+function guiaSec(){
+  if(!window.moldura) return;
+  var i = 0, P = moldura.pop({ titulo: 'Como funciona a conferência dos profissionais', largura: '820px', classe: 'gd-pop' });
+  P.rodape.hidden = false;
+  P.rodape.innerHTML = '<span class="gd-pontos"></span><span class="pop-dir"><button type="button" class="btn btn-s" data-g="-1">Anterior</button>' +
+    '<button type="button" class="btn btn-p" data-g="1">Próximo</button></span>';
+  var pinta = function(){
+    var s = GUIA[i];
+    P.corpo.innerHTML = '<div class="gd-passo">' +
+      '<div class="gd-vis">' + (s.img ? '<img src="' + GUIA_V + s.img + '.jpg?v=1" alt="Tela do site dos profissionais: ' + esc(s.t) + '" loading="lazy">' : s.vis()) + '</div>' +
+      '<div class="gd-txt"><p class="gd-n">' + (i + 1) + ' de ' + GUIA.length + '</p><h2>' + esc(s.t) + '</h2><p class="gd-p">' + s.p + '</p>' +
+      (s.e ? '<p class="gd-e">' + s.e + '</p>' : '') + '</div></div>';
+    P.rodape.querySelector('.gd-pontos').innerHTML = GUIA.map(function(_, k){
+      return '<button type="button" class="gd-ponto' + (k === i ? ' on' : '') + '" data-k="' + k + '" aria-label="Passo ' + (k + 1) + '"></button>';
+    }).join('');
+    P.rodape.querySelector('[data-g="-1"]').disabled = i === 0;
+    P.rodape.querySelector('[data-g="1"]').textContent = i === GUIA.length - 1 ? 'Fechar' : 'Próximo';
+    P.corpo.scrollTop = 0;
+  };
+  var vai = function(k){ if(k >= GUIA.length){ P.fechar(); return; } i = Math.max(0, k); pinta(); };
+  P.rodape.addEventListener('click', function(ev){
+    var b = ev.target.closest('[data-g],[data-k]'); if(!b) return;
+    if(b.hasAttribute('data-k')) vai(Number(b.getAttribute('data-k'))); else vai(i + Number(b.getAttribute('data-g')));
+  });
+  var tecla = function(ev){
+    if(!P.aberto){ document.removeEventListener('keydown', tecla); return; }
+    if(ev.key === 'ArrowRight') vai(i + 1); else if(ev.key === 'ArrowLeft' && i > 0) vai(i - 1);
+  };
+  document.addEventListener('keydown', tecla);
+  pinta();
+}
+function faixaGuia(){
+  var b = bt('cf-guia', '<span class="cf-guia-ic" aria-hidden="true">?</span><span class="cf-guia-q"><b>Como funciona: guia rápido</b>' +
+    '<small>Acesso dos profissionais, confirmação com selfie, datas e avisos</small></span><span class="cf-guia-ir">Abrir</span>', guiaSec);
+  return b;
+}
+
 /* porta: a senha do balcão (pedida uma vez por sessão, como antes) */
 function secretaria(){
   var host = document.getElementById('gv-conteudo'); if(!host) return;
@@ -793,6 +873,7 @@ function secretaria(){
   box.innerHTML = '<h2>Senha do balcão</h2><p>A conferência dos profissionais abre com a senha do balcão.</p>' +
     '<div class="cf-porta-l"><input type="password" class="fc" id="pf-sec-senha" autocomplete="off" aria-label="Senha do balcão" placeholder="Senha do balcão">' +
     '<button type="button" class="btn btn-p" id="pf-sec-ok">Abrir</button></div><p class="cf-porta-erro" id="pf-sec-erro" hidden></p>';
+  host.appendChild(faixaGuia());   /* v3.4 */
   host.appendChild(box);
   var inp = $('#pf-sec-senha', box), ok = $('#pf-sec-ok', box), er = $('#pf-sec-erro', box);
   var tenta = function(){
@@ -942,6 +1023,7 @@ function desenhaSec(d){
     '<p>Cada profissional confere a própria agenda pelo celular e confirma até o prazo.</p>' +
     '<p class="cinza">Se algo estiver errado, ele avisa o balcão pelo WhatsApp e vocês corrigem no Feegow. Quando a semana fecha, a agenda segue para o faturamento com o que estiver no Feegow.</p>'));
   wrap.appendChild(lado);
+  host.appendChild(faixaGuia());   /* v3.4 */
   host.appendChild(wrap);
   alturaLista();
   var c2 = host.querySelector('#cf-conf .lista-corpo'); if(c2) c2.scrollTop = rolagem;
