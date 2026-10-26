@@ -781,6 +781,9 @@ function pararRelogio(){ clearInterval(cf.timer); cf.timer = null; }
 /* porta: a senha do balcão (pedida uma vez por sessão, como antes) */
 function secretaria(){
   var host = document.getElementById('gv-conteudo'); if(!host) return;
+  /* v3.3: quem já entrou no Cortex não digita senha do balcão — a sessão do Cortex vale como senha */
+  var tk = (window.LAPI && LAPI.token) ? LAPI.token() : null;
+  if(tk && secr.tokenRuim !== tk){ secr.senha = tk; }
   if(secr.senha){ carregaSec(secr.semana); return; }
   pararRelogio(); cf.d = null;
   if(window.moldura) moldura.resumo('conferencia', '');
@@ -816,10 +819,14 @@ function carregaSec(inicio){
   var host = document.getElementById('gv-conteudo'); if(!host) return Promise.resolve();
   var tela = host.querySelector('#cf-conf');
   if(tela) tela.classList.add('carregando'); else host.innerHTML = '<div class="lista-vazio">Carregando…</div>';
-  return rpc('prof_secretaria_painel', { p_senha: secr.senha, p_semana_inicio: inicio })
-    .then(function(d){ secr.semana = d.semana_inicio; if(noTela()) desenhaSec(d); })
+  return rpc('prof_secretaria_painel', { p_senha: secr.senha, p_semana_inicio: inicio || null })
+    .then(function(d){ secr.semana = d.semana_inicio; if(!secr.semanas || !secr.semanas.length) secr.semanas = semanasDe(d.semana_inicio); if(noTela()) desenhaSec(d); })
     .catch(function(e){
-      if(e.message === 'SENHA_INVALIDA' || e.message === 'BLOQUEADO_TEMPORARIAMENTE'){ secr.senha = null; if(noTela()) secretaria(); return; }
+      if(e.message === 'SENHA_INVALIDA' || e.message === 'BLOQUEADO_TEMPORARIAMENTE'){
+        var tk = (window.LAPI && LAPI.token) ? LAPI.token() : null;
+        if(tk && secr.senha === tk) secr.tokenRuim = tk;   /* banco ainda sem o SQL v3.3: cai na senha do balcão, sem repetir */
+        secr.senha = null; if(noTela()) secretaria(); return;
+      }
       var t2 = host.querySelector('#cf-conf');
       if(t2){ t2.classList.remove('carregando'); if(typeof toast === 'function') toast(humano(e), 'ko'); }
       else if(noTela()) host.innerHTML = '<div class="lista-vazio erro">' + esc(humano(e)) + '</div>';
