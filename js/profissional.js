@@ -739,6 +739,7 @@ function alturaLista(){
 /* cabeçalho da página: botão de acessos (administrador) e a busca */
 function acoesTopo(aberta){
   var ac = window.moldura && moldura.acoesDe('conferencia'); if(!ac) return;
+  if(!ac.querySelector('.cf-manual')) ac.appendChild(bt('btn btn-s cf-manual', 'Manual', function(){ guiaSec(); }));   /* v3.5 */
   if(painelAdmin() && !ac.querySelector('.cf-acessos')) ac.appendChild(bt('btn btn-s cf-acessos', 'Acessos e configurações', function(){ admin(); }));
   var bu = ac.querySelector('.cf-busca');
   if(aberta && !bu){
@@ -778,7 +779,7 @@ function pintaContagem(){
 function iniciarRelogio(){ pintaContagem(); clearInterval(cf.timer); cf.timer = setInterval(pintaContagem, 30000); }
 function pararRelogio(){ clearInterval(cf.timer); cf.timer = null; }
 
-/* ═══ v3.4: guia rápido das secretárias (faixa no topo da Conferência → janela em passos) ═══ */
+/* ═══ v3.5: manual da Conferência (abre sozinho ao entrar, até a secretária marcar "Não mostrar de novo") ═══ */
 var GUIA_V = 'img/guia/';
 function guiaLinha(lista){
   return '<div class="gd-linha">' + lista.map(function(x){
@@ -786,47 +787,58 @@ function guiaLinha(lista){
   }).join('') + '</div>';
 }
 var GUIA = [
-  { img: '4-agenda', t: 'O que muda',
+  { img: '4-agenda', t: 'O que é a conferência',
     p: 'Cada profissional confere a <b>própria agenda</b> pelo celular, no site <b>profissionais.levsoul.com.br</b>, e confirma que está tudo certo.',
     e: 'É por essa agenda que a clínica fatura e calcula o repasse. O papel de vocês: <b>tirar dúvidas, corrigir no Feegow e cobrar quem atrasar</b>.' },
   { img: '1-entrar', t: 'Primeiro acesso',
-    p: 'Ele entra com o <b>e-mail do cadastro no Feegow</b> e a senha <b>0000</b>.',
+    p: 'O profissional recebe pelo WhatsApp da clínica a <b>mensagem de acesso</b>. Ele entra com o <b>e-mail do cadastro no Feegow</b> e a senha <b>0000</b>.',
     e: 'Não entrou? Quase sempre é o e-mail: confira o do cadastro. O 0000 não vence, vale até ele entrar. Errou a senha 5 vezes seguidas: espera 15 minutos.' },
   { img: '2-senha', t: 'Ele cria a senha dele',
     p: 'Na primeira entrada, o site pede uma <b>senha nova</b>, de pelo menos 4 caracteres. Daí em diante ele entra com ela.',
-    e: 'Esqueceu a senha? Por enquanto, quem gera um 0000 novo é a Administração.' },
+    e: 'Esqueceu a senha? Quem gera um 0000 novo é a Administração.' },
   { img: '3-tutorial-dia', t: 'Ele recebe um passo a passo',
-    p: 'Logo depois, aparece um <b>passo a passo de 6 telas</b> explicando tudo, inclusive o prazo.',
+    p: 'Logo depois, aparece um <b>passo a passo</b> explicando tudo, inclusive o prazo.',
     e: 'Ele pode rever quando quiser em <b>Como funciona</b>, dentro do site.' },
   { img: '4-agenda', t: 'Ele confere consulta por consulta',
     p: 'Cada consulta aparece com horário, paciente, convênio e a situação: <b>Atendido</b> ou <b>Não compareceu</b>.',
-    e: 'Viu algo errado? Ele avisa vocês pelo WhatsApp e <b>não confirma ainda</b>. Vocês corrigem no Feegow; a correção aparece no site <b>até a manhã seguinte</b> e ele confere de novo.' },
+    e: 'Viu algo errado? Ele avisa vocês pelo WhatsApp e <b>não confirma ainda</b>. Ele só confirma <b>depois que tudo estiver corrigido e aparecendo no site</b>.' },
   { img: '5-confirmar', t: 'Confirma com uma selfie',
     p: 'Só pelo <b>celular</b>: ele marca a declaração e tira uma <b>selfie na hora</b>. <b>A selfie é a assinatura dele.</b>',
     e: 'A câmera não abre? Ele precisa permitir a câmera para o site no navegador do celular. Pelo computador ele vê a agenda, mas não confirma.' },
-  { img: '6-confirmada', t: 'Pronto: agenda confirmada',
+  { img: '6-confirmada', t: 'Agenda confirmada',
     p: 'Depois de confirmada, a agenda <b>não muda mais</b> pelo site. Ele pode baixar o comprovante em PDF.',
-    e: 'Aqui na Conferência, ele sai de <b>Ainda não</b> e vai para <b>Confirmou</b>, e vocês conseguem ver a selfie. Confirmou errado? Fale com a Administração.' },
+    e: 'Aqui na Conferência, ele sai de <b>Ainda não</b> e vai para <b>Confirmou</b>, e vocês conseguem ver a selfie. Confirmou com erro? Fale com a Administração.' },
   { vis: function(){ return guiaLinha([['Segunda', '8h', 'abre a semana anterior'], ['Segunda', '22h', 'prazo do profissional', 'quente'],
                                        ['Terça', '22h', 'última chance; depois trava', 'fim']]); },
     t: 'As datas',
     p: 'Toda <b>segunda, às 8h</b>, abre a agenda da semana anterior. O prazo que o profissional vê é <b>segunda, 22h</b>. Até <b>terça, 22h</b> ainda dá para confirmar (fica marcado como atrasado). Depois disso <b>trava</b> e segue para o faturamento como está.',
-    e: '<b>Só nesta semana:</b> a agenda de 01/10 a 24/10 tem prazo <b>terça 27/10, 22h</b> e trava <b>quarta 28/10, 22h</b>.<br><b>Todo dia 1º:</b> abrem os últimos dias do mês anterior. É o que gera o recibo do repasse: confirmar <b>no mesmo dia, o quanto antes</b>.' },
+    e: '<b>Todo dia 1º:</b> abrem os últimos dias do mês anterior. É essa confirmação que gera o recibo do repasse, então tem que ser <b>no mesmo dia, o quanto antes</b>.' },
   { vis: function(){ return guiaLinha([['Segunda', '18h', '1º aviso'], ['Terça', '9h', '2º aviso', 'quente'], ['Terça', '17h', 'último aviso', 'fim']]); },
-    t: 'Os disparos',
-    p: '<b>Hoje:</b> cada profissional recebe a mensagem de acesso pelo WhatsApp da clínica, com o endereço, o e-mail e o 0000.',
+    t: 'Os avisos',
+    p: '<b>Mensagem de acesso:</b> sai quando o profissional começa ou quando ganha um 0000 novo, com o endereço, o e-mail e a senha.',
     e: '<b>Toda semana</b>, quem ainda não confirmou recebe um aviso de vocês na <b>segunda às 18h</b>, na <b>terça às 9h</b> e na <b>terça às 17h</b>. Os de terça deixam claro que <b>depois das 22h não dá mais para corrigir</b>.<br><b>Dia 1º:</b> avisos às <b>11h</b> e às <b>15h</b>.<br>Em breve o Cortex mostra um quadradinho vermelho na hora de cada aviso, com a mensagem pronta.' },
+  { vis: function(){ return guiaLinha([['Passo 1', 'Feegow', 'corrija a consulta'], ['Passo 2', '15 min', 'espere o sistema ler'],
+                                       ['Passo 3', 'Conferência', 'abra o profissional e confira', 'quente'], ['Passo 4', 'WhatsApp', 'avise o profissional', 'ok']]); },
+    t: 'Quando ele avisa uma consulta errada',
+    p: '<b>1.</b> Corrija no Feegow.<br><b>2.</b> Espere <b>15 minutos</b>.<br><b>3.</b> Aqui na Conferência, clique no profissional e veja, em <b>Consultas do período</b>, se a consulta já aparece certa.<br><b>4.</b> Apareceu certa? Avise o profissional que ele já pode conferir de novo e confirmar.',
+    e: '<b>Não apareceu depois de 15 minutos?</b> Procure a Administração e conte o que foi corrigido (paciente, dia e horário).<br><b>Importante:</b> o profissional só confirma quando <b>tudo</b> estiver corrigido. Depois de confirmada, a agenda não muda mais.' },
   { vis: function(){ return '<div class="gd-faq"><b>?</b></div>'; },
     t: 'O que responder ao profissional',
-    p: '<b>"Não consigo entrar."</b> Primeira vez: e-mail do cadastro + 0000. Depois: a senha que ele criou.<br><b>"Tem consulta errada."</b> Anote, corrija no Feegow e peça para ele conferir de novo amanhã cedo, sem confirmar antes.',
+    p: '<b>"Não consigo entrar."</b> Primeira vez: e-mail do cadastro + 0000. Depois: a senha que ele criou.<br><b>"Posso confirmar e corrigir depois?"</b> Não. Primeiro corrige, ele confere de novo, e só então confirma.',
     e: '<b>"Confirmei com erro."</b> Pelo site não muda mais: fale com a Administração.<br><b>"Perdi o prazo de segunda."</b> Ainda dá até terça, 22h. Depois, a agenda segue como está.' }
 ];
-function guiaSec(){
+function guiaChave(){ var u = (typeof CU !== 'undefined' && CU) ? (CU.id || CU.nome || '') : ''; return 'cf.manual.oculto.' + u; }
+function guiaOculto(){ try{ return localStorage.getItem(guiaChave()) === '1'; }catch(e){ return false; } }
+function guiaSec(auto){
   if(!window.moldura) return;
-  var i = 0, P = moldura.pop({ titulo: 'Como funciona a conferência dos profissionais', largura: '820px', classe: 'gd-pop' });
+  var i = 0, P = moldura.pop({ titulo: 'Manual da conferência dos profissionais', largura: '820px', classe: 'gd-pop' });
   P.rodape.hidden = false;
-  P.rodape.innerHTML = '<span class="gd-pontos"></span><span class="pop-dir"><button type="button" class="btn btn-s" data-g="-1">Anterior</button>' +
+  P.rodape.innerHTML = '<label class="gd-oculta"><input type="checkbox"' + (guiaOculto() ? ' checked' : '') + '> Não mostrar de novo ao abrir a Conferência</label>' +
+    '<span class="gd-pontos"></span><span class="pop-dir"><button type="button" class="btn btn-s" data-g="-1">Anterior</button>' +
     '<button type="button" class="btn btn-p" data-g="1">Próximo</button></span>';
+  P.rodape.querySelector('.gd-oculta input').addEventListener('change', function(){
+    try{ if(this.checked) localStorage.setItem(guiaChave(), '1'); else localStorage.removeItem(guiaChave()); }catch(e){}
+  });
   var pinta = function(){
     var s = GUIA[i];
     P.corpo.innerHTML = '<div class="gd-passo">' +
@@ -847,15 +859,17 @@ function guiaSec(){
   });
   var tecla = function(ev){
     if(!P.aberto){ document.removeEventListener('keydown', tecla); return; }
+    if(ev.target && /INPUT|TEXTAREA/.test(ev.target.tagName) && ev.target.type !== 'checkbox') return;
     if(ev.key === 'ArrowRight') vai(i + 1); else if(ev.key === 'ArrowLeft' && i > 0) vai(i - 1);
   };
   document.addEventListener('keydown', tecla);
   pinta();
 }
-function faixaGuia(){
-  var b = bt('cf-guia', '<span class="cf-guia-ic" aria-hidden="true">?</span><span class="cf-guia-q"><b>Como funciona: guia rápido</b>' +
-    '<small>Acesso dos profissionais, confirmação com selfie, datas e avisos</small></span><span class="cf-guia-ir">Abrir</span>', guiaSec);
-  return b;
+/* abre sozinho ao entrar na Conferência (uma vez por entrada na tela) */
+function guiaAuto(){
+  if(guiaOculto() || cf.guiaVisto) return;
+  cf.guiaVisto = true;
+  setTimeout(function(){ if(noTela()) guiaSec(true); }, 350);
 }
 
 /* porta: a senha do balcão (pedida uma vez por sessão, como antes) */
@@ -873,7 +887,6 @@ function secretaria(){
   box.innerHTML = '<h2>Senha do balcão</h2><p>A conferência dos profissionais abre com a senha do balcão.</p>' +
     '<div class="cf-porta-l"><input type="password" class="fc" id="pf-sec-senha" autocomplete="off" aria-label="Senha do balcão" placeholder="Senha do balcão">' +
     '<button type="button" class="btn btn-p" id="pf-sec-ok">Abrir</button></div><p class="cf-porta-erro" id="pf-sec-erro" hidden></p>';
-  host.appendChild(faixaGuia());   /* v3.4 */
   host.appendChild(box);
   var inp = $('#pf-sec-senha', box), ok = $('#pf-sec-ok', box), er = $('#pf-sec-erro', box);
   var tenta = function(){
@@ -1023,7 +1036,6 @@ function desenhaSec(d){
     '<p>Cada profissional confere a própria agenda pelo celular e confirma até o prazo.</p>' +
     '<p class="cinza">Se algo estiver errado, ele avisa o balcão pelo WhatsApp e vocês corrigem no Feegow. Quando a semana fecha, a agenda segue para o faturamento com o que estiver no Feegow.</p>'));
   wrap.appendChild(lado);
-  host.appendChild(faixaGuia());   /* v3.4 */
   host.appendChild(wrap);
   alturaLista();
   var c2 = host.querySelector('#cf-conf .lista-corpo'); if(c2) c2.scrollTop = rolagem;
@@ -1036,8 +1048,45 @@ function abrirProf(id, ids){
   if(!window.moldura || !cf.d) return;
   ids = (ids || cf.vis || []).slice();
   var atual = id, modo = null, telRasc = '', erro = null, foto = null, fotoErro = null, fotoCarregando = false, ocupado = false;
+  var cons = {};   /* v3.5: consultas do período por profissional { itens, lido_em, carregando, erro } */
   var P = moldura.pop({ largura: '600px', aoFechar: function(){ cf.aberto = null; cf.pinta = null; marcaLinha(); } });
   function limpa(){ modo = null; erro = null; foto = null; fotoErro = null; fotoCarregando = false; }
+  /* v3.5: consultas do período, como o profissional vê no site (sem valor) — para a secretária conferir se a correção já chegou */
+  function consultasBloco(p, d){
+    var c = cons[p.profissional_id], b = el('div', 'pp-bloco cf-cons');
+    var topo = el('div', 'cf-cons-topo');
+    topo.appendChild(el('span', 'pp-rot', 'Consultas do período'));
+    topo.appendChild(el('small', 'cf-cons-lido', c && c.lido_em ? 'lidas às ' + horaBr(c.lido_em) : ''));
+    topo.appendChild(bt('btn btn-s', c && c.carregando ? 'Atualizando…' : 'Atualizar', function(){ carregaCons(p.profissional_id, d); }));
+    b.appendChild(topo);
+    b.appendChild(el('span', 'pp-l2', 'É o que o profissional vê no site. Corrigiu no Feegow? Em até 15 minutos a mudança aparece aqui. Se não aparecer, procure a Administração.'));
+    if(!c || (c.carregando && !c.itens)){ b.appendChild(el('p', 'cf-cons-vazio', 'Carregando…')); if(!c) carregaCons(p.profissional_id, d); return b; }
+    if(c.erro){ b.appendChild(el('p', 'cf-cons-vazio txt-vermelho', esc(c.erro))); return b; }
+    if(!c.itens.length){ b.appendChild(el('p', 'cf-cons-vazio', 'Nenhuma consulta neste período.')); return b; }
+    var porDia = {}, ordem = [];
+    c.itens.forEach(function(x){ if(!porDia[x.data]){ porDia[x.data] = []; ordem.push(x.data); } porDia[x.data].push(x); });
+    var h = '';
+    ordem.forEach(function(dt){
+      h += '<div class="cf-cons-dia">' + esc(DIAS[dLocal(dt).getDay()] + ', ' + ddmm(dt)) + '</div>';
+      porDia[dt].forEach(function(x){
+        var cls = x.em_feriado ? 'neutro' : (x.futuro ? 'neutro' : (x.status_exibido === 'Atendido' ? 'ok' : 'falta'));
+        h += '<div class="cf-cons-l"><span class="h">' + esc(hhmm(x.horario) || '—') + '</span><span class="q"><b>' + esc(x.paciente || '(sem paciente)') + '</b>' +
+          '<small>' + esc((x.convenio || 'sem convênio') + (x.status ? ' · Feegow: ' + x.status : '')) + '</small></span>' +
+          '<span class="s ' + cls + '">' + esc(x.status_exibido || '') + '</span></div>';
+      });
+    });
+    b.appendChild(el('div', 'cf-cons-lista', h));
+    return b;
+  }
+  function carregaCons(pid, d){
+    var c = cons[pid] = cons[pid] || {}; if(c.carregando) return;
+    c.carregando = true; c.erro = null; if(P.aberto && atual === pid) pinta();
+    rpc('prof_secretaria_itens', { p_senha: secr.senha, p_profissional_id: pid,
+        p_inicio: d.periodo_inicio || d.semana_inicio, p_fim: d.periodo_fim || d.semana_fim })
+      .then(function(r){ c.itens = r.itens || []; c.lido_em = r.lido_em; })
+      .catch(function(e){ c.erro = /prof_secretaria_itens|404|schema cache/i.test(e.message || '') ? 'Falta rodar o SQL v3.5 no Supabase.' : humano(e); })
+      .then(function(){ c.carregando = false; if(P.aberto && atual === pid) pinta(); });
+  }
   function pinta(){
     var d = cf.d, p = (d.profissionais || []).find(function(x){ return x.profissional_id === atual; });
     if(!p){ P.fechar(); return; }
@@ -1056,8 +1105,8 @@ function abrirProf(id, ids){
     tg.style.color = conf ? (p.confirmado_fora_do_prazo ? '#C93400' : '#248A3D') : '#D70015';
     cx.appendChild(tg);
     cx.appendChild(el('span', 'pp-txt', esc(conf ? (p.confirmado_fora_do_prazo ? 'Confirmou depois do prazo.' : 'Dentro do prazo.') + (p.foto ? ' A confirmação tem foto.' : '')
-      : (p.ultimo_acesso_em ? 'Já entrou no Cortex (último acesso ' + fmtTs(p.ultimo_acesso_em) + '). Prazo: ' + fmtDiaHora(d.prazo).replace('-feira', '') + '.'
-                            : 'Ainda não entrou no Cortex. Se não tem o link de acesso, o administrador gera um em Acessos e configurações.'))));
+      : (p.ultimo_acesso_em ? 'Já entrou no site dos profissionais (último acesso ' + fmtTs(p.ultimo_acesso_em) + '). Prazo: ' + fmtDiaHora(d.prazo).replace('-feira', '') + '.'
+                            : 'Ainda não entrou no site dos profissionais. Ele entra com o e-mail do cadastro no Feegow e a senha 0000; quem gera um 0000 novo é a Administração.'))));
     if(conf && p.foto){
       var fb = bt('btn-claro', svgI('M4 7.5h3l1.5-2h7l1.5 2h3v11H4zM9 13a3 3 0 1 0 6 0 3 3 0 1 0-6 0', 14, 2) +
         (foto ? 'Esconder a foto' : (fotoCarregando ? 'Carregando a foto…' : 'Ver a foto')), function(){
@@ -1075,6 +1124,7 @@ function abrirProf(id, ids){
         '<span><b>Foto da confirmação</b><small>' + esc(fmtTs(foto.criado_em)) + ' · ' + Math.round((foto.tamanho || 0) / 1024) + ' KB</small></span>'));
     }
     P.corpo.appendChild(cx);
+    P.corpo.appendChild(consultasBloco(p, d));
 
     var fone = el('div', 'pp-fone cf-fone', '<span><small>Telefone dos avisos</small><b' + (p.telefone ? '' : ' class="txt-laranja"') + '>' +
       esc(p.telefone || 'Sem telefone: não recebe os avisos') + '</b></span>');
@@ -1501,7 +1551,7 @@ function msgAcesso(nome, email, ate){
   }
   l.push('*No dia 1º de cada mês*\nAbre a conferência dos últimos dias do mês anterior, a partir das ' + hAbre + '. *É muito importante confirmar no próprio dia 1º, o quanto antes:* para quem recebe repasse, é nessa confirmação que o recibo do mês sai, na hora. E ' + toda + diaAbre + ' a tela mostra o valor do mês até ali.');
   l.push('*Como conferir*\n1️⃣ Confira consulta por consulta: cada uma aparece como Atendido ou Não compareceu.\n' +
-         '2️⃣ Achou algo errado? Avise a recepção por aqui e *não confirme ainda*. A correção aparece no site até a manhã seguinte.\n' +
+         '2️⃣ Achou algo errado? Avise a recepção por aqui e *não confirme ainda*. A correção aparece no site até a manhã seguinte: confira de novo e *só confirme quando tudo estiver corrigido*.\n' +
          '3️⃣ Tudo certo? Toque em "Está tudo certo — confirmar", marque a declaração e tire uma selfie pelo celular. *A selfie é a sua assinatura.* ✅\n' +
          '⚠️ Depois de confirmada, a agenda não muda mais. Sem confirmação até o prazo, ela segue para o faturamento como está.');
   if(ate) l.push('A senha provisória vale até ' + quandoBr(ate) + '.');
@@ -1945,5 +1995,6 @@ function desenhaRepasse(d){
   }; });
 }
 
-return { loginLista: loginLista, entrarPeloLogin: entrarPeloLogin, sair: sair, secretaria: secretaria, recarregarSec: recarregarSec, admin: admin, convite: convite };
+function entrarConferencia(){ cf.guiaVisto = false; secretaria(); guiaAuto(); }   /* v3.5: entrada pela tela (o manual abre sozinho) */
+return { loginLista: loginLista, entrarPeloLogin: entrarPeloLogin, sair: sair, secretaria: entrarConferencia, recarregarSec: recarregarSec, admin: admin, convite: convite };
 })();
