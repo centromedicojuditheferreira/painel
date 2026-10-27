@@ -536,6 +536,8 @@ textarea.pp-nota:focus{border-color:var(--cinza)}
 .cf-ped .t b,.cf-ped .t small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cf-ped.resolvido .t b{font-weight:500}
 .cf-fone .btn{flex:none;height:34px;padding:0 14px;font-size:13px}
+.pp-fone+.pp-fone{border-top:0}   /* v3.6: telefone, e-mail e senha em sequência, uma linha só entre eles */
+.cf-fone>span{min-width:0}.cf-fone>span b{overflow-wrap:anywhere}
 .cf-tel-ed{gap:8px}
 .cf-tel-l{display:flex;gap:8px}
 .cf-tel-l .fc{flex:1;min-width:0;height:38px;font-variant-numeric:tabular-nums}

@@ -54,7 +54,7 @@ var MSG = {
   EMAIL_EM_USO:'Este e-mail já é de outro profissional.'
 };
 var sess = { id:null, senha:null, nome:null, semanas:[], semana:null, fotoObrigatoria:true };
-var secr = { senha:null, semana:null, semanas:[] };
+var secr = { senha:null, semana:null, semanas:[], emails:null, senhaProv:'0000', v36:null, lendoEmails:null };   /* v3.6: e-mail e senha pelo balcão */
 var adm  = { senha:null, dados:null, filtro:'' };
 function painelAdmin(){ return (typeof CU !== 'undefined' && CU && CU.admin === true); }
 var semanaAtual = null, relogioOffset = 0, contadorTimer = null, previaAtual = null;
@@ -955,11 +955,23 @@ function desenhaSec(d){
   if(cf.pinta) cf.pinta();
 }
 
+/* v3.6: e-mail de entrada e situação da senha de cada profissional (SQL PROF v3.6; sem ele, os blocos não aparecem) */
+function carregaEmails(){
+  if(!secr.senha || secr.v36 === false) return Promise.resolve();
+  if(secr.lendoEmails) return secr.lendoEmails;
+  secr.lendoEmails = rpc('prof_balcao_emails', { p_senha: secr.senha }).then(function(r){
+    var m = {}; (r.acessos || []).forEach(function(x){ m[x.profissional_id] = x; });
+    secr.emails = m; secr.senhaProv = r.senha_provisoria || '0000'; secr.v36 = true;
+  }).catch(function(e){ if(/prof_balcao_emails|404|schema cache/i.test(e.message || '')) secr.v36 = false; })
+    .then(function(){ secr.lendoEmails = null; });
+  return secr.lendoEmails;
+}
+
 /* janela do profissional */
 function abrirProf(id, ids){
   if(!window.moldura || !cf.d) return;
   ids = (ids || cf.vis || []).slice();
-  var atual = id, modo = null, telRasc = '', erro = null, foto = null, fotoErro = null, fotoCarregando = false, ocupado = false;
+  var atual = id, modo = null, telRasc = '', emRasc = '', erro = null, foto = null, fotoErro = null, fotoCarregando = false, ocupado = false;
   var cons = {};   /* v3.5: consultas do período por profissional { itens, lido_em, carregando, erro } */
   var P = moldura.pop({ largura: '600px', aoFechar: function(){ cf.aberto = null; cf.pinta = null; marcaLinha(); } });
   function limpa(){ modo = null; erro = null; foto = null; fotoErro = null; fotoCarregando = false; }
@@ -999,6 +1011,64 @@ function abrirProf(id, ids){
       .catch(function(e){ c.erro = /prof_secretaria_itens|404|schema cache/i.test(e.message || '') ? 'Falta rodar o SQL v3.5 no Supabase.' : humano(e); })
       .then(function(){ c.carregando = false; if(P.aberto && atual === pid) pinta(); });
   }
+  /* v3.6: e-mail de entrada (editar) e senha (voltar para 0000), com as mesmas regras do ⚙️ da Administração */
+  function entrada(p){
+    if(secr.v36 === false) return;
+    if(!secr.emails){
+      if(secr.lendoEmails) P.corpo.appendChild(el('div', 'pp-fone cf-fone', '<span><small>E-mail de entrada</small><b class="cinza">Carregando…</b></span>'));
+      return;
+    }
+    var x = secr.emails[p.profissional_id]; if(!x) return;
+    var em = x.email, sp = secr.senhaProv;
+    var fe = el('div', 'pp-fone cf-fone', '<span><small>E-mail de entrada</small><b' + (em ? '' : ' class="txt-laranja"') + '>' +
+      esc(em || 'Sem e-mail: não consegue entrar') + '</b></span>');
+    fe.appendChild(bt('btn btn-s', modo === 'email' ? 'Voltar' : (em ? 'Editar' : 'Cadastrar'), function(){
+      if(ocupado) return;
+      if(modo === 'email'){ modo = null; erro = null; } else { modo = 'email'; emRasc = em || x.email_feegow || ''; erro = null; }
+      pinta();
+    }));
+    P.corpo.appendChild(fe);
+    if(modo === 'email'){
+      var ed = el('div', 'pp-bloco cf-tel-ed');
+      ed.appendChild(el('span', 'pp-l2', 'É o e-mail que o profissional digita para entrar no site.' +
+        (x.email_feegow && x.email_feegow !== em ? ' No cadastro do Feegow está <b>' + esc(x.email_feegow) + '</b>.' : '')));
+      var lin = el('div', 'cf-tel-l');
+      var inp = el('input', 'fc'); inp.type = 'email'; inp.autocomplete = 'off'; inp.placeholder = 'nome@exemplo.com'; inp.value = emRasc; inp.setAttribute('aria-label', 'E-mail de entrada');
+      inp.addEventListener('input', function(){ emRasc = inp.value; });
+      var sv = bt('btn btn-p', 'Salvar', function(){
+        if(ocupado) return;
+        ocupado = true; sv.disabled = true; sv.textContent = 'Salvando…';
+        rpc('prof_balcao_email', { p_senha: secr.senha, p_profissional_id: p.profissional_id, p_email: inp.value })
+          .then(function(r){ ocupado = false; x.email = r.email; modo = null; erro = null; if(typeof toast === 'function') toast('E-mail salvo', 'ok'); if(P.aberto) pinta(); })
+          .catch(function(e){ ocupado = false; erro = humano(e); if(P.aberto) pinta(); });
+      });
+      inp.addEventListener('keydown', function(e){ if(e.key === 'Enter') sv.click(); });
+      lin.appendChild(inp); lin.appendChild(sv);
+      ed.appendChild(lin);
+      if(erro) ed.appendChild(el('span', 'cf-erro2', esc(erro)));
+      P.corpo.appendChild(ed);
+      setTimeout(function(){ if(document.body.contains(inp) && document.activeElement !== inp) inp.focus(); }, 0);
+    }
+    var st = x.bloqueado ? 'Bloqueada por 15 minutos (errou 5 vezes)'
+           : x.trocar_senha ? 'Provisória ' + sp + ': ele cria a dele no primeiro acesso'
+           : (x.senha_definida_em ? 'Senha própria desde ' + fmtTs(x.senha_definida_em) : 'Senha própria');
+    var fs = el('div', 'pp-fone cf-fone', '<span><small>Senha</small><b' + (x.bloqueado ? ' class="txt-laranja"' : '') + '>' + esc(st) + '</b></span>');
+    var bs = bt('btn btn-s', 'Voltar para ' + esc(sp), function(){
+      if(ocupado || !x.email) return;
+      if(!confirm('Voltar a senha de ' + p.nome + ' para ' + sp + '?\n\nA senha que ele usa hoje deixa de valer. No próximo acesso, ele entra com ' + sp + ' e cria outra.')) return;
+      ocupado = true; bs.disabled = true; bs.textContent = 'Voltando…';
+      rpc('prof_balcao_senha_provisoria', { p_senha: secr.senha, p_profissional_id: p.profissional_id })
+        .then(function(r){
+          ocupado = false; x.trocar_senha = true; x.bloqueado = false; x.provisoria_ate = r.provisoria_ate;
+          if(P.aberto) pinta();
+          mostraAcesso({ nome_exibicao: p.nome, email: x.email, telefone: p.telefone }, r);
+        })
+        .catch(function(e){ ocupado = false; if(P.aberto) pinta(); alert(humano(e)); });
+    });
+    if(!x.email){ bs.disabled = true; bs.title = 'Cadastre o e-mail antes'; }
+    fs.appendChild(bs);
+    P.corpo.appendChild(fs);
+  }
   function pinta(){
     var d = cf.d, p = (d.profissionais || []).find(function(x){ return x.profissional_id === atual; });
     if(!p){ P.fechar(); return; }
@@ -1018,7 +1088,7 @@ function abrirProf(id, ids){
     cx.appendChild(tg);
     cx.appendChild(el('span', 'pp-txt', esc(conf ? (p.confirmado_fora_do_prazo ? 'Confirmou depois do prazo.' : 'Dentro do prazo.') + (p.foto ? ' A confirmação tem foto.' : '')
       : (p.ultimo_acesso_em ? 'Já entrou no site dos profissionais (último acesso ' + fmtTs(p.ultimo_acesso_em) + '). Prazo: ' + fmtDiaHora(d.prazo).replace('-feira', '') + '.'
-                            : 'Ainda não entrou no site dos profissionais. Ele entra com o e-mail do cadastro no Feegow e a senha 0000; quem gera um 0000 novo é a Administração.'))));
+                            : 'Ainda não entrou no site dos profissionais. Ele entra com o e-mail de entrada e a senha 0000; os dois podem ser corrigidos aqui embaixo.'))));
     if(conf && p.foto){
       var fb = bt('btn-claro', svgI('M4 7.5h3l1.5-2h7l1.5 2h3v11H4zM9 13a3 3 0 1 0 6 0 3 3 0 1 0-6 0', 14, 2) +
         (foto ? 'Esconder a foto' : (fotoCarregando ? 'Carregando a foto…' : 'Ver a foto')), function(){
@@ -1065,6 +1135,7 @@ function abrirProf(id, ids){
       P.corpo.appendChild(ed);
       setTimeout(function(){ if(document.body.contains(inp) && document.activeElement !== inp) inp.focus(); }, 0);
     }
+    entrada(p);
 
     var av = p.avisos || [];
     var avb = el('div', 'pp-bloco');
@@ -1113,7 +1184,9 @@ function abrirProf(id, ids){
     }
   }
   cf.pinta = function(){ if(P.aberto) pinta(); };
+  var lendo = carregaEmails();   /* v3.6: relê a cada abertura (a Administração pode ter mudado algo) */
   pinta();
+  lendo.then(function(){ if(P.aberto && !ocupado && !modo) pinta(); });
 }
 
 /* janela do pedido de correção */
@@ -1437,11 +1510,12 @@ function quandoBr(iso){
 }
 function diaSemanaBr(iso){ return new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long' }); }
 function diaData(iso){ return diaSemanaBr(iso) + ' (' + new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' }) + ')'; }
-function msgAcesso(nome, email, ate){
-  var J = (adm.dados && adm.dados.janela) || {};
+function msgAcesso(nome, email, ate, ctx){
+  /* v3.6: no balcão não há adm.dados — a janela, os parâmetros e a senha vêm na resposta da função (ctx) */
+  var J = (ctx && ctx.janela) || (adm.dados && adm.dados.janela) || {};
   var primeiro = String(nome || '').trim().split(/\s+/)[0] || ''; primeiro = primeiro.charAt(0).toUpperCase() + primeiro.slice(1).toLowerCase();
   /* v3.2: a rotina sai das regras das semanas normais (parâmetros), nunca do prazo de um período especial */
-  var P = (adm.dados && adm.dados.parametros) || {}, H = P.avisos_horas || {};
+  var P = (ctx && ctx.parametros) || (adm.dados && adm.dados.parametros) || {}, H = P.avisos_horas || {};
   var hh = function(t, padrao){ var p = String(t || padrao).split(':'); return p[1] === '00' ? Number(p[0]) + 'h' : Number(p[0]) + 'h' + p[1]; };
   var hAbre = hh(H.abertura, '08:00'), hPrazo = hh(P.prazo_profissional_hora, '22:00');
   var diaAbre = (P.abertura_dia === 'domingo') ? 'domingo' : 'segunda-feira';
@@ -1450,7 +1524,7 @@ function msgAcesso(nome, email, ate){
   var jaAbriu = J.abre_em && Date.now() >= new Date(J.abre_em).getTime();
   var l = ['Olá, ' + primeiro + '! Tudo bem? 😊',
     'A conferência da sua agenda agora tem um endereço só dos profissionais da clínica:\n👉 ' + SITE_PROF,
-    '*Para entrar*\n• E-mail: ' + email + '\n• Senha provisória: ' + (adm.senhaProv || '0000') + '\nNo primeiro acesso, você cria a sua senha e vê um passo a passo rápido de como tudo funciona.'];
+    '*Para entrar*\n• E-mail: ' + email + '\n• Senha provisória: ' + ((ctx && ctx.senha) || adm.senhaProv || '0000') + '\nNo primeiro acesso, você cria a sua senha e vê um passo a passo rápido de como tudo funciona.'];
   if(J.periodo_especial && J.periodo_inicio && J.periodo_fim && J.abre_em && J.prazo){
     var outroDia = diaSemanaBr(J.prazo) !== diaSemanaBr(J.abre_em);
     l.push('*Desta vez é diferente*\nPara colocar a agenda em dia, nesta primeira vez você confere de uma vez os dias *' + ddmm(J.periodo_inicio) + ' a ' + ddmm(J.periodo_fim) +
@@ -1472,7 +1546,7 @@ function msgAcesso(nome, email, ate){
 }
 function mostraAcesso(p, r){
   var nome = String(r.nome || p.nome_exibicao || p.nome_feegow || '').trim();
-  var msg = msgAcesso(nome, r.email || p.email, r.provisoria_ate);
+  var msg = msgAcesso(nome, r.email || p.email, r.provisoria_ate, r);
   var tel = String(r.telefone || p.telefone || '').replace(/\D/g, '');
   var m = modal('Mensagem de acesso — ' + esc(nome),
     '<p style="font-size:13.5px;color:#555;margin-bottom:8px">Mande pelo WhatsApp da clínica. ' +
