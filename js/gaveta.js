@@ -50,6 +50,7 @@ var GAVETA = (function () {
   function ehAdmin() { return typeof isAdmin === 'function' && isAdmin(); }
   function avisa(msg) { if (typeof toast === 'function') toast(msg, 'ok'); }
   function mouseFino() { try { return window.matchMedia('(pointer: fine)').matches; } catch (e) { return false; } }
+  function soReg() { return !!(st.estado && st.estado.so_registrar); }   /* conferência em pausa: a contagem só fica registrada */
   function temConferindo() { return !!(st.estado && (st.estado.contagens || []).some(function (c) { return c.situacao === 'aguardando'; })); }
   function nomeTipo(c) { return (c.tipo === 'fechamento' ? 'Fechamento' : 'Chegada') + (c.tentativa === 2 ? ' · 2ª contagem' : ''); }
   function rodape(P, botoes) { P.rodape.hidden = false; P.rodape.classList.add('fim'); botoes.forEach(function (b) { P.rodape.appendChild(b); }); }
@@ -152,7 +153,8 @@ var GAVETA = (function () {
     P.innerHTML = '<p class="lo-p-tit">' + (recontar ? 'Conte a gaveta de novo.' : esc('Olá, ' + primeiroNome(u.nome) + '. Antes de começar, conte a gaveta.')) + '</p>' +
       '<p class="lo-p-txt">' + (recontar
         ? esc('A sua contagem das ' + p.hora + ' não bateu. Conte de novo, com calma, cédula por cédula.')
-        : 'Digite quantas cédulas e moedas há de cada valor. Você não vê quanto deveria ter: o Cortex confere sozinho em alguns minutos.') + '</p>';
+        : (soReg() ? 'Digite quantas cédulas e moedas há de cada valor. A contagem fica registrada no Cortex.'
+                   : 'Digite quantas cédulas e moedas há de cada valor. Você não vê quanto deveria ter: o Cortex confere sozinho em alguns minutos.')) + '</p>';
     var tot = el('p', 'gv-total', 'Total contado <b>R$ 0,00</b>');
     var ok = bt('btn-lo gv-enviar', 'Enviar contagem' + SETA, enviar);
     var g = grade(function () { tot.querySelector('b').textContent = brl(g.centavos() / 100); zero = false; }, enviar);
@@ -186,7 +188,7 @@ var GAVETA = (function () {
     if (!st.instalada || !window.LAPI || !LAPI.token()) { chips(); return; }
     if (st.enviouNaEntrada) {
       st.enviouNaEntrada = false;
-      setTimeout(function () { avisa('Contagem enviada. O Cortex confere em alguns minutos.'); }, 3200);
+      setTimeout(function () { avisa(soReg() ? 'Contagem registrada.' : 'Contagem enviada. O Cortex confere em alguns minutos.'); }, 3200);
     }
     st.timer = setTimeout(atualizar, 3000);   /* depois da saudação */
   }
@@ -283,7 +285,7 @@ var GAVETA = (function () {
     P.corpo.appendChild(el('div', 'pp-cab', '<h2>' + (recontar ? 'Conte a gaveta de novo' : (fechar ? 'Contagem de fechamento' : 'Contagem da gaveta')) + '</h2>' +
       '<span class="pp-sub">' + esc(recontar
         ? 'A contagem das ' + ((p && p.hora) || '') + ' não bateu. Conte de novo, com calma, cédula por cédula.'
-        : (fechar ? 'Use quando for fechar a clínica: conte todo o dinheiro da gaveta antes de sair.' : 'Conte todo o dinheiro da gaveta.') + ' Você não vê quanto deveria ter: o Cortex confere sozinho em alguns minutos.') + '</span>'));
+        : (fechar ? 'Use quando for fechar a clínica: conte todo o dinheiro da gaveta antes de sair.' : 'Conte todo o dinheiro da gaveta.') + (soReg() ? ' A contagem fica registrada no Cortex.' : ' Você não vê quanto deveria ter: o Cortex confere sozinho em alguns minutos.')) + '</span>'));
     var tot = el('p', 'gv-total', 'Total contado <b>R$ 0,00</b>');
     var g = grade(function () { tot.querySelector('b').textContent = brl(g.centavos() / 100); zero = false; }, enviar);
     P.corpo.appendChild(g.el);
@@ -299,7 +301,7 @@ var GAVETA = (function () {
       ocupado = true; ok.disabled = true; ok.textContent = 'Enviando…'; aviso.hidden = true; g.travar(true);
       var tipoEnvio = fechar ? 'fechamento' : (recontar ? ((p && p.contagem) || 'chegada') : 'chegada');   /* recontagem: do mesmo tipo da que não bateu */
       LAPI.gavetaContar(tipoEnvio, g.cedulas()).then(function () {
-        P.fechar(); avisa('Contagem enviada. O Cortex confere em alguns minutos.'); atualizar();
+        P.fechar(); avisa(soReg() ? 'Contagem registrada.' : 'Contagem enviada. O Cortex confere em alguns minutos.'); atualizar();
       }, function (er) {
         ocupado = false; ok.disabled = false; ok.textContent = 'Enviar contagem'; g.travar(false);
         mostrar(er.message || String(er));
@@ -379,6 +381,7 @@ var GAVETA = (function () {
   function situMinha(c) {
     switch (c.situacao) {
       case 'aguardando': return { rot: 'conferindo', cls: 'espera', sub: 'O resultado sai em alguns minutos' };
+      case 'registrada': return { rot: 'registrada', cls: 'ok', sub: 'Contagem guardada' };
       case 'ok': case 'abertura': return { rot: 'OK', cls: 'ok', sub: 'Bateu' };
       case 'recontar': return { rot: 'conte de novo', cls: 'pend', sub: 'Não bateu' };
       case 'recontada': return { rot: 'não bateu', cls: 'espera', sub: 'Você contou de novo' };
@@ -427,6 +430,13 @@ var GAVETA = (function () {
     if (!p && e && !f.feito) a.insertBefore(el('p', 'gv-nota', 'Nada pendente para você agora.'), a.firstChild);
     s.appendChild(a);
     l.appendChild(s);
+    if (soReg()) {
+      l.appendChild(el('section', 'painel nota-lado', '<h2>Como funciona</h2><ul class="gv-ul">' +
+        '<li>Cada secretária conta a gaveta quando chega; quem fecha conta de novo antes de sair.</li>' +
+        '<li>Digite quantas cédulas e moedas há de cada valor.</li>' +
+        '<li>Por enquanto a contagem só fica registrada: o Cortex não confere.</li></ul>'));
+      return l;
+    }
     l.appendChild(el('section', 'painel nota-lado', '<h2>Como funciona</h2><ul class="gv-ul">' +
       '<li>Cada secretária conta a gaveta quando chega; quem fecha conta de novo antes de sair.</li>' +
       '<li>Digite quantas cédulas e moedas há de cada valor. Você não vê quanto deveria ter.</li>' +
@@ -456,6 +466,7 @@ var GAVETA = (function () {
       }
       if (d.ultima) g.appendChild(el('div', 'lj-cx-l', '<span>Última contagem</span><b>' + esc(diaHora(d.ultima.contada_em) + ' · ' + d.ultima.quem) + '</b>'));
       if (d.conferindo) g.appendChild(el('div', 'lj-cx-l', '<span>Conferindo agora</span><b>' + esc(d.conferindo) + '</b>'));
+      if (d.so_registrar) g.appendChild(el('div', 'lj-cx-l', '<span>Conferência</span><b>em pausa: só registra</b>'));
       l.appendChild(g);
     }
     var s = el('section', 'painel gv-movs');
@@ -615,12 +626,13 @@ var GAVETA = (function () {
     return sec;
   }
 
-  var COMO = { corrigido: 'corrigido nos lançamentos', quebra: 'quebra de caixa', sozinha: 'acertou na contagem seguinte' };
+  var COMO = { corrigido: 'corrigido nos lançamentos', quebra: 'quebra de caixa', sozinha: 'acertou na contagem seguinte', pausa: 'conferência pausada' };
   function situDono(h) {
     switch (h.situacao) {
       case 'abertura': return { v: brl(h.valor), rot: 'abertura', cls: 'espera' };
       case 'ok': return { rot: 'OK', cls: 'ok' };
       case 'aguardando': return { rot: 'conferindo', cls: 'espera' };
+      case 'registrada': return { v: brl(h.valor), rot: 'registrada', cls: 'espera' };
       case 'recontar': return { rot: 'não bateu · esperando recontagem', cls: 'espera' };
       case 'recontada': return { rot: 'não bateu · recontou', cls: 'espera' };
       case 'superada': return { rot: 'não bateu · outra contagem bateu depois', cls: 'espera' };
@@ -718,5 +730,5 @@ var GAVETA = (function () {
     var r = raiz(); if (r) r.innerHTML = '';
   }
 
-  return { naEntrada: naEntrada, iniciar: iniciar, abrir: abrir, atualizar: atualizar, sair: sair };
+  return { naEntrada: naEntrada, iniciar: iniciar, abrir: abrir, atualizar: atualizar, sair: sair, soRegistrar: soReg };
 })();
