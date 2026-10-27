@@ -20,6 +20,7 @@ if(/[?&](conferir|convite)=/.test(location.search))location.replace('https://pro
 <link rel="stylesheet" href="css/profissional.css?v=11">
 <link rel="stylesheet" href="css/financeiro.css?v=2">
 <link rel="stylesheet" href="css/gaveta.css?v=1">
+<link rel="stylesheet" href="css/tutoriais.css?v=1">
 </head>
 <body>
 <div class="toast" id="toast"></div>
@@ -108,6 +109,7 @@ if(/[?&](conferir|convite)=/.test(location.search))location.replace('https://pro
     <button type="button" class="btn-renov" id="gv-renov" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 5h11a3 3 0 0 1 3 3v3.5M3.5 11V8a3 3 0 0 1 3-3M3.5 9.5h17M8 3v4M16 3v4M3.5 11v6.5a3 3 0 0 0 3 3H11M20.5 17.5a3.5 3.5 0 1 1-1-2.45M20.5 13.5v2.2h-2.2"/></svg><span>Renovação<span class="rv-s"> de validade</span> Unimed</span><span class="renov-n" id="gv-b-fila" hidden title="Resultados do robô para ler"></span></button>
     <button type="button" class="btn-ic" id="gv-lupa" title="Buscar paciente (tecla /)" aria-label="Buscar paciente" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 11a6.5 6.5 0 1 0 13 0 6.5 6.5 0 1 0-13 0M16 16l4 4"/></svg></button>
     <span id="pg-acoes" class="pg-acoes"></span>
+    <button type="button" class="btn-ic btn-ajuda" id="pg-ajuda" title="Tutorial desta tela" aria-label="Tutorial desta tela" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 17 0 8.5 8.5 0 1 0-17 0M9.6 9.4a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.5M12 16.6v.1"/></svg></button>
     <button type="button" class="btn-ic" id="gv-recarregar" title="Recarregar do banco" aria-label="Recarregar do banco" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4v4.5H15"/></svg></button>
   </div>
 </header>
@@ -252,6 +254,7 @@ if(/[?&](conferir|convite)=/.test(location.search))location.replace('https://pro
 <!-- FINANCEIRO · Extrato (js/financeiro.js monta a tela aqui; só o administrador) e Gaveta (js/gaveta.js: contagem às cegas) -->
 <div class="sec" id="s-financeiro"></div>
 <div class="sec" id="s-gaveta"></div>
+<div class="sec" id="s-tutoriais"></div>
 
 <!-- CONFIG -->
 <div class="sec" id="s-cfg">
@@ -336,13 +339,15 @@ if(/[?&](conferir|convite)=/.test(location.search))location.replace('https://pro
 
 <!-- conveniência e login: Supabase pelas funções loja_* (LOJA v1.0); o Firebase saiu -->
 <script src="js/loja_api.js?v=2"></script>
-<script src="js/lojinha.js?v=14"></script>
+<script src="js/lojinha.js?v=15"></script>
 <script src="js/guias.js?v=14"></script>
-<script src="js/profissional.js?v=13"></script>
+<script src="js/profissional.js?v=14"></script>
 <script src="js/loja_nova.js?v=10"></script>
 <script src="js/financeiro.js?v=6"></script>
 <script src="js/gaveta.js?v=2"></script>
-<script src="js/moldura.js?v=12"></script>
+<script src="js/tutoriais_conteudo.js?v=1"></script>
+<script src="js/moldura.js?v=13"></script>
+<script src="js/tutoriais.js?v=1"></script>
 <script src="js/entrada.js?v=1"></script>
 <script src="js/loja_login.js?v=2"></script>
 </body>

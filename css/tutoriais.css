@@ -1,0 +1,41 @@
+/* ═══ TUT v1.0 · tutoriais (27/10/2026) — a janela usa as classes gd-* de css/profissional.css ═══ */
+
+/* passo com print largo (tela do Cortex ou do Feegow): imagem em cima, texto embaixo */
+.gd-passo.larga{flex-direction:column;min-height:0}
+.gd-passo.larga .gd-vis{flex:none;padding:18px 20px}
+.gd-passo.larga .gd-vis img{width:100%;max-width:780px;max-height:360px;object-fit:contain;object-position:top;border:1px solid rgba(0,0,0,.25);box-shadow:0 12px 30px rgba(0,0,0,.25);background:#fff}
+.gd-passo.sem-vis .gd-txt{padding:32px 36px}
+.gd-p ul{margin:6px 0 0;padding-left:20px}
+.gd-p li{margin:3px 0}
+.gd-aviso{margin:auto 0 0;padding-top:14px;border-top:1px solid var(--linha);font-size:13.5px;color:var(--cinza)}
+.gd-tag{display:inline-block;padding:1px 7px;font-size:12.5px;font-weight:600;background:var(--vermelho);color:#fff}
+.gd-tag.am{background:var(--laranja)}
+
+/* botão "?" no topo da tela */
+.btn-ajuda{color:var(--tint)}
+
+/* aba Tutoriais */
+#s-tutoriais{padding-bottom:40px}
+.tut-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.tut-card{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-height:150px;padding:18px;text-align:left;font:inherit;color:var(--tinta);background:#fff;border:1px solid var(--linha);cursor:pointer}
+.tut-card:hover,.tut-card:focus-visible{border-color:var(--tint);outline:none}
+.tut-card.geral{grid-column:1/-1;min-height:0;background:linear-gradient(120deg,#2C2D6E,#B6569C);color:#fff;border:0}
+.tut-card.geral .tut-sec,.tut-card.geral small,.tut-card.geral .tut-pe{color:rgba(255,255,255,.85)}
+.tut-card b{font-size:18px;line-height:1.2}
+.tut-card small{font-size:13.5px;line-height:1.45;color:var(--cinza)}
+.tut-sec{font-size:11.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--cinza)}
+.tut-pe{margin-top:auto;display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--cinza)}
+.tut-selo{padding:2px 7px;font-size:11.5px;font-weight:600;color:#fff;background:var(--orquidea)}
+.tut-selo.atu{background:var(--tint)}
+.tut-vazio{color:var(--cinza);font-size:14px}
+.tut-adm{margin-top:28px}
+.tut-adm h3{margin:0 0 10px;font-size:17px}
+.tut-tab-wrap{overflow-x:auto;background:#fff;border:1px solid var(--linha)}
+.tut-tab{border-collapse:collapse;width:100%;font-size:13.5px}
+.tut-tab th,.tut-tab td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--linha);white-space:nowrap}
+.tut-tab th{font-weight:600;color:var(--cinza);background:var(--fundo)}
+.tut-tab td.nao{color:var(--vermelho)}
+.tut-tab td.velho{color:var(--laranja)}
+.tut-tab td.sim{color:var(--tinta)}
+.tut-leg{margin:8px 0 0;font-size:12.5px;color:var(--cinza)}
+@media (max-width:700px){ .gd-passo.sem-vis .gd-txt{padding:18px 16px} }

@@ -210,6 +210,7 @@ function entrarApp(){
   setDatas();updateDate();setInterval(updateDate,60000);loadCaches();loadCfg();
   nav('guias');GV.startTimers();
   if(window.GAVETA)GAVETA.iniciar();
+  if(window.TUT)TUT.aoEntrar();   /* TUT v1.0: Manual geral logo depois da entrada */
 }
 function aplicarPermissoes(){
   const admin=isAdmin();
@@ -218,7 +219,7 @@ function aplicarPermissoes(){
   ['cx-detalhes-fis','cx-detalhes-ban'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display=admin?'':'none';});
   const cxa=document.getElementById('cx-acoes');if(cxa)cxa.style.display=admin?'flex':'none';
 }
-function doLogout(){try{GV.stopTimers();}catch(e){}try{LJ.sair();}catch(e){}try{FIN.sair();}catch(e){}try{GAVETA.sair();}catch(e){}LAPI.sair();CU=null;PC=[];PRC=[];document.getElementById('app').style.display='none';document.getElementById('lo').style.display='flex';document.getElementById('lo-pin').value='';return loadLoginUsers();}
+function doLogout(){try{GV.stopTimers();}catch(e){}try{LJ.sair();}catch(e){}try{FIN.sair();}catch(e){}try{GAVETA.sair();}catch(e){}try{TUT.aoSair();}catch(e){}LAPI.sair();CU=null;PC=[];PRC=[];document.getElementById('app').style.display='none';document.getElementById('lo').style.display='flex';document.getElementById('lo-pin').value='';return loadLoginUsers();}
 LAPI.aoCair(function(codigo,msg){   /* sessão caiu no meio do uso: volta para a entrada e diz por quê (depois que a lista de nomes recarrega) */
   if(!CU)return;
   const txt=codigo==='TROCAR_PIN'?'O administrador definiu um PIN novo para você. Entre com ele.':(msg||'Sua sessão terminou. Entre de novo.');
@@ -235,7 +236,7 @@ function nav(s,sub){
   document.getElementById('s-'+s).classList.add('active');
   document.getElementById('tb-ttl').textContent=TTLS[s]||s;
   if(window.moldura)moldura.aoNavegar(s,sub);
-  const fn={guias:function(){GV.boot(sub);},dashboard:loadDashboard,estoque:function(){LJ.estoque();},balanco:loadBalanco,notinhas:function(){LJ.notinhas();},caixa:function(){LJ.caixa();},posicao:loadPosicao,profissionais:loadProfTable,historico:function(){LJ.historico();},cfg:loadCfg,financeiro:function(){if(window.FIN)FIN.abrir();},gaveta:function(){if(window.GAVETA)GAVETA.abrir();}};
+  const fn={guias:function(){GV.boot(sub);},dashboard:loadDashboard,estoque:function(){LJ.estoque();},balanco:loadBalanco,notinhas:function(){LJ.notinhas();},caixa:function(){LJ.caixa();},posicao:loadPosicao,profissionais:loadProfTable,historico:function(){LJ.historico();},cfg:loadCfg,financeiro:function(){if(window.FIN)FIN.abrir();},gaveta:function(){if(window.GAVETA)GAVETA.abrir();},tutoriais:function(){if(window.TUT)TUT.tela();}};
   if(fn[s])fn[s]();
 }
 
