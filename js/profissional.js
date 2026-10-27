@@ -779,98 +779,10 @@ function pintaContagem(){
 function iniciarRelogio(){ pintaContagem(); clearInterval(cf.timer); cf.timer = setInterval(pintaContagem, 30000); }
 function pararRelogio(){ clearInterval(cf.timer); cf.timer = null; }
 
-/* ═══ v3.5: manual da Conferência (abre sozinho ao entrar, até a secretária marcar "Não mostrar de novo") ═══ */
-var GUIA_V = 'img/guia/';
-function guiaLinha(lista){
-  return '<div class="gd-linha">' + lista.map(function(x){
-    return '<div class="gd-marco' + (x[3] ? ' ' + x[3] : '') + '"><small>' + x[0] + '</small><b>' + x[1] + '</b><span>' + x[2] + '</span></div>';
-  }).join('') + '</div>';
-}
-var GUIA = [
-  { img: '4-agenda', t: 'O que é a conferência',
-    p: 'Cada profissional confere a <b>própria agenda</b> pelo celular, no site <b>profissionais.levsoul.com.br</b>, e confirma que está tudo certo.',
-    e: 'É por essa agenda que a clínica fatura e calcula o repasse. O papel de vocês: <b>tirar dúvidas, corrigir no Feegow e cobrar quem atrasar</b>.' },
-  { img: '1-entrar', t: 'Primeiro acesso',
-    p: 'O profissional recebe pelo WhatsApp da clínica a <b>mensagem de acesso</b>. Ele entra com o <b>e-mail do cadastro no Feegow</b> e a senha <b>0000</b>.',
-    e: 'Não entrou? Quase sempre é o e-mail: confira o do cadastro. O 0000 não vence, vale até ele entrar. Errou a senha 5 vezes seguidas: espera 15 minutos.' },
-  { img: '2-senha', t: 'Ele cria a senha dele',
-    p: 'Na primeira entrada, o site pede uma <b>senha nova</b>, de pelo menos 4 caracteres. Daí em diante ele entra com ela.',
-    e: 'Esqueceu a senha? Quem gera um 0000 novo é a Administração.' },
-  { img: '3-tutorial-dia', t: 'Ele recebe um passo a passo',
-    p: 'Logo depois, aparece um <b>passo a passo</b> explicando tudo, inclusive o prazo.',
-    e: 'Ele pode rever quando quiser em <b>Como funciona</b>, dentro do site.' },
-  { img: '4-agenda', t: 'Ele confere consulta por consulta',
-    p: 'Cada consulta aparece com horário, paciente, convênio e a situação: <b>Atendido</b> ou <b>Não compareceu</b>.',
-    e: 'Viu algo errado? Ele avisa vocês pelo WhatsApp e <b>não confirma ainda</b>. Ele só confirma <b>depois que tudo estiver corrigido e aparecendo no site</b>.' },
-  { img: '5-confirmar', t: 'Confirma com uma selfie',
-    p: 'Só pelo <b>celular</b>: ele marca a declaração e tira uma <b>selfie na hora</b>. <b>A selfie é a assinatura dele.</b>',
-    e: 'A câmera não abre? Ele precisa permitir a câmera para o site no navegador do celular. Pelo computador ele vê a agenda, mas não confirma.' },
-  { img: '6-confirmada', t: 'Agenda confirmada',
-    p: 'Depois de confirmada, a agenda <b>não muda mais</b> pelo site. Ele pode baixar o comprovante em PDF.',
-    e: 'Aqui na Conferência, ele sai de <b>Ainda não</b> e vai para <b>Confirmou</b>, e vocês conseguem ver a selfie. Confirmou com erro? Fale com a Administração.' },
-  { vis: function(){ return guiaLinha([['Segunda', '8h', 'abre a semana anterior'], ['Segunda', '22h', 'prazo do profissional', 'quente'],
-                                       ['Terça', '22h', 'última chance; depois trava', 'fim']]); },
-    t: 'As datas',
-    p: 'Toda <b>segunda, às 8h</b>, abre a agenda da semana anterior. O prazo que o profissional vê é <b>segunda, 22h</b>. Até <b>terça, 22h</b> ainda dá para confirmar (fica marcado como atrasado). Depois disso <b>trava</b> e segue para o faturamento como está.',
-    e: '<b>Todo dia 1º:</b> abrem os últimos dias do mês anterior. É essa confirmação que gera o recibo do repasse, então tem que ser <b>no mesmo dia, o quanto antes</b>.' },
-  { vis: function(){ return guiaLinha([['Segunda', '18h', '1º aviso'], ['Terça', '9h', '2º aviso', 'quente'], ['Terça', '17h', 'último aviso', 'fim']]); },
-    t: 'Os avisos',
-    p: '<b>Mensagem de acesso:</b> sai quando o profissional começa ou quando ganha um 0000 novo, com o endereço, o e-mail e a senha.',
-    e: '<b>Toda semana</b>, quem ainda não confirmou recebe um aviso de vocês na <b>segunda às 18h</b>, na <b>terça às 9h</b> e na <b>terça às 17h</b>. Os de terça deixam claro que <b>depois das 22h não dá mais para corrigir</b>.<br><b>Dia 1º:</b> avisos às <b>11h</b> e às <b>15h</b>.<br>Em breve o Cortex mostra um quadradinho vermelho na hora de cada aviso, com a mensagem pronta.' },
-  { vis: function(){ return guiaLinha([['Passo 1', 'Feegow', 'corrija a consulta'], ['Passo 2', '15 min', 'espere o sistema ler'],
-                                       ['Passo 3', 'Conferência', 'abra o profissional e confira', 'quente'], ['Passo 4', 'WhatsApp', 'avise o profissional', 'ok']]); },
-    t: 'Quando ele avisa uma consulta errada',
-    p: '<b>1.</b> Corrija no Feegow.<br><b>2.</b> Espere <b>15 minutos</b>.<br><b>3.</b> Aqui na Conferência, clique no profissional e veja, em <b>Consultas do período</b>, se a consulta já aparece certa.<br><b>4.</b> Apareceu certa? Avise o profissional que ele já pode conferir de novo e confirmar.',
-    e: '<b>Não apareceu depois de 15 minutos?</b> Procure a Administração e conte o que foi corrigido (paciente, dia e horário).<br><b>Importante:</b> o profissional só confirma quando <b>tudo</b> estiver corrigido. Depois de confirmada, a agenda não muda mais.' },
-  { vis: function(){ return '<div class="gd-faq"><b>?</b></div>'; },
-    t: 'O que responder ao profissional',
-    p: '<b>"Não consigo entrar."</b> Primeira vez: e-mail do cadastro + 0000. Depois: a senha que ele criou.<br><b>"Posso confirmar e corrigir depois?"</b> Não. Primeiro corrige, ele confere de novo, e só então confirma.',
-    e: '<b>"Confirmei com erro."</b> Pelo site não muda mais: fale com a Administração.<br><b>"Perdi o prazo de segunda."</b> Ainda dá até terça, 22h. Depois, a agenda segue como está.' }
-];
-function guiaChave(){ var u = (typeof CU !== 'undefined' && CU) ? (CU.id || CU.nome || '') : ''; return 'cf.manual.oculto.' + u; }
-function guiaOculto(){ try{ return localStorage.getItem(guiaChave()) === '1'; }catch(e){ return false; } }
-function guiaSec(auto){
-  if(!window.moldura) return;
-  var i = 0, P = moldura.pop({ titulo: 'Manual da conferência dos profissionais', largura: '820px', classe: 'gd-pop' });
-  P.rodape.hidden = false;
-  P.rodape.innerHTML = '<label class="gd-oculta"><input type="checkbox"' + (guiaOculto() ? ' checked' : '') + '> Não mostrar de novo ao abrir a Conferência</label>' +
-    '<span class="gd-pontos"></span><span class="pop-dir"><button type="button" class="btn btn-s" data-g="-1">Anterior</button>' +
-    '<button type="button" class="btn btn-p" data-g="1">Próximo</button></span>';
-  P.rodape.querySelector('.gd-oculta input').addEventListener('change', function(){
-    try{ if(this.checked) localStorage.setItem(guiaChave(), '1'); else localStorage.removeItem(guiaChave()); }catch(e){}
-  });
-  var pinta = function(){
-    var s = GUIA[i];
-    P.corpo.innerHTML = '<div class="gd-passo">' +
-      '<div class="gd-vis">' + (s.img ? '<img src="' + GUIA_V + s.img + '.jpg?v=1" alt="Tela do site dos profissionais: ' + esc(s.t) + '" loading="lazy">' : s.vis()) + '</div>' +
-      '<div class="gd-txt"><p class="gd-n">' + (i + 1) + ' de ' + GUIA.length + '</p><h2>' + esc(s.t) + '</h2><p class="gd-p">' + s.p + '</p>' +
-      (s.e ? '<p class="gd-e">' + s.e + '</p>' : '') + '</div></div>';
-    P.rodape.querySelector('.gd-pontos').innerHTML = GUIA.map(function(_, k){
-      return '<button type="button" class="gd-ponto' + (k === i ? ' on' : '') + '" data-k="' + k + '" aria-label="Passo ' + (k + 1) + '"></button>';
-    }).join('');
-    P.rodape.querySelector('[data-g="-1"]').disabled = i === 0;
-    P.rodape.querySelector('[data-g="1"]').textContent = i === GUIA.length - 1 ? 'Fechar' : 'Próximo';
-    P.corpo.scrollTop = 0;
-  };
-  var vai = function(k){ if(k >= GUIA.length){ P.fechar(); return; } i = Math.max(0, k); pinta(); };
-  P.rodape.addEventListener('click', function(ev){
-    var b = ev.target.closest('[data-g],[data-k]'); if(!b) return;
-    if(b.hasAttribute('data-k')) vai(Number(b.getAttribute('data-k'))); else vai(i + Number(b.getAttribute('data-g')));
-  });
-  var tecla = function(ev){
-    if(!P.aberto){ document.removeEventListener('keydown', tecla); return; }
-    if(ev.target && /INPUT|TEXTAREA/.test(ev.target.tagName) && ev.target.type !== 'checkbox') return;
-    if(ev.key === 'ArrowRight') vai(i + 1); else if(ev.key === 'ArrowLeft' && i > 0) vai(i - 1);
-  };
-  document.addEventListener('keydown', tecla);
-  pinta();
-}
-/* abre sozinho ao entrar na Conferência (uma vez por entrada na tela) */
-function guiaAuto(){
-  if(guiaOculto() || cf.guiaVisto) return;
-  cf.guiaVisto = true;
-  setTimeout(function(){ if(noTela()) guiaSec(true); }, 350);
-}
+/* ═══ v3.5 → TUT v1.0: o manual da Conferência agora vive em js/tutoriais_conteudo.js ('conferencia')
+   e abre pelo motor dos tutoriais (js/tutoriais.js): botão "Manual", botão "?" no topo e abertura automática. ═══ */
+function guiaSec(){ if(window.TUT) TUT.abrir('conferencia'); }
+function guiaAuto(){ /* a abertura automática é do motor dos tutoriais (TUT.aoTrocarTela) */ }
 
 /* porta: a senha do balcão (pedida uma vez por sessão, como antes) */
 function secretaria(){

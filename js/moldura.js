@@ -24,6 +24,7 @@ var moldura = (function () {
     profissionais: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20c.8-3.3 3.3-5 6.5-5s5.7 1.7 6.5 5M16 4.5a3.5 3.5 0 0 1 0 6.5M18 15c1.8.6 3 2.3 3.5 5',
     exportar: 'M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14',
     cfg: 'M4 7h9M17 7h3M15 5v4M4 17h3M11 17h9M9 15v4',
+    tutoriais: 'M3.5 12a8.5 8.5 0 1 0 17 0 8.5 8.5 0 1 0-17 0M9.6 9.4a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.5M12 16.6v.1',   /* TUT v1.0 */
     dono: 'M4 8.5l4 3.5 4-6.5 4 6.5 4-3.5-1.8 10H5.8z',
     extrato: 'M6 3.5h12v17l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4-2 1.4zM9 8h6M9 11.5h6M9 15h3.5',
     gaveta: 'M3.5 9.5h17v9h-17zM3.5 9.5l2-4h13l2 4M10 13.5h4M7 7.5h10',
@@ -62,7 +63,8 @@ var moldura = (function () {
     visao:         { s: 'dashboard', secao: 'Administração', titulo: 'Visão geral' },
     posicao:       { s: 'posicao',   secao: 'Administração', titulo: 'Estoque atual' },
     exportar:      { s: 'exportar',  secao: 'Administração', titulo: 'Exportar' },
-    cfg:           { s: 'cfg',       secao: 'Administração', titulo: 'Configurações' }
+    cfg:           { s: 'cfg',       secao: 'Administração', titulo: 'Configurações' },
+    tutoriais:     { s: 'tutoriais', secao: 'Ajuda', titulo: 'Tutoriais' }   /* TUT v1.0: todos os manuais */
   };
   var TELA_GV = {}, SEC_LOJA = {};
   Object.keys(DEST).forEach(function (k) {
@@ -78,6 +80,7 @@ var moldura = (function () {
     ['Conveniência', [['notinhas', 'Notinhas'], ['caixa', 'Caixa'], ['estoque', 'Estoque'], ['historico', 'Histórico']]],
     ['Profissionais', [['conferencia', 'Conferência', 'gv-b-prof', true]]],
     ['Financeiro', [['gaveta', 'Gaveta'], ['extrato', 'Extrato']]],
+    ['Ajuda', [['tutoriais', 'Tutoriais']]],
     ['Administração', [['visao', 'Visão geral'], ['posicao', 'Estoque atual'], ['exportar', 'Exportar'], ['cfg', 'Configurações'],
       ['dono', 'Dono', null, false, 'gv-aba-dono']], true]
   ];
@@ -190,6 +193,7 @@ var moldura = (function () {
     document.querySelector('.pg-tit').classList.toggle('ola', ola);
     if (ola) document.getElementById('pg-titulo').textContent = saudacao();
     desenharAlertas();
+    if (mudou && window.TUT) TUT.aoTrocarTela(d);   /* TUT v1.0: botão "?" e abertura automática do tutorial da tela */
     if (mudou) window.scrollTo(0, 0);
   }
   function saudacao() {
