@@ -45,7 +45,7 @@ var TUT_CONTEUDO = {
 
       { vis: function(){ return TUT.linha([['Segunda a sexta', '21h', 'horário do corte', 'fim'], ['Sábado', '11h', 'horário do corte', 'fim'], ['Guia a caminho', '20h', 'aguardar, uma vez só', 'quente']]); },
         t: 'Corte: até as 21h',
-        p: 'Paciente que perdeu a cobertura vai para o <b>Corte</b>. Abra o próximo agendamento no Feegow, apague <b>este e os próximos</b> (nunca os anteriores) e assine no Cortex em <b>Excluí no Feegow</b>.',
+        p: 'Paciente que perdeu a cobertura vai para o <b>Corte</b> no <b>dia útil seguinte à última consulta coberta</b> (nunca no dia dela). Abra o próximo agendamento no Feegow, apague <b>este e os próximos</b> (nunca os anteriores) e assine no Cortex em <b>Excluí no Feegow</b>.',
         e: '<b>Guia a caminho?</b> Use <b>Aguardar 20h</b> e escolha o motivo. Vale <b>uma vez só</b> por consulta: depois, é cortar.<br>Guia solicitada segura no máximo 2 dias.' },
 
       { vis: function(){ return TUT.linha([['Apareceu', 'Falhas', 'abra a mensagem'], ['Mande', 'WhatsApp Web', 'a mensagem pronta', 'quente'], ['Mandou', 'Mandei', 'some da lista', 'ok']]); },
