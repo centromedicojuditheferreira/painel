@@ -61,6 +61,8 @@ var FIN = (function () {
       txt: 'Cartão: a prova é a venda na Cielo, item por item. Fica aguardando até a Cielo estar ligada.' };
     if (forma === 1 || forma === 'dinheiro') {   /* FIN v1.5: a primeira contagem da gaveta que alcançou esta entrada */
       var g = gaveta || {}, quando = (g.dia && st.dados && g.dia !== st.dados.dia ? ddmm(g.dia) + ' às ' : 'das ') + (g.hora || '');
+      if (g.st === 'pausa') return { st: 'ok', rot: 'OK',   /* conferência da gaveta em pausa: dinheiro fica OK, como o DOC */
+        txt: 'Dinheiro: a conferência da gaveta está em pausa. As contagens só ficam registradas; o dinheiro aparece como OK.' };
       if (g.st === 'ok') return { st: 'ok', rot: 'OK',
         txt: 'Dinheiro: a contagem da gaveta ' + quando + (g.quem ? ' (' + g.quem + ')' : '') + ' bateu depois desta entrada.' };
       if (g.st === 'dif') return { st: 'espera', rot: 'gaveta com diferença',
@@ -347,9 +349,11 @@ var FIN = (function () {
     var s = el('section', 'painel fin-provas');
     s.appendChild(el('div', 'painel-cab', '<h2>Provas</h2><span>o que já está ligado</span>'));
     var gv = d.gaveta || null;
+    var gvPausa = (d.pagamentos || []).concat(d.conveniencia || []).some(function (x) { return x.gaveta && x.gaveta.st === 'pausa'; }) ||
+                  !!(window.GAVETA && GAVETA.soRegistrar && GAVETA.soRegistrar());
     [['Banco (Inter)', d.banco_ligado ? 'Robô ligado; a conferência do Pix entra na etapa 4' : 'Robô do Inter ainda não ligado'],
      ['Cielo', 'Aguardando o acesso à Cielo'],
-     ['Contagem da gaveta', gv ? (gv.ligada ? 'Ligada: o dinheiro vira OK quando a contagem bate' : 'Ligada; esperando a primeira contagem')
+     ['Contagem da gaveta', gvPausa ? 'Em pausa: as contagens só ficam registradas' : gv ? (gv.ligada ? 'Ligada: o dinheiro vira OK quando a contagem bate' : 'Ligada; esperando a primeira contagem')
                               : 'Esperando a instalação da gaveta (FIN v1.5)']].forEach(function (x) {
       s.appendChild(el('div', 'lj-cl', '<span>' + esc(x[0]) + '</span><b>' + esc(x[1]) + '</b>'));
     });
