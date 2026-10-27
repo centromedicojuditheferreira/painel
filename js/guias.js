@@ -539,7 +539,7 @@ var TOM = { r:"#D70015", o:"#C93400", c:"#636366", v:"#248A3D" };
 var SIT_TXT = {
   hoje_sem_guia:          { rot:"Hoje sem guia", tom:"r", sub:"Não atender: avisar o paciente agora", acao:"A consulta é hoje e nenhuma guia cobre. Regra da casa: sem guia não atende. Avisar o paciente agora; se a guia não entrar no sistema antes do horário, desmarcar no Feegow. Marcar “Resolvido” sem a guia entrar não adianta: em 30 minutos ela volta para cá." },
   sem_guia:               { rot:"Sem guia", tom:"r", sub:"Solicitar a guia agora ou desmarcar", acao:"Regra da casa: consulta não pode estar na agenda sem guia. Solicitar a guia agora ou desmarcar." },
-  guia_vencida:           { rot:"Depois da última", tom:"c", sub:"Vai para o Corte se a guia não for renovada", acao:"A guia não alcança esta consulta. O aviso fica na última consulta coberta (Última viável ou Última sessão); se a guia não for renovada até lá, esta vai para o Corte." },
+  guia_vencida:           { rot:"Depois da última", tom:"c", sub:"Vai para o Corte se a guia não for renovada", acao:"A guia não alcança esta consulta. O aviso fica na última consulta coberta (Última viável ou Última sessão); se a guia não for renovada, esta vai para o Corte no dia útil seguinte à última coberta." },
   saldo_esgotado:         { rot:"Saldo esgotado", tom:"r", sub:"Solicitar a renovação agora ou desmarcar", acao:"Sem sessão sobrando é o mesmo que sem guia. Solicitar a renovação agora ou desmarcar." },
   sem_carteirinha:        { rot:"Sem carteirinha", tom:"r", sub:"Completar o cadastro do paciente hoje", acao:"Completar o cadastro do paciente hoje: sem carteirinha não dá para casar a guia." },
   guia_de_outra_terapia:  { rot:"Guia de outra terapia", tom:"r", sub:"Conferir procedimento ou guia e corrigir", acao:"A guia viva do paciente é de outra terapia. Conferir se o erro é o procedimento marcado ou a guia pedida e corrigir agora, ou desmarcar." },
@@ -551,7 +551,7 @@ var SIT_TXT = {
   sem_saldo_na_fila:      { rot:"Fila passa do saldo", tom:"o", sub:"Pedir guia nova antes desta data", acao:"Solicitar guia nova antes desta data: a fila do paciente consome o saldo antes de chegar aqui." },
   guia_ainda_nao_vale:    { rot:"Guia só vale depois", tom:"o", sub:"Conferir a data com a Unimed", acao:"Conferir a data de autorização com a Unimed." },
   sessao_em_feriado:      { rot:"Cai no feriado", tom:"c", sub:"Remarcar", acao:"Remarcar: o sistema não fatura sessão em feriado." },
-  ultima_viavel_validade: { rot:"Última viável (validade)", tom:"o", sub:"Corte hoje: renovar a validade (falar com o paciente)", acao:"A guia ainda tem saldo, mas a validade termina antes da próxima consulta: esta é a última que ela cobre. Renovar a validade: entrar em contato com o paciente. Se não renovar até o dia desta consulta, as seguintes vão para o Corte." },
+  ultima_viavel_validade: { rot:"Última viável (validade)", tom:"o", sub:"Renovar a validade (falar com o paciente)", acao:"A guia ainda tem saldo, mas a validade termina antes da próxima consulta: esta é a última que ela cobre. Renovar a validade: entrar em contato com o paciente. Sem renovação, as seguintes vão para o Corte no dia útil seguinte a esta consulta." },
   coberto:                { rot:"Coberta", tom:"v", sub:"", acao:"" }
 };
 var ABA_TXT = { rot:"ABA", tom:"r", sub:"Sem guia de ABA, ABA no Intercâmbio ou psicologia sobre guia de ABA",
@@ -872,13 +872,11 @@ function abrirPacAgenda(agid, ctx){
     if(det) cx.appendChild(novo("span", "pp-txt", escapa(det)));
     if(voltou(l)) cx.appendChild(novo("span", "pp-txt", '<b style="color:' + TOM.r + '">' + escapa(voltouTxt(l)) + '</b>'));   /* Blindagem v1 */
     if(l.ultima_viavel && l.proximo_agendamento_id){
+      /* CORTE v2.3 (27/10/2026): o corte saiu do dia desta consulta — é no dia útil seguinte, pela tela Corte.
+         Sem o botão "Abrir a próxima no Feegow" aqui: ele convidava a cortar antes da consulta acontecer. */
       var n = l.futuros_apos || 0;
-      cx.appendChild(novo("span", "pp-txt", "Última consulta viável: sem guia nova, o corte é às " + (l.dia_semana === "sábado" ? "11h" : "21h") +
-        " deste dia. Há " + n + (n === 1 ? " consulta futura" : " consultas futuras") + " na fila: abrir a próxima no Feegow e apagar esta e as seguintes."));
-      var a = novo("a", "btn-claro", "Abrir a próxima no Feegow " + ico(IC.fora, 14, 2));
-      a.href = "https://app.feegow.com/main/?P=Agenda-1&Pers=1&AgendamentoID=" + l.proximo_agendamento_id;
-      a.target = "_blank"; a.rel = "noopener";
-      cx.appendChild(a);
+      cx.appendChild(novo("span", "pp-txt", "Última consulta coberta: sem guia nova, o corte é no dia útil seguinte, até as 21h (sábado, 11h). Há " +
+        n + (n === 1 ? " consulta futura" : " consultas futuras") + " na fila: no dia do corte, o paciente aparece na tela Corte."));
     }
     P.corpo.appendChild(cx);
     if(m.acao) P.corpo.appendChild(novo("div", "pp-bloco", '<span class="pp-rot">O que fazer</span><span class="pp-txt">' + escapa(m.acao) + '</span>'));
@@ -2068,8 +2066,8 @@ function salvarCorteNota(ref, campos, aoSalvar){
    e recusa a segunda espera para a mesma consulta sem guia. O "Segurar o corte" (indulto) saiu da tela;
    indulto antigo ainda aparece até vencer. */
 var CORTE_TXT = {
-  cortar_hoje:       { label:"Cortar hoje", grupo:"Cortar hoje, até as 21h", cor:"#D70015", ordem:0, sub:"Última consulta viável: corte às 21h (sábado, 11h)",
-                       acao:"Hoje é a última consulta que a cobertura alcança. Sem guia nova até as 21h (sábado, 11h), abrir o próximo agendamento no Feegow, apagar “este e os próximos” e assinar aqui." },
+  cortar_hoje:       { label:"Cortar hoje", grupo:"Cortar hoje, até as 21h", cor:"#D70015", ordem:0, sub:"A última consulta coberta já passou: corte até as 21h (sábado, 11h)",
+                       acao:"A última consulta coberta foi no dia útil anterior e a guia nova não entrou. Sem guia nova até as 21h (sábado, 11h), abrir o próximo agendamento no Feegow, apagar “este e os próximos” e assinar aqui." },
   prazo_vencido:     { label:"Prazo vencido", grupo:"Prazo vencido", cor:"#D70015", ordem:1, sub:"A guia solicitada não chegou em 2 dias",
                        acao:"A guia foi solicitada, mas o prazo de 2 dias venceu. Cortar: abrir o próximo agendamento no Feegow, apagar “este e os próximos” e assinar aqui." },
   cortar_agora:      { label:"Cortar agora", grupo:"Cortar agora", cor:"#D70015", ordem:2, sub:"Os próximos atendimentos já estão sem guia",
@@ -2194,7 +2192,7 @@ function desenharCorte(){
   });
   lado.appendChild(pn);
   lado.appendChild(novo("section", "painel nota-lado",
-    '<h2>A tesoura do dia</h2><p>Quem está aqui <b>perdeu a cobertura</b>: ou hoje é a última consulta viável (corte às <b>21h</b>, sábado às <b>11h</b>), ou os próximos já estão sem guia.</p>' +
+    '<h2>A tesoura do dia</h2><p>Quem está aqui <b>perdeu a cobertura</b>: a última consulta coberta já passou. O corte é no <b>dia útil seguinte</b> a ela, até as <b>21h</b> (sábado, <b>11h</b>); passou desse dia, é cortar agora.</p>' +
     '<p>O caminho: abrir o <b>próximo</b> agendamento no Feegow e apagar <b>“este e os próximos”</b>, nunca os anteriores. Depois assinar aqui em <b>Excluí no Feegow</b>.</p>' +
     '<p class="cinza">A linha some sozinha quando o espelho confirmar. Aguardando guia = guia solicitada, prazo máximo de 2 dias; venceu, corta.' +
     (hEsp() ? ' Guia a caminho? <b>Aguardar ' + hEsp() + 'h</b> tira o paciente da lista; se a guia não entrar no sistema nesse prazo, ele volta, e aí é cortar (uma vez só).' : '') + '</p>'));
@@ -2283,7 +2281,8 @@ function abrirCorteItem(ref){
       (sumiu ? '' : desdeL2(desdeDe("corte", c.oc_ref)))));
     var cx = novo("div", "pp-caixa", '<span class="pp-tag" style="color:' + S.cor + '">' + escapa(S.label) + '</span>' +
       '<span class="pp-txt"><b>' + futSemCob(c.n_descobertos) + ':</b> ' + escapa(c.datas_fmt || "—") + '</span>' +
-      (c.motivos ? '<span class="pp-txt cinza">Motivo: ' + escapa(motivosTxt(c.motivos)) + '</span>' : ''));
+      (c.motivos ? '<span class="pp-txt cinza">Motivo: ' + escapa(motivosTxt(c.motivos)) + '</span>' : '') +
+      (c.ultima_consulta ? '<span class="pp-txt cinza">Última consulta: ' + escapa(fmtData(c.ultima_consulta).slice(0, 5)) + '</span>' : ''));   /* CORTE v2.3: corte no dia útil seguinte a ela */
     if(c.hoje_sem_guia) cx.appendChild(novo("span", "pp-txt", '<b style="color:#D70015">Consulta HOJE' + (c.hoje_horario ? " às " + escapa(c.hoje_horario) : "") +
       ' sem guia: não atender.</b> Avisar o paciente agora; sem a guia entrar no sistema antes do horário, ela também sai no corte.'));   /* Blindagem v1 */
     if(e === "incompleto") cx.appendChild(novo("span", "pp-txt", '<b style="color:#D70015">Apagou incompleto:</b> foi assinada como excluída, mas os futuros ainda existem. Foi apagado só um? Abrir o Feegow e apagar “este e os próximos”.'));
