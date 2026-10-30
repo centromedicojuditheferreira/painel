@@ -12,7 +12,7 @@
 var TUT_CONTEUDO = {
 
   geral: {
-    titulo: 'Manual geral da recepção', secao: 'Comece por aqui', versao: 1, telas: [],
+    titulo: 'Manual geral da recepção', secao: 'Comece por aqui', versao: 2, telas: [],
     resumo: 'Todas as obrigações da recepção no Cortex, na ordem do dia: chegar, atender, cobrar, fechar.',
     passos: [
       { vis: function(){ return TUT.icone('C'); }, t: 'O Cortex em um minuto',
@@ -53,10 +53,10 @@ var TUT_CONTEUDO = {
         p: 'Quando o robô não consegue mandar um WhatsApp (confirmação, lembrete, aviso de guia, aviso ao profissional), ele aparece em <b>Falhas</b>.<br>Abra, toque em <b>Abrir no WhatsApp</b>, mande a mensagem pronta e toque em <b>Mandei</b>.',
         e: '<b>Sem celular?</b> Primeiro cadastre o celular do paciente no Feegow, depois mande.<br><b>Ninguém fica sem aviso.</b> Mensagem parada há mais de 2 horas é cobrada no Telegram.' },
 
-      { vis: function(){ return TUT.linha([['Segunda', '8h', 'abre a agenda'], ['Segunda', '22h', 'prazo do profissional', 'quente'], ['Terça', '22h', 'trava', 'fim']]); },
+      { vis: function(){ return TUT.linha([['Segunda', '18h', '1ª cobrança'], ['Terça', '9h', '2ª cobrança', 'quente'], ['Terça', '17h', 'última cobrança', 'fim']]); },
         t: 'Conferência dos profissionais',
         p: 'Toda semana os profissionais conferem a própria agenda no site deles. O papel de vocês: <b>tirar dúvidas, corrigir no Feegow o que eles pedirem e cobrar quem atrasar</b>.',
-        e: 'Todo <b>dia 1º</b> abrem os últimos dias do mês anterior: é o que gera o recibo do repasse.<br>A tela <b>Conferência</b> tem o manual completo.' },
+        e: 'Na hora de cobrar, aparece o quadrado vermelho <b>Profissionais</b>. Abra, mande a <b>mensagem pronta</b> pelo WhatsApp e toque em <b>Enviei</b>. Sem o Enviei em <b>40 minutos</b>, a Administração é avisada.<br>Todo <b>dia 1º</b> abrem os últimos dias do mês anterior: é o que gera o recibo do repasse. Quem não confirmar continua no quadrado e é cobrado <b>todo dia às 9h</b>, até confirmar.<br>A tela <b>Conferência</b> tem o manual completo.' },
 
       { vis: function(){ return TUT.icone('R$'); }, t: 'Conveniência',
         p: 'Toda venda passa pelo botão <b>Nova venda</b>, no canto de baixo da tela. Profissional pode pagar na hora ou <b>lançar na notinha</b>.<br>Mercadoria que chegou: registre em <b>Estoque → Nova entrada</b>.',
@@ -70,7 +70,7 @@ var TUT_CONTEUDO = {
   },
 
   conferencia: {
-    titulo: 'Manual da conferência dos profissionais', secao: 'Profissionais', versao: 1, telas: ['conferencia'], ondeAbre: 'a Conferência',
+    titulo: 'Manual da conferência dos profissionais', secao: 'Profissionais', versao: 2, telas: ['conferencia'], ondeAbre: 'a Conferência',
     resumo: 'Como os profissionais confirmam a agenda, os prazos, os avisos e o que fazer quando eles apontam um erro.',
     passos: [
     { img: '4-agenda.jpg?v=1', t: 'O que é a conferência',
@@ -98,11 +98,11 @@ var TUT_CONTEUDO = {
                                          ['Terça', '22h', 'última chance; depois trava', 'fim']]); },
       t: 'As datas',
       p: 'Toda <b>segunda, às 8h</b>, abre a agenda da semana anterior. O prazo que o profissional vê é <b>segunda, 22h</b>. Até <b>terça, 22h</b> ainda dá para confirmar (fica marcado como atrasado). Depois disso <b>trava</b> e segue para o faturamento como está.',
-      e: '<b>Todo dia 1º:</b> abrem os últimos dias do mês anterior. É essa confirmação que gera o recibo do repasse, então tem que ser <b>no mesmo dia, o quanto antes</b>.' },
+      e: '<b>Todo dia 1º:</b> abrem os últimos dias do mês anterior. É essa confirmação que gera o recibo do repasse, então tem que ser <b>no mesmo dia, o quanto antes</b>. Essa conferência <b>não trava</b>: fica aberta até o profissional confirmar.' },
     { vis: function(){ return TUT.linha([['Segunda', '18h', '1º aviso'], ['Terça', '9h', '2º aviso', 'quente'], ['Terça', '17h', 'último aviso', 'fim']]); },
       t: 'Os avisos',
       p: '<b>Mensagem de acesso:</b> sai quando o profissional começa ou quando ganha um 0000 novo, com o endereço, o e-mail e a senha.',
-      e: '<b>Toda semana</b>, quem ainda não confirmou recebe um aviso de vocês na <b>segunda às 18h</b>, na <b>terça às 9h</b> e na <b>terça às 17h</b>. Os de terça deixam claro que <b>depois das 22h não dá mais para corrigir</b>.<br><b>Dia 1º:</b> avisos às <b>11h</b> e às <b>15h</b>.<br>Em breve o Cortex mostra um quadradinho vermelho na hora de cada aviso, com a mensagem pronta.' },
+      e: '<b>Toda semana</b>, quem ainda não confirmou recebe um aviso de vocês na <b>segunda às 18h</b>, na <b>terça às 9h</b> e na <b>terça às 17h</b>. Os de terça deixam claro que <b>depois das 22h não dá mais para corrigir</b>.<br><b>Fim do mês:</b> dia 1º às <b>11h</b> e às <b>15h</b>; depois, <b>todo dia às 9h</b>, até confirmar. Domingo e feriado passam para o próximo dia aberto, às 9h. Quem não tem nenhuma consulta no período não é cobrado.<br>Na hora de cada aviso, aparece o quadrado vermelho <b>Profissionais</b> no alto da tela, com a mensagem pronta: abra o WhatsApp, envie e toque em <b>Enviei</b>. Sem o Enviei em <b>40 minutos</b>, a Administração é avisada no Telegram.' },
     { vis: function(){ return TUT.linha([['Passo 1', 'Feegow', 'corrija a consulta'], ['Passo 2', '15 min', 'espere o sistema ler'],
                                          ['Passo 3', 'Conferência', 'abra o profissional e confira', 'quente'], ['Passo 4', 'WhatsApp', 'avise o profissional', 'ok']]); },
       t: 'Quando ele avisa uma consulta errada',
