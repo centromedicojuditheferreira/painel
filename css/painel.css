@@ -109,6 +109,7 @@ a{color:var(--tint)}
 .busca input::-webkit-search-cancel-button{cursor:pointer}
 .btn-ic{flex:none;width:36px;height:36px;border:0;background:var(--preenche);color:var(--tint);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
 .btn-ic[hidden]{display:none}
+.btn-ic.btn-sino{color:var(--vermelho);background:var(--vermelho-suave)}   /* ALERTA v1.0: só aparece com os avisos do navegador desligados */
 .btn-ic:hover{background:var(--preenche2)}
 .btn-ic.girando svg{animation:gira .8s linear infinite}
 /* v3.4: botão "Renovação de validade Unimed" no topo da Agenda (abre o popup grande) */

@@ -12,7 +12,7 @@ if(/[?&](conferir|convite)=/.test(location.search))location.replace('https://pro
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&amp;display=swap">
-<link rel="stylesheet" href="css/painel.css?v=12">
+<link rel="stylesheet" href="css/painel.css?v=13">
 <link rel="stylesheet" href="css/entrada.css?v=1">
 <link rel="stylesheet" href="css/loja_login.css?v=1">
 <link rel="stylesheet" href="css/loja.css?v=8">
@@ -109,6 +109,7 @@ if(/[?&](conferir|convite)=/.test(location.search))location.replace('https://pro
     <button type="button" class="btn-renov" id="gv-renov" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 5h11a3 3 0 0 1 3 3v3.5M3.5 11V8a3 3 0 0 1 3-3M3.5 9.5h17M8 3v4M16 3v4M3.5 11v6.5a3 3 0 0 0 3 3H11M20.5 17.5a3.5 3.5 0 1 1-1-2.45M20.5 13.5v2.2h-2.2"/></svg><span>Renovação<span class="rv-s"> de validade</span> Unimed</span><span class="renov-n" id="gv-b-fila" hidden title="Resultados do robô para ler"></span></button>
     <button type="button" class="btn-ic" id="gv-lupa" title="Buscar paciente (tecla /)" aria-label="Buscar paciente" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 11a6.5 6.5 0 1 0 13 0 6.5 6.5 0 1 0-13 0M16 16l4 4"/></svg></button>
     <span id="pg-acoes" class="pg-acoes"></span>
+    <button type="button" class="btn-ic btn-sino" id="pg-sino" title="Ligar os avisos do navegador" aria-label="Ligar os avisos do navegador" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16.5V11a6 6 0 1 1 12 0v5.5l1.5 1.5h-15zM10 20.5a2 2 0 0 0 4 0M4 4l16 16"/></svg></button>
     <button type="button" class="btn-ic btn-ajuda" id="pg-ajuda" title="Tutorial desta tela" aria-label="Tutorial desta tela" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 17 0 8.5 8.5 0 1 0-17 0M9.6 9.4a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.5M12 16.6v.1"/></svg></button>
     <button type="button" class="btn-ic" id="gv-recarregar" title="Recarregar do banco" aria-label="Recarregar do banco" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4v4.5H15"/></svg></button>
   </div>
@@ -339,14 +340,15 @@ if(/[?&](conferir|convite)=/.test(location.search))location.replace('https://pro
 
 <!-- conveniência e login: Supabase pelas funções loja_* (LOJA v1.0); o Firebase saiu -->
 <script src="js/loja_api.js?v=2"></script>
-<script src="js/lojinha.js?v=15"></script>
-<script src="js/guias.js?v=14"></script>
+<script src="js/lojinha.js?v=16"></script>
+<script src="js/guias.js?v=15"></script>
 <script src="js/profissional.js?v=15"></script>
 <script src="js/loja_nova.js?v=10"></script>
 <script src="js/financeiro.js?v=6"></script>
 <script src="js/gaveta.js?v=2"></script>
 <script src="js/tutoriais_conteudo.js?v=2"></script>
-<script src="js/moldura.js?v=13"></script>
+<script src="js/moldura.js?v=14"></script>
+<script src="js/alerta.js?v=1"></script>
 <script src="js/tutoriais.js?v=1"></script>
 <script src="js/entrada.js?v=1"></script>
 <script src="js/loja_login.js?v=2"></script>
