@@ -4,7 +4,8 @@
    · pendência nova sai numa notificação separada, assim que o Cortex a enxerga (na leitura do banco, de 10 em 10 min);
    · aba do navegador piscando ("🔴 N pendências") sempre que houver pendência, e o ícone com o número.
    Vale para todo mundo que entra no Cortex (secretárias e Administração).
-   A conta é a mesma do número vermelho do menu: Agenda + Corte + Falhas + Cadastros + Exclusões (GV.pendenciasAgora).
+   A conta é a mesma do número vermelho do menu: Agenda + Corte + Falhas + Cadastros + Exclusões (GV.pendenciasAgora),
+   mais o quadrado Cobrar (FIN v2.0, 02/11/2026: paciente que chegou sem a cobrança no Feegow).
    Funciona com o Cortex aberto em alguma aba (pode estar minimizado ou atrás de outra janela). Navegador fechado não avisa.
    Várias abas no mesmo navegador combinam pelo localStorage para não repetir o mesmo aviso.
    O relógio do pisca roda num Worker: o Chrome atrasa os relógios de aba escondida, o do Worker não. */
@@ -16,8 +17,8 @@ var ALERTA = (function () {
   var MAX_SEPARADAS = 3;            /* até 3 novas: uma notificação para cada; mais que isso, uma só com a lista */
   var K_ULTIMO = 'cortex.alerta.ultimo_aviso_em';
   var K_CONHECIDAS = 'cortex.alerta.conhecidas.v1';
-  var ORDEM = ['agenda', 'corte', 'falhas', 'cad', 'excl'];
-  var ROT = { agenda: 'Agenda', corte: 'Corte', falhas: 'Falhas', cad: 'Cadastros', excl: 'Exclusões' };
+  var ORDEM = ['agenda', 'corte', 'falhas', 'cad', 'excl', 'fin'];
+  var ROT = { agenda: 'Agenda', corte: 'Corte', falhas: 'Falhas', cad: 'Cadastros', excl: 'Exclusões', fin: 'Cobrar' };
   var ICONE_NOTIF = 'img/levsoul-marca.png';
 
   var st = {
