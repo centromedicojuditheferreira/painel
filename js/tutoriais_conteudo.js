@@ -12,7 +12,7 @@
 var TUT_CONTEUDO = {
 
   geral: {
-    titulo: 'Manual geral da recepção', secao: 'Comece por aqui', versao: 2, telas: [],
+    titulo: 'Manual geral da recepção', secao: 'Comece por aqui', versao: 3, telas: [],
     resumo: 'Todas as obrigações da recepção no Cortex, na ordem do dia: chegar, atender, cobrar, fechar.',
     passos: [
       { vis: function(){ return TUT.icone('C'); }, t: 'O Cortex em um minuto',
@@ -57,6 +57,11 @@ var TUT_CONTEUDO = {
         t: 'Conferência dos profissionais',
         p: 'Toda semana os profissionais conferem a própria agenda no site deles. O papel de vocês: <b>tirar dúvidas, corrigir no Feegow o que eles pedirem e cobrar quem atrasar</b>.',
         e: 'Na hora de cobrar, aparece o quadrado vermelho <b>Profissionais</b>. Abra, mande a <b>mensagem pronta</b> pelo WhatsApp e toque em <b>Enviei</b>. Sem o Enviei em <b>40 minutos</b>, a Administração é avisada.<br>Todo <b>dia 1º</b> abrem os últimos dias do mês anterior: é o que gera o recibo do repasse. Quem não confirmar continua no quadrado e é cobrado <b>todo dia às 9h</b>, até confirmar.<br>A tela <b>Conferência</b> tem o manual completo.' },
+
+      { vis: function(){ return TUT.linha([['Chegou', 'Aguardando', 'no Feegow'], ['Lance', 'Feegow', 'conta + pagamento', 'quente'], ['Lançou', 'Some', 'do Cobrar', 'ok']]); },
+        t: 'Cobrar o paciente',
+        p: 'Paciente <b>Particular ou Lev Soul</b> que chegou (Aguardando, Chamando, Em atendimento ou Atendido) aparece no quadrado vermelho <b>Cobrar</b>.<br>Lance no <b>Feegow</b> a conta <b>com o pagamento</b>: a forma certa (dinheiro, Pix, débito ou crédito) e o valor certo. Lev Soul é <b>R$ 60</b> por sessão; particular, o valor da agenda.',
+        e: '<b>Conta sem pagamento não vale:</b> o paciente continua no Cobrar até o pagamento estar lançado. Lançou, ele sai sozinho em poucos minutos.<br>Enquanto estiver no Cobrar, a Administração é avisada no Telegram: na chegada, de 10 em 10 minutos por 3 vezes e depois de 6 em 6 horas.<br><b>Aluguel</b> (paga direto ao profissional) não entra no Cobrar. Se pagar no <b>cartão da clínica</b>, lance como cartão, não como DOC.' },
 
       { vis: function(){ return TUT.icone('R$'); }, t: 'Conveniência',
         p: 'Toda venda passa pelo botão <b>Nova venda</b>, no canto de baixo da tela. Profissional pode pagar na hora ou <b>lançar na notinha</b>.<br>Mercadoria que chegou: registre em <b>Estoque → Nova entrada</b>.',

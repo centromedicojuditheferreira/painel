@@ -504,7 +504,8 @@ function badgesTopo(){
   if(window.ALERTA) ALERTA.atualizar();   /* ALERTA v1.0: notificações do navegador e aba piscando (js/alerta.js) */
 }
 /* ═══ 🔔 ALERTA v1.0 (30/10/2026) · o que conta como pendência fora da tela ═══
-   Mesma conta do número vermelho do menu (gv-sbb): Agenda (vermelhas) + Corte + Falhas + Cadastros + Exclusões.
+   Mesma conta do número vermelho do menu (gv-sbb): Agenda (vermelhas) + Corte + Falhas + Cadastros + Exclusões,
+   mais o quadrado Cobrar (FIN v2.0, js/cobrar.js), que não é tela do menu.
    Cada item leva uma chave estável (fonte|referência|situação): o js/alerta.js compara com a leitura anterior
    para saber o que é novo. "pronto" diz quais telas já leram o banco sem erro (tela com erro não entra na comparação). */
 function pendenciasAgora(){
@@ -514,6 +515,7 @@ function pendenciasAgora(){
   P.pronto.falhas = estado.falhas !== null && !estado.falhasErro;
   P.pronto.cad    = estado.cad    !== null && !estado.cadErro;
   P.pronto.excl   = estado.excl   !== null && !estado.exclErro;
+  P.pronto.fin    = window.FCOB ? FCOB.pronto() : true;            /* FIN v2.0 */
   function poe(fonte, chave, titulo, corpo, abrir){ P.itens.push({ fonte:fonte, chave:fonte + "|" + chave, titulo:titulo, corpo:corpo, abrir:abrir }); }
   var ag = estado.linhas.filter(ehPendencia);
   ag.forEach(function(l){
@@ -545,7 +547,12 @@ function pendenciasAgora(){
     poe("excl", x.oc_ref, "Nova pendência · Série apagada inteira", (x.paciente || "—") + (x.profissional ? " · " + x.profissional : ""),
         function(){ irParaTela("excl"); setTimeout(function(){ abrirExclItem(x.oc_ref); }, 400); });
   });
-  P.partes = { agenda: ag.length, corte: co.length, falhas: fa.length, cad: cd.length, excl: ex.length };
+  var fi = window.FCOB ? FCOB.itens() : [];                         /* FIN v2.0: paciente que chegou sem a cobrança no Feegow */
+  fi.forEach(function(x){
+    poe("fin", x.chave, "Nova pendência · Cobrar paciente", (x.paciente || "—") + " · " + x.origem + " · " + FCOB.situacaoCurta(x),
+        function(){ FCOB.abrir(x.chave); });
+  });
+  P.partes = { agenda: ag.length, corte: co.length, falhas: fa.length, cad: cd.length, excl: ex.length, fin: fi.length };
   return P;
 }
 /* v3.5: o "Resolver agora" da direita mostra Corte, Falhas, Cadastros e Exclusões assim que cada carga chega
@@ -564,12 +571,14 @@ function desenharFaixa(){
   var corteN = (estado.corte || []).filter(corteAtivo).length;   /* v3.2: o Corte também entra aqui (mesmo número do menu) */
   var falhasN = (estado.falhas || []).length;                     /* v3.5: Falhas também ganha o quadrado, ao lado do Corte */
   var profN = window.PCOB ? PCOB.n() : 0;                          /* PROF_COBRA v1.0: cobrança dos profissionais (js/cobranca.js) */
+  var finN = window.FCOB ? FCOB.n() : 0;                           /* FIN v2.0: cobrança dos pacientes (js/cobrar.js) */
   var chips = [];
   categorias().forEach(function(c){
     chips.push({ chave:c.chave, rot:c.rot, n:c.n, dica:c.sub,
       acao:function(){ irParaTela("agenda"); abrirCatAgenda(c.chave); } });
   });
-  if(chips.length && (corteN || falhasN || profN || cadN || exclN)) chips.push({ sep:true });
+  if(chips.length && (finN || corteN || falhasN || profN || cadN || exclN)) chips.push({ sep:true });
+  if(finN) chips.push({ chave:"cobrar-pacientes", rot:"Cobrar", n:finN, dica:"Pacientes que chegaram sem a cobrança lançada no Feegow", acao:function(){ FCOB.abrir(); } });
   if(corteN) chips.push({ chave:"corte", rot:"Corte", n:corteN, dica:"Abrir Corte: consultas para apagar no Feegow", acao:function(){ irParaTela("corte"); } });
   if(falhasN) chips.push({ chave:"falhas", rot:"Falhas", n:falhasN, dica:"Abrir Falhas: mensagens de WhatsApp que não saíram", acao:function(){ irParaTela("falhas"); } });
   if(profN) chips.push({ chave:"profissionais-cobrar", rot:"Profissionais", n:profN, dica:"Profissionais que não confirmaram a agenda: mandar a cobrança pelo WhatsApp", acao:function(){ PCOB.abrir(); } });
@@ -860,12 +869,14 @@ function agPainel(){
   var corteN = (estado.corte || []).filter(corteAtivo).length;   /* v3.2 */
   var falhasN = (estado.falhas || []).length;                     /* v3.5 */
   var profN = window.PCOB ? PCOB.n() : 0;                          /* PROF_COBRA v1.0 */
+  var finN = window.FCOB ? FCOB.n() : 0;                           /* FIN v2.0 */
+  if(finN) sec.appendChild(cat("Cobrar", "Pacientes que chegaram sem a cobrança lançada no Feegow", finN, TOM.r, function(){ FCOB.abrir(); }));
   if(corteN) sec.appendChild(cat("Corte", "Consultas para apagar no Feegow, na tela de Corte", corteN, TOM.r, function(){ irParaTela("corte"); }));
   if(falhasN) sec.appendChild(cat("Falhas", "Mensagens de WhatsApp que não saíram, na tela de Falhas", falhasN, TOM.r, function(){ irParaTela("falhas"); }));
   if(profN) sec.appendChild(cat("Profissionais", "Cobrar pelo WhatsApp quem não confirmou a agenda", profN, TOM.r, function(){ PCOB.abrir(); }));
   if(cadN)  sec.appendChild(cat("Cadastros", "Fichas com problema de cadastro, na tela de Cadastros", cadN, TOM.r, function(){ irParaTela("cad"); }));
   if(exclN) sec.appendChild(cat("Exclusões", "Séries apagadas inteiras no Feegow, na tela de Exclusões", exclN, TOM.r, function(){ irParaTela("excl"); }));
-  if(!cats.length && !corteN && !falhasN && !profN && !cadN && !exclN) sec.appendChild(novo("div", "lista-vazio", estado._carregouEm ? "Nada para resolver agora." : "Buscando…"));
+  if(!cats.length && !finN && !corteN && !falhasN && !profN && !cadN && !exclN) sec.appendChild(novo("div", "lista-vazio", estado._carregouEm ? "Nada para resolver agora." : "Buscando…"));
   return sec;
 }
 /* janela de uma categoria: lista as consultas e leva para a lista filtrada */
