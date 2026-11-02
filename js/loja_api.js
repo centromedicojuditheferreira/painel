@@ -46,6 +46,13 @@ var LAPI = (function () {
     token: function () { return token; },
     definirToken: function (t) { token = t || null; caiu = false; },
     aoCair: function (fn) { aoCair = fn; },
+    /* SEGURANÇA Fase 2: o porteiro do banco recusou a sessão (venceu ou saiu em outro lugar) → volta para a entrada */
+    cair: function (msg) {
+      if (token && aoCair && !caiu) {
+        caiu = true;
+        setTimeout(function () { aoCair('SESSAO_INVALIDA', msg || 'Sua sessão terminou. Entre de novo.'); }, 0);
+      }
+    },
 
     /* entrada */
     loginLista: function () { return chamar('loja_login_lista'); },
