@@ -169,6 +169,7 @@ var moldura = (function () {
     document.getElementById('pg-secao').textContent = x.secao;
     document.getElementById('pg-titulo').textContent = x.titulo;
     document.title = x.titulo + ' · Cortex';
+    if (window.ALERTA) ALERTA.titulo(document.title);   /* ALERTA v1.0: a aba pisca por cima deste título */
     document.getElementById('pg-resumo').textContent = resumos[d] || '';
     var ehGV = x.s === 'guias';
     ['gv-renov', 'gv-lupa'].forEach(function (id) { var el = document.getElementById(id); if (el) el.hidden = !x.busca; });
