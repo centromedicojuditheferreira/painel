@@ -342,10 +342,14 @@ function aprovarExclusao(l, btn){
    então basta reclassificar aqui, sem tocar no banco. */
 function regrasAba(linhas){
   (linhas || []).forEach(function(l){
-    /* v2.1 · última viável por validade: coberta, mas a régua avisa */
-    if(l.ultima_viavel && l.situacao === "coberto"){
-      l.situacao = "ultima_viavel_validade";
-      l.gravidade = 1;
+    /* 30/10/2026 (ordem do dono): "Última viável (validade)" e "Última sessão (saldo)" não são pendência nem aviso:
+       somem da Agenda (chips, menu, contagem dos dias, ABA, lista e janela). A consulta é coberta e aparece como
+       coberta; quem cuida do que vem depois é o Corte, no dia útil seguinte. Antes (v2.1) a régua avisava aqui. */
+    if(l.situacao === "ultima_sessao" || (l.ultima_viavel && l.situacao === "coberto")){
+      l.situacao = "coberto";
+      l.gravidade = 2;
+      l.ultima_viavel = false;
+      l.corte_hoje = false;
     }
     if(l.especialidade === "psicologia" && l.outra_guia_terapia === "aba" && l.situacao !== "sessao_em_feriado"){
       l.situacao = "psico_com_guia_aba";
@@ -497,6 +501,52 @@ function badgesTopo(){
   b("gv-sbb", pend + cadN + exclN + corteN + falhasN);
   desenharFaixa();
   if(estado.tela === "agenda") atualizaLadoAgenda();
+  if(window.ALERTA) ALERTA.atualizar();   /* ALERTA v1.0: notificações do navegador e aba piscando (js/alerta.js) */
+}
+/* ═══ 🔔 ALERTA v1.0 (30/10/2026) · o que conta como pendência fora da tela ═══
+   Mesma conta do número vermelho do menu (gv-sbb): Agenda (vermelhas) + Corte + Falhas + Cadastros + Exclusões.
+   Cada item leva uma chave estável (fonte|referência|situação): o js/alerta.js compara com a leitura anterior
+   para saber o que é novo. "pronto" diz quais telas já leram o banco sem erro (tela com erro não entra na comparação). */
+function pendenciasAgora(){
+  var P = { pronto:{}, partes:{}, itens:[] };
+  P.pronto.agenda = estado._carregouEm > 0;
+  P.pronto.corte  = estado.corte  !== null && !estado.corteErro;
+  P.pronto.falhas = estado.falhas !== null && !estado.falhasErro;
+  P.pronto.cad    = estado.cad    !== null && !estado.cadErro;
+  P.pronto.excl   = estado.excl   !== null && !estado.exclErro;
+  function poe(fonte, chave, titulo, corpo, abrir){ P.itens.push({ fonte:fonte, chave:fonte + "|" + chave, titulo:titulo, corpo:corpo, abrir:abrir }); }
+  var ag = estado.linhas.filter(ehPendencia);
+  ag.forEach(function(l){
+    poe("agenda", l.agendamento_id + "|" + l.situacao, (voltou(l) ? "Voltou · " : "Nova pendência · ") + sitTxt(l.situacao).rot,
+        (l.paciente || "—") + " · " + quandoCurto(l) + " · " + (ESP_ROT[l.especialidade] || l.especialidade || "—"),
+        function(){ irParaTela("agenda"); setTimeout(function(){ abrirPacAgenda(l.agendamento_id, "lista"); }, 400); });
+  });
+  var co = (estado.corte || []).filter(corteAtivo);
+  co.forEach(function(c){
+    var k = c.apagou_incompleto === true ? "incompleto" : c.estado === "prazo_vencido" ? "prazo" : "cortar";
+    var rot = { incompleto:"Apagou incompleto", prazo:"Prazo da guia estourou", cortar:"Cortar no Feegow" }[k];
+    poe("corte", c.oc_ref + "|" + k, "Nova pendência · Corte: " + rot, (c.paciente || "—") + (c.datas_fmt ? " · " + c.datas_fmt : ""),
+        function(){ irParaTela("corte"); setTimeout(function(){ abrirCorteItem(c.oc_ref); }, 400); });
+  });
+  var fa = estado.falhas || [];
+  fa.forEach(function(f){
+    poe("falhas", f.chave, "Nova pendência · WhatsApp que não saiu",
+        (f.nome_paciente || "—") + (f.data_fmt ? " · " + f.data_fmt + (f.horario ? " " + f.horario : "") : ""),
+        function(){ irParaTela("falhas"); setTimeout(function(){ abrirFalhaItem(f.chave); }, 400); });
+  });
+  var cd = (estado.cad || []).filter(cadAberto);
+  cd.forEach(function(f){
+    var t = f.problemas && f.problemas[0] ? cadTxt(f.problemas[0].tipo).curto : "Cadastro com problema";
+    poe("cad", f.oc_ref, "Nova pendência · Cadastro: " + t, f.paciente || "—",
+        function(){ irParaTela("cad"); setTimeout(function(){ abrirCadItem(f.paciente_id); }, 400); });
+  });
+  var ex = (estado.excl || []).filter(exclAberta);
+  ex.forEach(function(x){
+    poe("excl", x.oc_ref, "Nova pendência · Série apagada inteira", (x.paciente || "—") + (x.profissional ? " · " + x.profissional : ""),
+        function(){ irParaTela("excl"); setTimeout(function(){ abrirExclItem(x.oc_ref); }, 400); });
+  });
+  P.partes = { agenda: ag.length, corte: co.length, falhas: fa.length, cad: cd.length, excl: ex.length };
+  return P;
 }
 /* v3.5: o "Resolver agora" da direita mostra Corte, Falhas, Cadastros e Exclusões assim que cada carga chega
    (antes só aparecia no próximo redesenho da Agenda) */
@@ -3536,6 +3586,7 @@ function checaVolta(){
   if(venceu){ carregar(); loadCorte(); }
 }
 function startTimers(){
+  if(window.ALERTA) ALERTA.ligar();   /* ALERTA v1.0 */
   if(GV._t10) return;
   GV._t10 = setInterval(function(){
     if(typeof CU === "undefined" || !CU) return;   /* deslogado: não faz nada */
@@ -3544,6 +3595,7 @@ function startTimers(){
   if(!GV._t1) GV._t1 = setInterval(checaVolta, 60*1000);
 }
 function stopTimers(){
+  if(window.ALERTA) ALERTA.desligar();   /* ALERTA v1.0: saiu do Cortex, a aba volta ao normal */
   if(GV._t10){ clearInterval(GV._t10); GV._t10 = null; }
   if(GV._t1){ clearInterval(GV._t1); GV._t1 = null; }
   desligarPollFila();
@@ -3553,5 +3605,5 @@ return { boot: boot, startTimers: startTimers, stopTimers: stopTimers, recarrega
          tela: function(t){ trocaTela(t); }, telaAtual: function(){ return estado.tela; },
          filtroTipo: function(){ return estado.filtroTipo; }, ehDono: ehDono,
          limparFiltroTipo: function(){ estado.filtroTipo = null; agMudou(); },
-         abrirRenovacoes: abrirRenovacoes, abrirBusca: abrirBusca };
+         abrirRenovacoes: abrirRenovacoes, abrirBusca: abrirBusca, pendenciasAgora: pendenciasAgora };
 })();

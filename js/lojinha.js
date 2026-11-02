@@ -189,6 +189,7 @@ async function doLogin(){
   const err=document.getElementById('lo-err');err.style.display='none';
   if(!uid){err.textContent='Escolha o seu nome.';err.style.display='block';return;}
   if(!pin){err.textContent='Digite seu PIN.';err.style.display='block';return;}
+  if(window.ALERTA)ALERTA.pedirPermissao();   /* ALERTA v1.0: pede a permissão das notificações no próprio clique de Entrar */
   let r;   /* o PIN é conferido no servidor (5 erros seguidos travam o usuário por 15 minutos) */
   try{r=await LAPI.entrar(uid,pin);}
   catch(e){err.textContent=e.message||String(e);err.style.display='block';if(e.codigo==='PIN_INCORRETO')document.getElementById('lo-pin').value='';return;}
