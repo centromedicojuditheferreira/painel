@@ -2461,6 +2461,7 @@ function loadFalhas(){
     .then(function(r){ return r.ok ? r.json() : []; })
     .catch(function(){ return []; });
   Promise.all([qPac, qProf])
+    .then(function(res){ return carregarLinksFalha(res[0] || []).then(function(){ return res; }); })
     .then(function(res){
       estado.falhas = (res[0] || []).map(falhaDePaciente).concat((res[1] || []).map(falhaDeProf));
       estado.falhasErro = "";
@@ -2505,7 +2506,30 @@ var TPL_AVISOS = {
   "VENCE EM 3 DIAS OU MENOS": "⚠️ Sua guia vence em *3 dias ou menos* — e guia vencida sai da agenda. Fale com a Unimed *hoje* pra atualizar a validade e manter seus horários.",
   "GUIA VENCIDA": "Sua guia está *vencida* — e guia vencida sai da agenda. Fale com a Unimed pra atualizar a validade ou solicite guia nova com seu médico. Dúvidas, é só responder aqui."
 };
-function linkConfirmacao(id){ return "https://api.feegow.com.br/confirmation/" + id + ":1005416"; }
+/* CONF_LINK v1.0 (03/11/2026): o link do Feegow saiu do ar. Com o link novo ligado (chave conf_link_ativo),
+   o banco devolve o link assinado de cada consulta da lista — só para quem está logado no Cortex
+   (conf_link_balcao). Desligado, ou se o banco não responder, segue o link do Feegow como antes. */
+function carregarLinksFalha(lista){
+  var ids = [];
+  lista.forEach(function(f){
+    if(f.tipo !== "aviso_guia" && f.agendamento_id != null && ids.indexOf(f.agendamento_id) < 0) ids.push(f.agendamento_id);
+  });
+  if(!ids.length){ estado.linksFalha = {}; return Promise.resolve(); }
+  return fetch(GCFG.url + "/rest/v1/rpc/conf_link_balcao", {
+      method: "POST", headers: cab({ "Content-Type": "application/json" }), body: JSON.stringify({ p_ids: ids })
+    })
+    .then(function(r){ return r.ok ? r.json() : []; })
+    .then(function(rows){
+      var m = {};
+      (rows || []).forEach(function(x){ if(x && x.link) m[x.agendamento_id] = x.link; });
+      estado.linksFalha = m;
+    })
+    .catch(function(){ estado.linksFalha = {}; });
+}
+function linkConfirmacao(id){
+  var proprio = estado.linksFalha && estado.linksFalha[id];
+  return proprio || ("https://api.feegow.com.br/confirmation/" + id + ":1005416");
+}
 function abreMsg(f){ return "Oi, " + (f.nome_paciente || "paciente") + "! Aqui é do Centro Médico JF / Lev Soul 🤍\n\n"; }
 function textoFalha(f){
   var m = falhaMotivo(f);
