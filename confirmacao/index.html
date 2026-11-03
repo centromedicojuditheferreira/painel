@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#2C2D6E">
+<title>Confirmação de consulta · Centro Médico JF</title>
+<link rel="icon" type="image/png" href="../img/levsoul-marca.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..700&family=Figtree:wght@400;500;600;700&display=swap">
+<!--
+  CONF_LINK v1.0 (03/11/2026) — página do link de confirmação que vai no WhatsApp.
+  O link traz ?c=<código assinado pelo banco>. Abrir a página NÃO muda nada (o WhatsApp
+  abre o link sozinho para a prévia): só o toque no botão grava. Funções do Supabase:
+  conf_link_ver (mostra) e conf_link_responder (grava; o banco leva para o Feegow:
+  7 = confirmado, 11 = desmarcado pelo paciente). Resposta única por consulta.
+-->
+<style>
+:root{
+  --indigo:#2C2D6E; --indigo2:#24255C; --orq:#B6569C; --rosa:#C65C9F;
+  --tinta:#1D1D1F; --cinza:#5A5A60; --linha:#E2E0EA; --fundo:#F6F4F8; --branco:#fff;
+  --verde:#1F7A3A; --verde-suave:#E8F4EC; --verm:#B3261E; --verm-suave:#FBECEB;
+  --display:'Bricolage Grotesque',system-ui,sans-serif;
+  --texto:'Figtree',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{min-height:100vh;min-height:100dvh;background:var(--fundo);color:var(--tinta);font:400 18px/1.45 var(--texto);
+  -webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;display:flex;flex-direction:column}
+.topo{position:relative;overflow:hidden;background:var(--rosa);color:#fff;padding:28px 20px 64px}
+.topo::before,.topo::after{content:"";position:absolute;border-radius:50%;pointer-events:none}
+.topo::before{width:520px;height:520px;left:-200px;top:-300px;background:radial-gradient(closest-side,rgba(248,196,224,.9),rgba(248,196,224,0))}
+.topo::after{width:560px;height:560px;right:-260px;bottom:-380px;background:radial-gradient(closest-side,rgba(92,44,122,.85),rgba(92,44,122,0))}
+.topo-in{position:relative;z-index:1;max-width:520px;margin:0 auto}
+.topo img{display:block;width:150px;height:auto;opacity:.92}
+.topo small{display:block;margin-top:10px;font-size:15px;font-weight:500;letter-spacing:.01em;opacity:.92}
+main{flex:1;width:100%;max-width:520px;margin:-40px auto 0;padding:0 16px 24px;position:relative;z-index:2}
+.cartao{background:var(--branco);border:1px solid var(--linha);box-shadow:0 18px 40px -22px rgba(44,45,110,.45);padding:26px 22px 24px}
+h1{font:600 30px/1.15 var(--display);font-variation-settings:'opsz' 48;color:var(--indigo);letter-spacing:-.01em}
+.sub{margin-top:6px;color:var(--cinza);font-size:17px}
+.consulta{margin-top:20px;border-left:4px solid var(--orq);background:#FAF7FB;padding:16px 16px 14px}
+.quando{font:600 26px/1.2 var(--display);color:var(--indigo)}
+.quando span{display:block;font:500 17px/1.3 var(--texto);color:var(--cinza);text-transform:none}
+.quem{margin-top:10px;font-size:17px}
+.quem b{font-weight:600}
+.onde{margin-top:8px;font-size:15px;color:var(--cinza)}
+.onde a{color:var(--indigo);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.acoes{margin-top:22px;display:flex;flex-direction:column;gap:12px}
+button{font:600 19px/1 var(--texto);min-height:58px;width:100%;border:2px solid var(--indigo);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:10px;padding:0 18px;transition:transform .08s ease,background .15s ease,opacity .15s}
+button:active{transform:scale(.99)}
+button:disabled{opacity:.55;cursor:default}
+.b-pri{background:var(--indigo);color:#fff}
+.b-pri:hover{background:var(--indigo2)}
+.b-sec{background:#fff;color:var(--indigo)}
+.b-perigo{background:var(--verm);border-color:var(--verm);color:#fff}
+.estado{display:flex;gap:14px;align-items:flex-start;margin-top:4px}
+.selo{flex:none;width:48px;height:48px;display:flex;align-items:center;justify-content:center;border-radius:50%}
+.selo.ok{background:var(--verde-suave);color:var(--verde)}
+.selo.nao{background:var(--verm-suave);color:var(--verm)}
+.selo.info{background:#EEEDF6;color:var(--indigo)}
+.estado h1{font-size:27px}
+.nota{margin-top:14px;font-size:15px;color:var(--cinza)}
+.aviso{margin-top:18px;padding:14px 16px;background:var(--verm-suave);border-left:4px solid var(--verm);font-size:17px}
+.carregando{display:flex;align-items:center;gap:12px;color:var(--cinza);min-height:120px}
+.giro{width:22px;height:22px;border:3px solid var(--linha);border-top-color:var(--indigo);border-radius:50%;animation:g .8s linear infinite}
+@keyframes g{to{transform:rotate(360deg)}}
+.erro-linha{margin-top:12px;color:var(--verm);font-size:16px;min-height:1px}
+footer{max-width:520px;margin:0 auto;padding:6px 20px 28px;text-align:center;font-size:15px;color:var(--cinza)}
+footer b{color:var(--indigo);font-weight:600}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<header class="topo">
+  <div class="topo-in">
+    <img src="../img/levsoul-logo-branco.svg" alt="Lev Soul" width="1466" height="215">
+    <small>Centro Médico Judithe Ferreira</small>
+  </div>
+</header>
+
+<main>
+  <section class="cartao" id="cartao" aria-live="polite">
+    <div class="carregando"><span class="giro" aria-hidden="true"></span>Carregando sua consulta…</div>
+  </section>
+</main>
+
+<footer>Qualquer imprevisto, é só <b>responder a mensagem no WhatsApp</b>.<br>Lev Soul · cuidado para a família inteira</footer>
+
+<script>
+(function () {
+  'use strict';
+  var SB = { url: 'https://xcucoryngkkuszztpxyq.supabase.co', key: 'sb_publishable_6ATQUvqBBRS5xx7jAYKlmw_2FwTuHG7' };
+  var MAPA = 'https://www.google.com/maps/search/?api=1&query=' +
+             encodeURIComponent('Rua Caetano Puglise, 170 - Jundiaí, Anápolis - GO');
+  var ENDERECO = 'Rua Caetano Puglise, 170 – Jundiaí, Anápolis';
+  var cartao = document.getElementById('cartao');
+  var codigo = (new URLSearchParams(location.search).get('c') || '').trim();
+  var dados = null;
+
+  var IC = {
+    ok:   '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+    nao:  '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    info: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>'
+  };
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function rpc(fn, corpo) {
+    return fetch(SB.url + '/rest/v1/rpc/' + fn, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SB.key, 'Authorization': 'Bearer ' + SB.key },
+      body: JSON.stringify(corpo)
+    }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  }
+
+  function blocoConsulta(d) {
+    var quem = d.profissional ? '<p class="quem">Com <b>' + esc(d.profissional) + '</b>' +
+               (d.especialidade ? ' · ' + esc(d.especialidade) : '') + '</p>' : '';
+    return '<div class="consulta">' +
+      '<p class="quando"><span>' + esc(d.dia_semana) + '</span>' + esc(d.data) + ', às ' + esc(d.hora) + '</p>' +
+      quem +
+      '<p class="onde">' + esc(ENDERECO) + ' · <a href="' + MAPA + '" target="_blank" rel="noopener">ver no mapa</a></p>' +
+    '</div>';
+  }
+
+  function telaEstado(tipo, titulo, texto, d, nota) {
+    cartao.innerHTML =
+      '<div class="estado"><span class="selo ' + tipo + '">' + IC[tipo] + '</span>' +
+      '<div><h1>' + esc(titulo) + '</h1>' + (texto ? '<p class="sub">' + texto + '</p>' : '') + '</div></div>' +
+      (d ? blocoConsulta(d) : '') +
+      (nota ? '<p class="nota">' + esc(nota) + '</p>' : '');
+  }
+
+  function telaAberta(d) {
+    cartao.innerHTML =
+      '<h1>Olá' + (d.nome ? ', ' + esc(d.nome) : '') + '!</h1>' +
+      '<p class="sub">Você vem para a sua consulta?</p>' +
+      blocoConsulta(d) +
+      '<div class="acoes">' +
+        '<button type="button" class="b-pri" id="b-sim">' + IC.ok + 'Confirmar presença</button>' +
+        '<button type="button" class="b-sec" id="b-nao">Não poderei ir</button>' +
+      '</div>' +
+      '<p class="erro-linha" id="erro" role="alert"></p>';
+    document.getElementById('b-sim').onclick = function () { responder('confirmar'); };
+    document.getElementById('b-nao').onclick = telaCerteza;
+  }
+
+  function telaCerteza() {
+    cartao.innerHTML =
+      '<h1>Desmarcar a consulta?</h1>' +
+      '<p class="sub">Sua consulta será desmarcada. Depois disso, não dá para desfazer por aqui.</p>' +
+      blocoConsulta(dados) +
+      '<div class="acoes">' +
+        '<button type="button" class="b-perigo" id="b-desm">Sim, desmarcar</button>' +
+        '<button type="button" class="b-sec" id="b-volta">Voltar</button>' +
+      '</div>' +
+      '<p class="erro-linha" id="erro" role="alert"></p>';
+    document.getElementById('b-desm').onclick = function () { responder('desmarcar'); };
+    document.getElementById('b-volta').onclick = function () { telaAberta(dados); };
+  }
+
+  function travar(sim) {
+    Array.prototype.forEach.call(cartao.querySelectorAll('button'), function (b) { b.disabled = sim; });
+  }
+
+  function responder(resposta) {
+    travar(true);
+    var erro = document.getElementById('erro');
+    if (erro) erro.textContent = '';
+    rpc('conf_link_responder', { p_c: codigo, p_resposta: resposta })
+      .then(mostrar)
+      .catch(function () {
+        travar(false);
+        if (erro) erro.textContent = 'Não conseguimos registrar agora. Confira a internet e toque de novo.';
+      });
+  }
+
+  function mostrar(d) {
+    dados = d || {};
+    var e = dados.estado;
+    if (e === 'aberto') return telaAberta(dados);
+    if (e === 'respondido') {
+      var quando = dados.respondido_em ? 'Resposta registrada em ' + dados.respondido_em + '.' : '';
+      if (dados.resposta === 'confirmar') {
+        return telaEstado('ok', 'Presença confirmada', 'Obrigado' + (dados.nome ? ', ' + esc(dados.nome) : '') +
+          '! A gente te espera.', dados, quando);
+      }
+      return telaEstado('nao', 'Consulta desmarcada', 'Se quiser marcar outro horário, é só responder a mensagem no WhatsApp.', dados, quando);
+    }
+    if (e === 'passou') return telaEstado('info', 'Esta consulta já passou', '', dados);
+    if (e === 'indisponivel') {
+      return telaEstado('info', 'Consulta já atualizada', 'A recepção já mexeu nesta consulta. Qualquer dúvida, responda a mensagem no WhatsApp.', dados);
+    }
+    if (e === 'invalido') {
+      return telaEstado('info', 'Este link não vale mais', 'Se a sua consulta mudou de dia ou horário, use o link da mensagem mais recente. Qualquer dúvida, responda a mensagem no WhatsApp.');
+    }
+    return telaErro();
+  }
+
+  function telaErro() {
+    cartao.innerHTML =
+      '<div class="estado"><span class="selo info">' + IC.info + '</span>' +
+      '<div><h1>Não conseguimos abrir</h1><p class="sub">Confira a internet e tente de novo.</p></div></div>' +
+      '<div class="acoes"><button type="button" class="b-sec" id="b-de-novo">Tentar de novo</button></div>';
+    document.getElementById('b-de-novo').onclick = carregar;
+  }
+
+  function carregar() {
+    cartao.innerHTML = '<div class="carregando"><span class="giro" aria-hidden="true"></span>Carregando sua consulta…</div>';
+    if (!codigo) return mostrar({ estado: 'invalido' });
+    rpc('conf_link_ver', { p_c: codigo }).then(mostrar).catch(telaErro);
+  }
+
+  carregar();
+})();
+</script>
+</body>
+</html>
