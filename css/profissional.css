@@ -37,6 +37,9 @@
 .rp-pv tr.rp-conta td{background:#F7F9FC;font-size:12.5px;padding-top:4px;padding-bottom:8px}
 .rp-pv .rp-reg{display:block;font-size:11.5px;color:#777;margin-top:2px}
 .rp-pv .rp-sub{display:block;font-size:11.5px;color:#777}
+.rp-pv label.rp-pago{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.rp-pv label.rp-pago input{width:18px;height:18px;margin:0;cursor:pointer;accent-color:var(--ok,#248A3D)}
+.rp-pv tr.rp-pago-sim>td{background:var(--ok-fundo,rgba(36,138,61,.12))}
 #prof-view .pf-semanas{display:none}
 #prof-view .pf-resumo{color:#666;font-size:15px;margin:14px 0 0}
 #prof-view .pf-dia{margin-top:18px}

@@ -1851,23 +1851,43 @@ function carregaRepasse(comp){
   rpc('rep_admin_listar', { p_senha_admin: adm.senha, p_competencia: comp }).then(function(d){ desenhaRepasse(d); })
     .catch(function(e){ host.innerHTML = '<p class="gv-vazio">⚠️ ' + esc(humano(e)) + '</p>'; });
 }
-function desenhaPreviaAdmin(pv, box, totEl, d){
+/* v3.7: pagamento do repasse — a Administração marca com um X quem já recebeu (só referência; SQL REP v2.6).
+   pagos = { "<profissional_id>": pago_em } ou null quando o SQL ainda não foi rodado (a coluna fica vazia). */
+function desenhaPreviaAdmin(pv, box, totEl, d, pagos){
   if(pv.mes_em_andamento){
     box.innerHTML = '<p class="gv-vazio">' + esc(pv.mes_nome) + ' ainda não terminou. Os valores aparecem a partir do dia 1 do mês seguinte — antes disso, as consultas que ainda vão acontecer contariam como falta.</p>';
     return;
   }
-  var L = pv.linhas || [];
+  var L = (pv.linhas || []).slice();
   if(!L.length){ box.innerHTML = '<p class="gv-vazio">Nenhum profissional com recibo neste mês.</p>'; return; }
-  if(totEl) totEl.textContent = '(total ' + brl(pv.total_a_receber) + ' · ' + pv.n_recibos + ' com recibo emitido · ' + pv.n_previas + ' em prévia' + (pv.n_sem_regime ? ' · ' + pv.n_sem_regime + ' sem regime' : '') + ')';
+  if(pagos) L.sort(function(a, b){ return (pagos[a.profissional_id] ? 1 : 0) - (pagos[b.profissional_id] ? 1 : 0); });   /* quem falta pagar em cima */
+  var totTexto = function(){
+    var t = '(total ' + brl(pv.total_a_receber) + ' · ' + pv.n_recibos + ' com recibo emitido · ' + pv.n_previas + ' em prévia' + (pv.n_sem_regime ? ' · ' + pv.n_sem_regime + ' sem regime' : '');
+    if(pagos){
+      var pg = 0, npg = 0, falta = 0, nfalta = 0;
+      L.forEach(function(x){ if(x.erro || x.fonte !== 'recibo') return; if(pagos[x.profissional_id]){ pg += Number(x.a_receber); npg++; } else { falta += Number(x.a_receber); nfalta++; } });
+      t += ' · pago ' + brl(pg) + ' (' + npg + ') · falta pagar ' + brl(falta) + ' (' + nfalta + ')';
+      var c = document.getElementById('rp-pv-totpago'); if(c) c.textContent = brl(pg);
+    }
+    if(totEl) totEl.textContent = t + ')';
+  };
+  var celPago = function(x){
+    if(!pagos || x.erro || x.fonte !== 'recibo') return '';
+    var em = pagos[x.profissional_id];
+    return '<label class="rp-pago"><input type="checkbox" data-pv-pago="' + x.profissional_id + '"' + (em ? ' checked' : '') + '> pago</label>' +
+      '<span class="rp-sub" id="rp-pago-em-' + x.profissional_id + '">' + (em ? fmtTs(em) : '') + '</span>';
+  };
   var verde = 'style="background:var(--ok-fundo);color:var(--ok)"';
-  var h = '<p class="sub" style="margin:2px 0 10px">Calculado agora, pelas mesmas regras do recibo. Enquanto o profissional não confirma, o valor é uma <b>prévia</b> e muda com as correções no Feegow (que chegam até a manhã seguinte). Depois da confirmação, vale o <b>recibo emitido</b>.</p>' +
-    '<div style="overflow-x:auto"><table class="adm rp-pv"><tr><th>Profissional</th><th class="num">Atendidos</th><th class="num">Faltas</th><th>% de agenda</th><th class="num">A receber</th><th>Conferência</th><th></th></tr>';
+  var h = '<p class="sub" style="margin:2px 0 10px">Calculado agora, pelas mesmas regras do recibo. Enquanto o profissional não confirma, o valor é uma <b>prévia</b> e muda com as correções no Feegow (que chegam até a manhã seguinte). Depois da confirmação, vale o <b>recibo emitido</b>.' +
+    (pagos ? ' Pagou o Pix? Marque <b>pago</b> na linha do profissional.' : '') + '</p>' +
+    (pagos ? '' : '<p class="pf-adm-msg erro">Falta rodar no Supabase o SQL REP v2.6 (pagamento do repasse) para marcar quem já recebeu.</p>') +
+    '<div style="overflow-x:auto"><table class="adm rp-pv"><tr><th>Profissional</th><th class="num">Atendidos</th><th class="num">Faltas</th><th>% de agenda</th><th class="num">A receber</th><th>Conferência</th><th>Pagamento</th><th></th></tr>';
   L.forEach(function(x, i){
     var nome = '<b>' + esc(x.nome) + '</b>' + (x.situacao && x.situacao !== 'ativo' ? ' <span class="tag-sit tag-s1">' + esc(x.situacao) + '</span>' : '');
     var conf = x.confirmou_em ? '<span class="tag-sit" ' + verde + '>confirmou ' + fmtTs(x.confirmou_em) + '</span>'
              : (x.tem_acesso ? '<span class="tag-sit">aguardando</span>' : '<span class="tag-sit">sem acesso</span>');
     if(x.erro){
-      h += '<tr><td>' + nome + '</td><td colspan="4"><span class="tag-sit tag-s0">' + (x.erro === 'SEM_REGIME' ? 'defina o regime na tabela abaixo' : esc(humano(new Error(x.erro)))) + '</span></td><td>' + conf + '</td><td></td></tr>';
+      h += '<tr><td>' + nome + '</td><td colspan="4"><span class="tag-sit tag-s0">' + (x.erro === 'SEM_REGIME' ? 'defina o regime na tabela abaixo' : esc(humano(new Error(x.erro)))) + '</span></td><td>' + conf + '</td><td></td><td></td></tr>';
       return;
     }
     var pct = esc(x.pct_texto || '—');
@@ -1877,16 +1897,33 @@ function desenhaPreviaAdmin(pv, box, totEl, d){
     var val = '<b>' + brl(x.a_receber) + '</b><span class="rp-sub">' +
       (x.fonte === 'recibo' ? 'recibo v' + x.recibo_versao + ' · ' + fmtTs(x.recibo_gerado_em) : 'prévia') + '</span>' +
       (x.difere ? '<span class="rp-sub"><span class="tag-sit tag-s1">cálculo de agora: ' + brl(x.previa_total) + '</span> <button type="button" class="gv-btn mini" data-pv-regerar="' + x.profissional_id + '">Regerar</button></span>' : '');
-    h += '<tr><td>' + nome + '<span class="rp-reg">' + esc(x.regime_nome || '') + '</span></td>' +
+    h += '<tr id="rp-linha-' + x.profissional_id + '"' + (pagos && pagos[x.profissional_id] ? ' class="rp-pago-sim"' : '') + '><td>' + nome + '<span class="rp-reg">' + esc(x.regime_nome || '') + '</span></td>' +
       '<td class="num">' + x.atendidos + '</td><td class="num">' + x.faltas + '</td><td>' + pct + '</td>' +
-      '<td class="num">' + val + '</td><td>' + conf + '</td>' +
+      '<td class="num">' + val + '</td><td>' + conf + '</td><td>' + celPago(x) + '</td>' +
       '<td><button type="button" class="gv-btn mini" data-pv-conta="' + i + '">conta</button></td></tr>' +
-      '<tr class="rp-conta" id="rp-conta-' + i + '" style="display:none"><td colspan="7">' +
+      '<tr class="rp-conta" id="rp-conta-' + i + '" style="display:none"><td colspan="8">' +
       (previaLinhas(x).map(function(l){ return esc(l.descricao) + ': ' + esc(l.un) + ' = <b>' + l.valor + '</b>'; }).join(' · ') || 'Nenhum atendimento pago no mês.') +
       ' · <b>total ' + brl(x.previa_total) + '</b>' + (x.fonte === 'recibo' && x.difere ? ' (o recibo emitido é de ' + brl(x.recibo_total) + ')' : '') + '</td></tr>';
   });
-  h += '<tr class="tot"><td colspan="4">TOTAL DO MÊS</td><td class="num">' + brl(pv.total_a_receber) + '</td><td colspan="2"></td></tr></table></div>';
+  h += '<tr class="tot"><td colspan="4">TOTAL DO MÊS</td><td class="num">' + brl(pv.total_a_receber) + '</td><td></td><td class="num" id="rp-pv-totpago"></td><td></td></tr></table></div>';
   box.innerHTML = h;
+  totTexto();
+  Array.prototype.forEach.call(box.querySelectorAll('input[data-pv-pago]'), function(cb){ cb.onchange = function(){
+    var id = Number(cb.getAttribute('data-pv-pago')), marcar = cb.checked;
+    var x = L.filter(function(y){ return y.profissional_id === id; })[0];
+    if(!marcar && !confirm('Desmarcar o pagamento de ' + (x ? x.nome : 'este profissional') + '?')){ cb.checked = true; return; }
+    cb.disabled = true;
+    rpc('rep_admin_marcar_pago', { p_senha_admin: adm.senha, p_profissional_id: id, p_competencia: d.competencia, p_pago: marcar })
+      .then(function(r){
+        if(r && r.pago_em) pagos[id] = r.pago_em; else delete pagos[id];
+        cb.checked = !!pagos[id];
+        var em = document.getElementById('rp-pago-em-' + id); if(em) em.textContent = pagos[id] ? fmtTs(pagos[id]) : '';
+        var tr = document.getElementById('rp-linha-' + id); if(tr) tr.classList.toggle('rp-pago-sim', !!pagos[id]);
+        totTexto();
+      })
+      .catch(function(e){ cb.checked = !marcar; alert(humano(e)); })
+      .then(function(){ cb.disabled = false; });
+  }; });
   Array.prototype.forEach.call(box.querySelectorAll('button[data-pv-conta]'), function(b){ b.onclick = function(){
     var tr = document.getElementById('rp-conta-' + b.getAttribute('data-pv-conta')); tr.style.display = tr.style.display === 'none' ? '' : 'none'; }; });
   Array.prototype.forEach.call(box.querySelectorAll('button[data-pv-regerar]'), function(b){ b.onclick = function(){
@@ -1919,8 +1956,10 @@ function desenhaRepasse(d){
   secP.innerHTML = 'Quanto cada um vai receber — ' + esc(d.mes_nome) + ' <small id="rp-pv-tot"></small>';
   host.appendChild(secP);
   var boxP = document.createElement('div'); boxP.innerHTML = '<p class="gv-vazio">Calculando…</p>'; host.appendChild(boxP);
-  rpc('rep_admin_previa', { p_senha_admin: adm.senha, p_competencia: d.competencia })
-    .then(function(pv){ desenhaPreviaAdmin(pv, boxP, $('#rp-pv-tot', secP), d); })
+  var pagos = rpc('rep_admin_pagamentos', { p_senha_admin: adm.senha, p_competencia: d.competencia })   /* v3.7 — sem o SQL REP v2.6, vem null */
+    .then(function(r){ return (r && r.pagos) || {}; }).catch(function(){ return null; });
+  Promise.all([rpc('rep_admin_previa', { p_senha_admin: adm.senha, p_competencia: d.competencia }), pagos])
+    .then(function(v){ desenhaPreviaAdmin(v[0], boxP, $('#rp-pv-tot', secP), d, v[1]); })
     .catch(function(e){ boxP.innerHTML = '<p class="gv-vazio">⚠️ ' + esc(humano(e)) + '</p>'; });
 
   // recibos do mês
