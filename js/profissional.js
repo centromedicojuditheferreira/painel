@@ -677,7 +677,8 @@ function comprimeFoto(file){
    Mesmas chamadas de antes: prof_secretaria_painel, prof_atender_pedido, prof_balcao_telefone e
    prof_foto_confirmacao. Só a cara mudou: lista à esquerda, prazo e pedidos à direita, detalhe em janela. */
 var AVISO_TIPO = { abertura:'Abertura', lembrete:'Lembrete', ultimo:'Última chamada', encerrado:'Encerramento' };
-var cf = { d:null, filtro:'faltam', busca:'', vis:[], timer:null, pinta:null, aberto:null, topo:false };
+var cf = { d:null, filtro:'faltam', busca:'', vis:[], timer:null, pinta:null, aberto:null, topo:false,
+           vista:null, fech:null, pag:null, pagComp:null };   /* v3.8: vista = 'pagamentos' (só admin) | 'semana' | 'fechamento' */
 function el(tag, cls, html){ var e = document.createElement(tag); if(cls) e.className = cls; if(html != null) e.innerHTML = html; return e; }
 function bt(cls, html, fn){ var b = el('button', cls, html); b.type = 'button'; if(fn) b.addEventListener('click', fn); return b; }
 function svgI(d, t, w){ return window.moldura ? moldura.svg(d, t, w) : ''; }
@@ -687,8 +688,10 @@ function quando(iso){ return fmtTs(iso).replace(', ', ' às '); }
 function diaHora(iso){ return fmtDiaHora(iso).replace(' às 12h', ' ao meio-dia'); }
 function capital(t){ t = String(t || ''); return t.charAt(0).toUpperCase() + t.slice(1); }
 function noTela(){ return !!document.getElementById('gv-conteudo') && !!window.GV && GV.telaAtual && GV.telaAtual() === 'prof'; }
+function ehFech(d){ return !!d && d.tipo === 'fechamento_mes'; }   /* v3.8 */
 function periodoTxt(d){
   var pIni = d.periodo_inicio || d.semana_inicio, pFim = d.periodo_fim || d.semana_fim;
+  if(ehFech(d)) return 'Fechamento de ' + d.mes + ': ' + ddmm(pIni) + ' a ' + ddmm(pFim);
   return (d.periodo_especial ? 'Período de ' : 'Semana de ') + ddmm(pIni) + ' (' + DIAS[dLocal(pIni).getDay()].toLowerCase() + ') a ' +
          ddmm(pFim) + ' (' + DIAS[dLocal(pFim).getDay()].toLowerCase() + ')';
 }
@@ -760,7 +763,11 @@ function pintaContagem(){
   if(!d || !c){ pararRelogio(); return; }
   var ms = new Date(d.prazo).getTime() - agora(), mf = new Date(d.fechamento).getTime() - agora();
   c.className = 'cf-prazo-conta';
-  if(mf <= 0){
+  if(ehFech(d)){   /* v3.8: o fim do mês não trava — fica aberto até cada um confirmar */
+    c.textContent = 'Aberto até confirmar'; c.classList.add('laranja');
+    l1.innerHTML = 'Os últimos dias de ' + esc(d.mes) + ' ficam abertos até cada profissional confirmar.';
+    l2.textContent = 'É essa confirmação que gera o recibo do repasse. Quem ainda não confirmou é cobrado pelo quadrado vermelho Profissionais.';
+  } else if(mf <= 0){
     c.textContent = 'Semana fechada';
     l1.innerHTML = 'Fechou ' + esc(diaHora(d.fechamento)) + '.';
     l2.textContent = 'Os profissionais tinham até ' + diaHora(d.prazo) + '. A agenda seguiu para o faturamento com o que estava no Feegow.';
@@ -821,12 +828,34 @@ function semanasDe(inicio){
   }
   return out;
 }
+/* v3.8: o fechamento do mês (últimos dias do mês anterior). null = não há fechamento em aberto (ou falta o SQL PROF v3.8) */
+function lerFech(){
+  return rpc('prof_secretaria_fechamento', { p_senha: secr.senha })
+    .then(function(f){ return (f && f.visivel) ? f : null; }).catch(function(){ return null; });
+}
 function carregaSec(inicio){
   var host = document.getElementById('gv-conteudo'); if(!host) return Promise.resolve();
+  if(cf.vista === 'pagamentos') return carregaPag(cf.pagComp);
   var tela = host.querySelector('#cf-conf');
   if(tela) tela.classList.add('carregando'); else host.innerHTML = '<div class="lista-vazio">Carregando…</div>';
-  return rpc('prof_secretaria_painel', { p_senha: secr.senha, p_semana_inicio: inicio || null })
-    .then(function(d){ secr.semana = d.semana_inicio; if(!secr.semanas || !secr.semanas.length) secr.semanas = semanasDe(d.semana_inicio); if(noTela()) desenhaSec(d); })
+  if(cf.vista === 'fechamento'){
+    return lerFech().then(function(f){
+      cf.fech = f;
+      if(!f){ cf.vista = 'semana'; return carregaSec(secr.semana); }   /* todo mundo confirmou: volta para a semana */
+      if(noTela()) desenhaSec(f);
+    });
+  }
+  return Promise.all([rpc('prof_secretaria_painel', { p_senha: secr.senha, p_semana_inicio: inicio || null }), lerFech()])
+    .then(function(v){
+      var d = v[0]; cf.fech = v[1];
+      secr.semana = d.semana_inicio; if(!secr.semanas || !secr.semanas.length) secr.semanas = semanasDe(d.semana_inicio);
+      if(cf.vista == null){   /* 1ª entrada: o admin cai nos Pagamentos; a secretária, no fechamento enquanto a semana nova não abre */
+        cf.vista = painelAdmin() ? 'pagamentos'
+                 : (cf.fech && Date.parse(d.agora) < Date.parse(d.abre_em)) ? 'fechamento' : 'semana';
+        if(cf.vista !== 'semana') return carregaSec(inicio);
+      }
+      if(noTela()) desenhaSec(d);
+    })
     .catch(function(e){
       if(e.message === 'SENHA_INVALIDA' || e.message === 'BLOQUEADO_TEMPORARIAMENTE'){
         var tk = (window.LAPI && LAPI.token) ? LAPI.token() : null;
@@ -839,15 +868,137 @@ function carregaSec(inicio){
     });
 }
 function recarregarSec(){ if(secr.senha && noTela() && document.getElementById('cf-conf')) carregaSec(secr.semana); }
+
+/* ═══ v3.8 — abas da Conferência: Pagamentos (só o administrador) · Agenda da semana · Fechamento do mês ═══ */
+function abasConf(){
+  var L = [];
+  if(painelAdmin()) L.push(['pagamentos', 'Pagamentos', null]);
+  L.push(['semana', 'Agenda da semana', null]);
+  if(cf.fech) L.push(['fechamento', 'Fechamento de ' + cf.fech.mes, cf.fech.faltam]);
+  if(L.length < 2) return null;
+  var nav = el('nav', 'cf-abas'); nav.setAttribute('aria-label', 'O que ver');
+  L.forEach(function(a){
+    var on = cf.vista === a[0];
+    var b = bt('cf-aba' + (on ? ' on' : ''), esc(a[1]) + (a[2] ? ' <span class="n" title="faltam confirmar">' + a[2] + '</span>' : ''), function(){
+      if(cf.vista === a[0]) return;
+      cf.vista = a[0]; cf.topo = true; carregaSec(secr.semana);
+    });
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    nav.appendChild(b);
+  });
+  return nav;
+}
+
+/* ═══ v3.8 — 💵 PAGAMENTOS do repasse: tela do administrador, grande e simples ═══
+   Quem confirmou o mês tem recibo → "Pode pagar". Fez o Pix → "Já paguei". Quem não confirmou → "Não pagar ainda".
+   Tudo pela sessão do Cortex (rep_cortex_pagamentos / rep_cortex_marcar_pago, SQL PROF v3.8). */
+function tokenCortex(){ return (window.LAPI && LAPI.token) ? LAPI.token() : null; }
+function mesSoma(comp, n){ var d = dLocal(comp); d = new Date(d.getFullYear(), d.getMonth() + n, 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-01'; }
+function carregaPag(comp){
+  var host = document.getElementById('gv-conteudo'); if(!host) return Promise.resolve();
+  pararRelogio(); acoesTopo(false);
+  if(!host.querySelector('#cf-pag')){ host.innerHTML = ''; var ab = abasConf(); if(ab) host.appendChild(ab); host.appendChild(el('div', 'lista-vazio', 'Carregando…')); }
+  var fech = lerFech().then(function(f){ cf.fech = f; });   /* mantém a aba do fechamento (e o número) em dia */
+  return Promise.all([rpc('rep_cortex_pagamentos', { p_token: tokenCortex(), p_competencia: comp || null }), fech])
+    .then(function(v){ cf.pag = v[0]; cf.pagComp = v[0].competencia; if(noTela() && cf.vista === 'pagamentos') desenhaPag(v[0]); })
+    .catch(function(e){
+      if(!noTela() || cf.vista !== 'pagamentos') return;
+      var semSql = /rep_cortex_pagamentos|PGRST202|schema cache|HTTP 404/i.test(e.message || '');
+      host.innerHTML = ''; var ab = abasConf(); if(ab) host.appendChild(ab);
+      host.appendChild(el('div', 'lista-vazio erro', esc(semSql ? 'Falta rodar no Supabase o SQL PROF v3.8 (pagamentos).' : humano(e))));
+    });
+}
+function desenhaPag(d){
+  var host = document.getElementById('gv-conteudo'); if(!host) return;
+  var L = d.linhas || [];
+  var pagar = L.filter(function(x){ return x.estado === 'pagar'; }),
+      pagos = L.filter(function(x){ return x.estado === 'pago'; }),
+      espera = L.filter(function(x){ return x.estado === 'aguardando'; }),
+      semReg = L.filter(function(x){ return x.estado === 'sem_regime'; });
+  var soma = function(a){ return a.reduce(function(s, x){ return s + Number(x.valor || 0); }, 0); };
+  var mesAno = d.mes + ' de ' + d.ano;
+  if(window.moldura) moldura.resumo('conferencia', d.mes_em_andamento ? 'Pagamentos de ' + mesAno
+    : 'Pagamentos de ' + mesAno + ' · falta pagar ' + brl(soma(pagar)) + ' · já pago ' + brl(soma(pagos)));
+  host.innerHTML = '';
+  var ab = abasConf(); if(ab) host.appendChild(ab);
+  var w = el('div', 'pgt'); w.id = 'cf-pag';
+
+  var hojeSP = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  var maxComp = mesSoma(hojeSP.slice(0, 7) + '-01', -1);   /* o último mês fechado */
+  var topo = el('div', 'pgt-topo');
+  topo.appendChild(bt('pgt-seta', '‹', function(){ carregaPag(mesSoma(d.competencia, -1)); }));
+  topo.appendChild(el('h2', '', 'Pagamentos de ' + esc(mesAno)));
+  var prox = bt('pgt-seta', '›', function(){ carregaPag(mesSoma(d.competencia, 1)); });
+  if(d.competencia >= maxComp) prox.disabled = true;
+  topo.appendChild(prox);
+  w.appendChild(topo);
+  topo.querySelector('.pgt-seta').setAttribute('aria-label', 'Mês anterior'); prox.setAttribute('aria-label', 'Próximo mês');
+
+  if(d.mes_em_andamento){
+    w.appendChild(el('div', 'pgt-vazio', '<b>' + esc(capital(d.mes)) + ' ainda não terminou.</b><br>Os pagamentos deste mês aparecem aqui a partir do dia 1º do mês seguinte, conforme cada profissional confirmar.'));
+    host.appendChild(w); return;
+  }
+
+  w.appendChild(el('div', 'pgt-resumo',
+    '<div class="pgt-card vermelho"><small>Falta pagar</small><b>' + brl(soma(pagar)) + '</b><span>' + (pagar.length === 1 ? '1 profissional' : pagar.length + ' profissionais') + '</span></div>' +
+    '<div class="pgt-card verde"><small>Já pago</small><b>' + brl(soma(pagos)) + '</b><span>' + (pagos.length === 1 ? '1 profissional' : pagos.length + ' profissionais') + '</span></div>' +
+    '<div class="pgt-card cinza"><small>Ainda não confirmaram</small><b>' + espera.length + '</b><span>não pagar ainda</span></div>'));
+
+  var marca = function(x, pago){
+    var msg = pago ? 'Confirmar: você já fez o Pix de ' + brl(x.valor) + ' para ' + x.nome + '?'
+                   : 'Desfazer o pagamento de ' + x.nome + '? Ele volta para “Pode pagar”.';
+    if(!confirm(msg)) return;
+    rpc('rep_cortex_marcar_pago', { p_token: tokenCortex(), p_profissional_id: x.profissional_id, p_competencia: d.competencia, p_pago: pago })
+      .then(function(r){ x.pago_em = r.pago_em || null; x.estado = x.pago_em ? 'pago' : 'pagar'; desenhaPag(d); })
+      .catch(function(e){ alert(humano(e)); });
+  };
+  var secao = function(n, tit, sub, cls){
+    var s = el('section', 'pgt-sec ' + cls);
+    s.appendChild(el('h3', '', '<span class="pgt-num">' + n + '</span>' + esc(tit) + (sub ? '<small>' + esc(sub) + '</small>' : '')));
+    w.appendChild(s); return s;
+  };
+
+  var s1 = secao(1, 'Pode pagar', pagar.length ? 'Faça o Pix e depois toque em “Já paguei”.' : '', 'pagar');
+  if(!pagar.length) s1.appendChild(el('p', 'pgt-nada', pagos.length ? 'Tudo pago. 👍' : 'Ninguém confirmou ainda.'));
+  pagar.forEach(function(x){
+    var r = el('div', 'pgt-linha');
+    r.appendChild(el('span', 'pgt-nome', esc(x.nome) + '<small>confirmou ' + esc(quando(x.confirmou_em || x.recibo_em)) + '</small>'));
+    r.appendChild(el('span', 'pgt-valor', brl(x.valor)));
+    r.appendChild(bt('pgt-btn', 'Já paguei', function(){ marca(x, true); }));
+    s1.appendChild(r);
+  });
+
+  if(pagos.length){
+    var s2 = secao(2, 'Já pagos', '', 'pagos');
+    pagos.forEach(function(x){
+      var r = el('div', 'pgt-linha');
+      r.appendChild(el('span', 'pgt-nome', esc(x.nome) + '<small>✓ pago ' + esc(quando(x.pago_em)) + '</small>'));
+      r.appendChild(el('span', 'pgt-valor', brl(x.valor)));
+      r.appendChild(bt('pgt-desfaz', 'desfazer', function(){ marca(x, false); }));
+      s2.appendChild(r);
+    });
+  }
+
+  if(espera.length || semReg.length){
+    var s3 = secao(pagos.length ? 3 : 2, 'Ainda não confirmaram', 'Não pagar ainda: o valor aparece quando o profissional confirmar o mês.', 'espera');
+    espera.forEach(function(x){ s3.appendChild(el('div', 'pgt-linha', '<span class="pgt-nome">' + esc(x.nome) + '</span><span class="pgt-st">esperando confirmar</span>')); });
+    semReg.forEach(function(x){ s3.appendChild(el('div', 'pgt-linha', '<span class="pgt-nome">' + esc(x.nome) + '</span><span class="pgt-st">falta configurar no sistema</span>')); });
+  }
+  host.appendChild(w);
+}
+
 function desenhaSec(d){
   var host = document.getElementById('gv-conteudo'); if(!host) return;
+  cf.vista = ehFech(d) ? 'fechamento' : 'semana';   /* v3.8 */
   relogioOffset = new Date(d.agora).getTime() - Date.now();
   cf.d = d;
   var profs = d.profissionais || [], ped = d.pedidos || [];
   var nConf = profs.filter(function(p){ return p.confirmado_em; }).length;
   var pIni = d.periodo_inicio || d.semana_inicio, pFim = d.periodo_fim || d.semana_fim;
   var fechou = new Date(d.fechamento).getTime() <= agora(), passou = new Date(d.prazo).getTime() <= agora();
-  if(window.moldura) moldura.resumo('conferencia', (d.periodo_especial ? capital(mesNome(pIni)) + ', de ' : 'Semana de ') + ddmm(pIni) + ' a ' + ddmm(pFim) + ' · ' +
+  if(window.moldura) moldura.resumo('conferencia', ehFech(d)
+    ? 'Fechamento de ' + d.mes + ' (' + ddmm(pIni) + ' a ' + ddmm(pFim) + ') · ' + nConf + ' de ' + profs.length + ' já confirmaram · aberto até cada um confirmar'
+    : (d.periodo_especial ? capital(mesNome(pIni)) + ', de ' : 'Semana de ') + ddmm(pIni) + ' a ' + ddmm(pFim) + ' · ' +
     nConf + ' de ' + profs.length + ' já confirmaram · ' + (fechou ? 'semana fechada' : passou ? 'prazo dos profissionais encerrado' : 'prazo ' + fmtDiaHora(d.prazo).replace('-feira', '')));
   acoesTopo(true);
   var abertos = ped.filter(function(p){ return p.situacao === 'aberto'; }), resolvidos = ped.filter(function(p){ return p.situacao !== 'aberto'; });
@@ -858,6 +1009,7 @@ function desenhaSec(d){
   var rolagem = (antes && !cf.topo) ? antes.scrollTop : 0;
   cf.topo = false;
   host.innerHTML = '';
+  var abas = abasConf(); if(abas) host.appendChild(abas);   /* v3.8 */
   var wrap = el('div', 'duas-col'); wrap.id = 'cf-conf';
 
   /* lista dos profissionais */
@@ -911,7 +1063,7 @@ function desenhaSec(d){
     '<span class="cf-prazo-l1" id="cf-l1"></span><span class="cf-prazo-l2" id="cf-l2"></span>' +
     '<div class="cf-barra"><div style="width:' + (profs.length ? Math.round(nConf / profs.length * 100) : 0) + '%"></div></div>' +
     '<span class="cf-prazo-n">' + nConf + ' de ' + profs.length + ' confirmaram</span>';
-  if(secr.semanas && secr.semanas.length){
+  if(secr.semanas && secr.semanas.length && !ehFech(d)){
     var ls = el('label', 'cf-semana-sel', '<span>Ver a semana</span>');
     var sel = el('select', 'fc');
     var temAtual = false;
@@ -1076,7 +1228,7 @@ function abrirProf(id, ids){
     P.topo.innerHTML = '<span class="pop-titulo-topo">Conferência dos profissionais</span>';
     P.corpo.innerHTML = '';
     var pIni = d.periodo_inicio || d.semana_inicio, pFim = d.periodo_fim || d.semana_fim;
-    P.corpo.appendChild(el('div', 'pp-cab', '<span class="pp-quando">' + esc((d.periodo_especial ? 'Conferência de ' + mesNome(pIni) : 'Semana') + ' · ' + ddmm(pIni) + ' a ' + ddmm(pFim)) + '</span>' +
+    P.corpo.appendChild(el('div', 'pp-cab', '<span class="pp-quando">' + esc((ehFech(d) ? 'Fechamento de ' + d.mes : d.periodo_especial ? 'Conferência de ' + mesNome(pIni) : 'Semana') + ' · ' + ddmm(pIni) + ' a ' + ddmm(pFim)) + '</span>' +
       '<h2>' + esc(p.nome) + '</h2><span class="pp-l1">' + esc(p.consultas + (p.consultas === 1 ? ' consulta' : ' consultas') + ' no período · ' +
         (p.pendentes === 1 ? '1 ainda marcada ou em atendimento' : p.pendentes + ' ainda marcadas ou em atendimento')) + '</span>' +
       (p.teste_ate ? '<span class="pp-l2">Acesso de teste aberto até ' + esc(fmtTs(p.teste_ate)) + '</span>' : '')));
@@ -1087,7 +1239,8 @@ function abrirProf(id, ids){
     tg.style.color = conf ? (p.confirmado_fora_do_prazo ? '#C93400' : '#248A3D') : '#D70015';
     cx.appendChild(tg);
     cx.appendChild(el('span', 'pp-txt', esc(conf ? (p.confirmado_fora_do_prazo ? 'Confirmou depois do prazo.' : 'Dentro do prazo.') + (p.foto ? ' A confirmação tem foto.' : '')
-      : (p.ultimo_acesso_em ? 'Já entrou no site dos profissionais (último acesso ' + fmtTs(p.ultimo_acesso_em) + '). Prazo: ' + fmtDiaHora(d.prazo).replace('-feira', '') + '.'
+      : (p.ultimo_acesso_em ? 'Já entrou no site dos profissionais (último acesso ' + fmtTs(p.ultimo_acesso_em) + '). ' +
+                              (ehFech(d) ? 'O fim do mês fica aberto até ele confirmar.' : 'Prazo: ' + fmtDiaHora(d.prazo).replace('-feira', '') + '.')
                             : 'Ainda não entrou no site dos profissionais. Ele entra com o e-mail de entrada e a senha 0000; os dois podem ser corrigidos aqui embaixo.'))));
     if(conf && p.foto){
       var fb = bt('btn-claro', svgI('M4 7.5h3l1.5-2h7l1.5 2h3v11H4zM9 13a3 3 0 1 0 6 0 3 3 0 1 0-6 0', 14, 2) +
@@ -1851,43 +2004,23 @@ function carregaRepasse(comp){
   rpc('rep_admin_listar', { p_senha_admin: adm.senha, p_competencia: comp }).then(function(d){ desenhaRepasse(d); })
     .catch(function(e){ host.innerHTML = '<p class="gv-vazio">⚠️ ' + esc(humano(e)) + '</p>'; });
 }
-/* v3.7: pagamento do repasse — a Administração marca com um X quem já recebeu (só referência; SQL REP v2.6).
-   pagos = { "<profissional_id>": pago_em } ou null quando o SQL ainda não foi rodado (a coluna fica vazia). */
-function desenhaPreviaAdmin(pv, box, totEl, d, pagos){
+function desenhaPreviaAdmin(pv, box, totEl, d){
   if(pv.mes_em_andamento){
     box.innerHTML = '<p class="gv-vazio">' + esc(pv.mes_nome) + ' ainda não terminou. Os valores aparecem a partir do dia 1 do mês seguinte — antes disso, as consultas que ainda vão acontecer contariam como falta.</p>';
     return;
   }
-  var L = (pv.linhas || []).slice();
+  var L = pv.linhas || [];
   if(!L.length){ box.innerHTML = '<p class="gv-vazio">Nenhum profissional com recibo neste mês.</p>'; return; }
-  if(pagos) L.sort(function(a, b){ return (pagos[a.profissional_id] ? 1 : 0) - (pagos[b.profissional_id] ? 1 : 0); });   /* quem falta pagar em cima */
-  var totTexto = function(){
-    var t = '(total ' + brl(pv.total_a_receber) + ' · ' + pv.n_recibos + ' com recibo emitido · ' + pv.n_previas + ' em prévia' + (pv.n_sem_regime ? ' · ' + pv.n_sem_regime + ' sem regime' : '');
-    if(pagos){
-      var pg = 0, npg = 0, falta = 0, nfalta = 0;
-      L.forEach(function(x){ if(x.erro || x.fonte !== 'recibo') return; if(pagos[x.profissional_id]){ pg += Number(x.a_receber); npg++; } else { falta += Number(x.a_receber); nfalta++; } });
-      t += ' · pago ' + brl(pg) + ' (' + npg + ') · falta pagar ' + brl(falta) + ' (' + nfalta + ')';
-      var c = document.getElementById('rp-pv-totpago'); if(c) c.textContent = brl(pg);
-    }
-    if(totEl) totEl.textContent = t + ')';
-  };
-  var celPago = function(x){
-    if(!pagos || x.erro || x.fonte !== 'recibo') return '';
-    var em = pagos[x.profissional_id];
-    return '<label class="rp-pago"><input type="checkbox" data-pv-pago="' + x.profissional_id + '"' + (em ? ' checked' : '') + '> pago</label>' +
-      '<span class="rp-sub" id="rp-pago-em-' + x.profissional_id + '">' + (em ? fmtTs(em) : '') + '</span>';
-  };
+  if(totEl) totEl.textContent = '(total ' + brl(pv.total_a_receber) + ' · ' + pv.n_recibos + ' com recibo emitido · ' + pv.n_previas + ' em prévia' + (pv.n_sem_regime ? ' · ' + pv.n_sem_regime + ' sem regime' : '') + ')';
   var verde = 'style="background:var(--ok-fundo);color:var(--ok)"';
-  var h = '<p class="sub" style="margin:2px 0 10px">Calculado agora, pelas mesmas regras do recibo. Enquanto o profissional não confirma, o valor é uma <b>prévia</b> e muda com as correções no Feegow (que chegam até a manhã seguinte). Depois da confirmação, vale o <b>recibo emitido</b>.' +
-    (pagos ? ' Pagou o Pix? Marque <b>pago</b> na linha do profissional.' : '') + '</p>' +
-    (pagos ? '' : '<p class="pf-adm-msg erro">Falta rodar no Supabase o SQL REP v2.6 (pagamento do repasse) para marcar quem já recebeu.</p>') +
-    '<div style="overflow-x:auto"><table class="adm rp-pv"><tr><th>Profissional</th><th class="num">Atendidos</th><th class="num">Faltas</th><th>% de agenda</th><th class="num">A receber</th><th>Conferência</th><th>Pagamento</th><th></th></tr>';
+  var h = '<p class="sub" style="margin:2px 0 10px">Calculado agora, pelas mesmas regras do recibo. Enquanto o profissional não confirma, o valor é uma <b>prévia</b> e muda com as correções no Feegow (que chegam até a manhã seguinte). Depois da confirmação, vale o <b>recibo emitido</b>.</p>' +
+    '<div style="overflow-x:auto"><table class="adm rp-pv"><tr><th>Profissional</th><th class="num">Atendidos</th><th class="num">Faltas</th><th>% de agenda</th><th class="num">A receber</th><th>Conferência</th><th></th></tr>';
   L.forEach(function(x, i){
     var nome = '<b>' + esc(x.nome) + '</b>' + (x.situacao && x.situacao !== 'ativo' ? ' <span class="tag-sit tag-s1">' + esc(x.situacao) + '</span>' : '');
     var conf = x.confirmou_em ? '<span class="tag-sit" ' + verde + '>confirmou ' + fmtTs(x.confirmou_em) + '</span>'
              : (x.tem_acesso ? '<span class="tag-sit">aguardando</span>' : '<span class="tag-sit">sem acesso</span>');
     if(x.erro){
-      h += '<tr><td>' + nome + '</td><td colspan="4"><span class="tag-sit tag-s0">' + (x.erro === 'SEM_REGIME' ? 'defina o regime na tabela abaixo' : esc(humano(new Error(x.erro)))) + '</span></td><td>' + conf + '</td><td></td><td></td></tr>';
+      h += '<tr><td>' + nome + '</td><td colspan="4"><span class="tag-sit tag-s0">' + (x.erro === 'SEM_REGIME' ? 'defina o regime na tabela abaixo' : esc(humano(new Error(x.erro)))) + '</span></td><td>' + conf + '</td><td></td></tr>';
       return;
     }
     var pct = esc(x.pct_texto || '—');
@@ -1897,33 +2030,16 @@ function desenhaPreviaAdmin(pv, box, totEl, d, pagos){
     var val = '<b>' + brl(x.a_receber) + '</b><span class="rp-sub">' +
       (x.fonte === 'recibo' ? 'recibo v' + x.recibo_versao + ' · ' + fmtTs(x.recibo_gerado_em) : 'prévia') + '</span>' +
       (x.difere ? '<span class="rp-sub"><span class="tag-sit tag-s1">cálculo de agora: ' + brl(x.previa_total) + '</span> <button type="button" class="gv-btn mini" data-pv-regerar="' + x.profissional_id + '">Regerar</button></span>' : '');
-    h += '<tr id="rp-linha-' + x.profissional_id + '"' + (pagos && pagos[x.profissional_id] ? ' class="rp-pago-sim"' : '') + '><td>' + nome + '<span class="rp-reg">' + esc(x.regime_nome || '') + '</span></td>' +
+    h += '<tr><td>' + nome + '<span class="rp-reg">' + esc(x.regime_nome || '') + '</span></td>' +
       '<td class="num">' + x.atendidos + '</td><td class="num">' + x.faltas + '</td><td>' + pct + '</td>' +
-      '<td class="num">' + val + '</td><td>' + conf + '</td><td>' + celPago(x) + '</td>' +
+      '<td class="num">' + val + '</td><td>' + conf + '</td>' +
       '<td><button type="button" class="gv-btn mini" data-pv-conta="' + i + '">conta</button></td></tr>' +
-      '<tr class="rp-conta" id="rp-conta-' + i + '" style="display:none"><td colspan="8">' +
+      '<tr class="rp-conta" id="rp-conta-' + i + '" style="display:none"><td colspan="7">' +
       (previaLinhas(x).map(function(l){ return esc(l.descricao) + ': ' + esc(l.un) + ' = <b>' + l.valor + '</b>'; }).join(' · ') || 'Nenhum atendimento pago no mês.') +
       ' · <b>total ' + brl(x.previa_total) + '</b>' + (x.fonte === 'recibo' && x.difere ? ' (o recibo emitido é de ' + brl(x.recibo_total) + ')' : '') + '</td></tr>';
   });
-  h += '<tr class="tot"><td colspan="4">TOTAL DO MÊS</td><td class="num">' + brl(pv.total_a_receber) + '</td><td></td><td class="num" id="rp-pv-totpago"></td><td></td></tr></table></div>';
+  h += '<tr class="tot"><td colspan="4">TOTAL DO MÊS</td><td class="num">' + brl(pv.total_a_receber) + '</td><td colspan="2"></td></tr></table></div>';
   box.innerHTML = h;
-  totTexto();
-  Array.prototype.forEach.call(box.querySelectorAll('input[data-pv-pago]'), function(cb){ cb.onchange = function(){
-    var id = Number(cb.getAttribute('data-pv-pago')), marcar = cb.checked;
-    var x = L.filter(function(y){ return y.profissional_id === id; })[0];
-    if(!marcar && !confirm('Desmarcar o pagamento de ' + (x ? x.nome : 'este profissional') + '?')){ cb.checked = true; return; }
-    cb.disabled = true;
-    rpc('rep_admin_marcar_pago', { p_senha_admin: adm.senha, p_profissional_id: id, p_competencia: d.competencia, p_pago: marcar })
-      .then(function(r){
-        if(r && r.pago_em) pagos[id] = r.pago_em; else delete pagos[id];
-        cb.checked = !!pagos[id];
-        var em = document.getElementById('rp-pago-em-' + id); if(em) em.textContent = pagos[id] ? fmtTs(pagos[id]) : '';
-        var tr = document.getElementById('rp-linha-' + id); if(tr) tr.classList.toggle('rp-pago-sim', !!pagos[id]);
-        totTexto();
-      })
-      .catch(function(e){ cb.checked = !marcar; alert(humano(e)); })
-      .then(function(){ cb.disabled = false; });
-  }; });
   Array.prototype.forEach.call(box.querySelectorAll('button[data-pv-conta]'), function(b){ b.onclick = function(){
     var tr = document.getElementById('rp-conta-' + b.getAttribute('data-pv-conta')); tr.style.display = tr.style.display === 'none' ? '' : 'none'; }; });
   Array.prototype.forEach.call(box.querySelectorAll('button[data-pv-regerar]'), function(b){ b.onclick = function(){
@@ -1956,10 +2072,8 @@ function desenhaRepasse(d){
   secP.innerHTML = 'Quanto cada um vai receber — ' + esc(d.mes_nome) + ' <small id="rp-pv-tot"></small>';
   host.appendChild(secP);
   var boxP = document.createElement('div'); boxP.innerHTML = '<p class="gv-vazio">Calculando…</p>'; host.appendChild(boxP);
-  var pagos = rpc('rep_admin_pagamentos', { p_senha_admin: adm.senha, p_competencia: d.competencia })   /* v3.7 — sem o SQL REP v2.6, vem null */
-    .then(function(r){ return (r && r.pagos) || {}; }).catch(function(){ return null; });
-  Promise.all([rpc('rep_admin_previa', { p_senha_admin: adm.senha, p_competencia: d.competencia }), pagos])
-    .then(function(v){ desenhaPreviaAdmin(v[0], boxP, $('#rp-pv-tot', secP), d, v[1]); })
+  rpc('rep_admin_previa', { p_senha_admin: adm.senha, p_competencia: d.competencia })
+    .then(function(pv){ desenhaPreviaAdmin(pv, boxP, $('#rp-pv-tot', secP), d); })
     .catch(function(e){ boxP.innerHTML = '<p class="gv-vazio">⚠️ ' + esc(humano(e)) + '</p>'; });
 
   // recibos do mês
@@ -2020,6 +2134,6 @@ function desenhaRepasse(d){
   }; });
 }
 
-function entrarConferencia(){ cf.guiaVisto = false; secretaria(); guiaAuto(); }   /* v3.5: entrada pela tela (o manual abre sozinho) */
+function entrarConferencia(){ cf.guiaVisto = false; cf.vista = null; secretaria(); guiaAuto(); }   /* v3.5: entrada pela tela (o manual abre sozinho); v3.8: cada entrada começa na tela padrão */
 return { loginLista: loginLista, entrarPeloLogin: entrarPeloLogin, sair: sair, secretaria: entrarConferencia, recarregarSec: recarregarSec, admin: admin, convite: convite };
 })();

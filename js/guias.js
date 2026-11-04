@@ -572,7 +572,7 @@ function desenharFaixa(){
   if(chips.length && (corteN || falhasN || profN || cadN || exclN)) chips.push({ sep:true });
   if(corteN) chips.push({ chave:"corte", rot:"Corte", n:corteN, dica:"Abrir Corte: consultas para apagar no Feegow", acao:function(){ irParaTela("corte"); } });
   if(falhasN) chips.push({ chave:"falhas", rot:"Falhas", n:falhasN, dica:"Abrir Falhas: mensagens de WhatsApp que não saíram", acao:function(){ irParaTela("falhas"); } });
-  if(profN) chips.push({ chave:"profissionais-cobrar", rot:"Profissionais", n:profN, dica:"Profissionais que não confirmaram a agenda: mandar a cobrança pelo WhatsApp", acao:function(){ PCOB.abrir(); } });
+  if(profN) chips.push({ chave:"profissionais-cobrar", rot:"Profissionais", n:profN, dica:(PCOB.sub ? PCOB.sub() : "Profissionais que não confirmaram a agenda: mandar a cobrança pelo WhatsApp"), acao:function(){ PCOB.abrir(); } });   /* v1.1: + cadastro incompleto */
   if(cadN) chips.push({ chave:"cadastros", rot:"Cadastros", n:cadN, dica:"Abrir Cadastros", acao:function(){ irParaTela("cad"); } });
   if(exclN) chips.push({ chave:"exclusoes", rot:"Exclusões", n:exclN, dica:"Abrir Exclusões", acao:function(){ irParaTela("excl"); } });
   moldura.alertas(chips);
@@ -862,7 +862,7 @@ function agPainel(){
   var profN = window.PCOB ? PCOB.n() : 0;                          /* PROF_COBRA v1.0 */
   if(corteN) sec.appendChild(cat("Corte", "Consultas para apagar no Feegow, na tela de Corte", corteN, TOM.r, function(){ irParaTela("corte"); }));
   if(falhasN) sec.appendChild(cat("Falhas", "Mensagens de WhatsApp que não saíram, na tela de Falhas", falhasN, TOM.r, function(){ irParaTela("falhas"); }));
-  if(profN) sec.appendChild(cat("Profissionais", "Cobrar pelo WhatsApp quem não confirmou a agenda", profN, TOM.r, function(){ PCOB.abrir(); }));
+  if(profN) sec.appendChild(cat("Profissionais", PCOB.sub ? PCOB.sub() : "Cobrar pelo WhatsApp quem não confirmou a agenda", profN, TOM.r, function(){ PCOB.abrir(); }));
   if(cadN)  sec.appendChild(cat("Cadastros", "Fichas com problema de cadastro, na tela de Cadastros", cadN, TOM.r, function(){ irParaTela("cad"); }));
   if(exclN) sec.appendChild(cat("Exclusões", "Séries apagadas inteiras no Feegow, na tela de Exclusões", exclN, TOM.r, function(){ irParaTela("excl"); }));
   if(!cats.length && !corteN && !falhasN && !profN && !cadN && !exclN) sec.appendChild(novo("div", "lista-vazio", estado._carregouEm ? "Nada para resolver agora." : "Buscando…"));

@@ -9,20 +9,29 @@
      Fim do mês: ele continua na lista, esperando, até confirmar.
    · Sem o "Enviei" em 40 min, o Telegram avisa no grupo (cob_regras 'prof_cobranca'), e de hora em hora.
    Sem o SQL PROF_COBRA v1.0 no banco, fica quieto (tenta de novo a cada 10 min).
+   v1.1 (04/11/2026): CADASTRO INCOMPLETO no mesmo quadrado — profissional sem celular ou sem e-mail,
+   ou sem acesso ao site. A secretária completa aqui (prof_cadastro_pendencias / prof_balcao_telefone /
+   prof_balcao_email / prof_balcao_criar_acesso, SQL PROF v3.8). Sem o SQL, a parte do cadastro fica quieta.
    ═══════════════════════════════════════════════════════════════════ */
 var PCOB = (function(){
 "use strict";
 var CFG = { url: "https://xcucoryngkkuszztpxyq.supabase.co", key: "sb_publishable_6ATQUvqBBRS5xx7jAYKlmw_2FwTuHG7" };
 var IC = { esq:"M14.5 6l-6 6 6 6", dir:"M9.5 6l6 6-6 6", ok:"M5.5 12.5l4.2 4.2 8.8-9.4",
-           wpp:"M20.5 11.6a8.5 8.5 0 0 1-12.6 7.4L3.5 20.5l1.5-4.3A8.5 8.5 0 1 1 20.5 11.6z" };
+           wpp:"M20.5 11.6a8.5 8.5 0 0 1-12.6 7.4L3.5 20.5l1.5-4.3A8.5 8.5 0 1 1 20.5 11.6z", mais:"M12 5v14M5 12h14" };
 var MESES = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
 var DIAS = ["dom","seg","ter","qua","qui","sex","sáb"];
 var MSG = {
   SESSAO_INVALIDA: "Sua sessão no Cortex caiu. Saia e entre de novo.",
   TROCAR_PIN: "Troque o seu PIN antes de continuar.",
-  COBRANCA_MUDOU: "Esta cobrança mudou: o profissional confirmou ou chegou a próxima hora da régua. A lista foi atualizada."
+  COBRANCA_MUDOU: "Esta cobrança mudou: o profissional confirmou ou chegou a próxima hora da régua. A lista foi atualizada.",
+  EMAIL_INVALIDO: "Esse e-mail não parece certo. Confira e tente de novo.",
+  EMAIL_EM_USO: "Esse e-mail já é a entrada de outro profissional.",
+  TELEFONE_INVALIDO: "Celular inválido: use DDD + número, só com os dígitos.",
+  JA_TEM_ACESSO: "Este profissional já tem acesso. A lista foi atualizada.",
+  SEM_ACESSO: "Este profissional ainda não tem acesso. A lista foi atualizada.",
+  PROFISSIONAL_NAO_EXISTE: "Este profissional não está ativo no Feegow."
 };
-var st = { itens: [], ate: 0, voando: false, denovo: false, geracao: 0, offSrv: 0, alertaMin: 40, pop: null, pinta: null };
+var st = { itens: [], cad: [], ate: 0, voando: false, denovo: false, geracao: 0, offSrv: 0, alertaMin: 40, pop: null, pinta: null };
 
 function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 function ico(d, tam, traco){
@@ -85,11 +94,14 @@ function esperando(){ return st.itens.filter(function(x){ return x.situacao !== 
 function ordenada(){ return aEnviar().concat(esperando()); }
 
 function carregar(forcar){
-  if(!logado()){ if(st.itens.length){ st.itens = []; avisa(); } return; }
+  if(!logado()){ if(st.itens.length || st.cad.length){ st.itens = []; st.cad = []; avisa(); } return; }
   if(st.voando){ if(forcar) st.denovo = true; return; }   /* já tem uma leitura no ar: lê de novo quando ela voltar */
   if(!forcar && Date.now() < st.ate) return;
   st.voando = true; st.denovo = false;
   var ger = st.geracao;
+  rpc("prof_cadastro_pendencias", { p_token: LAPI.token() })   /* v1.1: cadastro incompleto */
+    .then(function(r){ st.cad = (r && r.itens) || []; avisa(); })
+    .catch(function(){ if(st.cad.length){ st.cad = []; avisa(); } });
   rpc("prof_cobranca_lista", { p_token: LAPI.token() })
     .then(function(d){
       if(ger !== st.geracao){ st.denovo = true; return; }   /* saiu um "Enviei" enquanto lia: esta leitura já é velha */
@@ -117,7 +129,7 @@ function abrir(chave){
   var vista = { item: chave || null };
   var P = moldura.pop({ largura: "660px", titulo: "Cobrança dos profissionais", aoFechar: function(){ st.pop = null; st.pinta = null; } });
   st.pop = P;
-  st.pinta = function(){ if(vista.item) pintaItem(P, vista); else pintaLista(P, vista); };
+  st.pinta = function(){ if(vista.cad != null) pintaCad(P, vista); else if(vista.item) pintaItem(P, vista); else pintaLista(P, vista); };
   st.pinta();
   carregar(true);
 }
@@ -134,12 +146,13 @@ function linhaHtml(x){
 }
 
 function pintaLista(P, vista){
-  var A = aEnviar(), E = esperando();
+  var A = aEnviar(), E = esperando(), C = st.cad;
   P.corpo.innerHTML = "";
   P.corpo.appendChild(novo("div", "pp-cab",
-    '<span class="pp-alerta">' + (A.length ? (A.length === 1 ? "1 mensagem para mandar" : A.length + " mensagens para mandar") : "Nada para mandar agora") + '</span>' +
-    '<h2>Profissionais sem confirmar a agenda</h2>'));
-  P.corpo.appendChild(novo("div", "pp-caixa",
+    '<span class="pp-alerta">' + (A.length ? (A.length === 1 ? "1 mensagem para mandar" : A.length + " mensagens para mandar")
+                                           : C.length ? (C.length === 1 ? "1 cadastro para completar" : C.length + " cadastros para completar") : "Nada para mandar agora") + '</span>' +
+    '<h2>' + (A.length || E.length || !C.length ? "Profissionais sem confirmar a agenda" : "Cadastro dos profissionais") + '</h2>'));
+  if(A.length || E.length) P.corpo.appendChild(novo("div", "pp-caixa",
     '<span class="pp-txt">Abra cada profissional, mande a <b>mensagem pronta</b> pelo WhatsApp e toque em <b>Enviei</b>.</span>' +
     '<span class="pp-l2">Sem o Enviei em ' + st.alertaMin + ' minutos, a Administração é avisada no Telegram, e de novo a cada hora.</span>'));
   function grupo(rot, L){
@@ -156,7 +169,18 @@ function pintaLista(P, vista){
   }
   if(A.length) grupo("Mandar agora", A);
   if(E.length) grupo("Fim do mês: mensagem enviada, esperando o profissional confirmar", E);
-  if(!A.length && !E.length) P.corpo.appendChild(novo("div", "lista-vazio", '<b class="ok">Ninguém para cobrar agora</b><br>Quando chegar a hora de uma cobrança, o quadrado Profissionais aparece no alto da tela.'));
+  if(C.length){   /* v1.1 */
+    var bc = novo("div", "pp-bloco");
+    bc.appendChild(novo("span", "pp-rot", "Completar o cadastro: celular e e-mail"));
+    var ulc = novo("div", "pp-lista");
+    C.forEach(function(x){
+      ulc.appendChild(botao("pp-linha", '<span class="w">' + ico(IC.mais, 14, 2.2) + '</span><span class="q"><b>' + esc(x.nome) + '</b><small>' +
+        esc(cadFalta(x)) + '</small></span>' + ico(IC.dir, 14, 2), function(){ vista.cad = x.profissional_id; vista.cadErro = null; vista.cadOk = null; st.pinta(); }));
+    });
+    bc.appendChild(ulc);
+    P.corpo.appendChild(bc);
+  }
+  if(!A.length && !E.length && !C.length) P.corpo.appendChild(novo("div", "lista-vazio", '<b class="ok">Ninguém para cobrar agora</b><br>Quando chegar a hora de uma cobrança, o quadrado Profissionais aparece no alto da tela.'));
   P.rodape.hidden = false; P.rodape.innerHTML = ""; P.rodape.classList.add("fim");
   P.rodape.appendChild(botao("btn btn-s", "Fechar", function(){ P.fechar(); }));
 }
@@ -248,6 +272,86 @@ function pintaItem(P, vista){
   P.rodape.appendChild(dirs);
 }
 
+/* ── v1.1: cadastro incompleto ── */
+function cadFalta(x){
+  if(!x.tem_acesso) return "Sem acesso ao site dos profissionais: falta e-mail e celular";
+  return "Falta " + [x.falta_telefone ? "o celular" : null, x.falta_email ? "o e-mail" : null].filter(Boolean).join(" e ");
+}
+function pintaCad(P, vista){
+  var x = st.cad.filter(function(y){ return y.profissional_id === vista.cad; })[0];
+  if(!x && !vista.cadOk){ vista.cad = null; pintaLista(P, vista); return; }
+  P.corpo.innerHTML = "";
+  P.rodape.hidden = false; P.rodape.innerHTML = ""; P.rodape.classList.add("fim");
+  var volta = botao("btn btn-s", ico(IC.esq, 16, 2.2) + "Lista", function(){ vista.cad = null; vista.cadOk = null; st.pinta(); });
+  if(vista.cadOk){   /* acesso criado: mostra o recado pronto para o profissional */
+    var ok = vista.cadOk;
+    var txt = "Olá, " + primeiroNome(ok.nome).charAt(0) + primeiroNome(ok.nome).slice(1).toLowerCase() + "! Seu acesso ao site dos profissionais da clínica está pronto: " +
+              "profissionais.levsoul.com.br\nEntre com o e-mail " + ok.email + " e a senha " + ok.senha + ". No primeiro acesso você cria a sua própria senha.";
+    P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-quando">Cadastro do profissional</span><h2>' + esc(ok.nome) + '</h2>'));
+    P.corpo.appendChild(novo("div", "pp-caixa", '<span class="pp-tag" style="color:#248A3D">Acesso criado</span>' +
+      '<span class="pp-txt">Mande a mensagem abaixo para o profissional pelo WhatsApp.</span>'));
+    var bm = novo("div", "pp-bloco"), cab = novo("div", "pp-msg-cab", '<span class="pp-rot">Mensagem pronta</span>'), ac = novo("span", "falha-acoes");
+    var bcp = botao("btn btn-s btn-sm", "Copiar", function(){ copia(txt, bcp, "Copiada", "Copiar"); });
+    ac.appendChild(bcp);
+    var tel = normTel(ok.telefone);
+    if(tel){ var a = novo("a", "btn btn-p btn-sm falha-wpp", ico(IC.wpp, 15, 2) + "Abrir no WhatsApp"); a.href = linkWpp(tel, txt); a.target = "whatsapp_cmjf"; a.rel = "noopener"; ac.appendChild(a); }
+    cab.appendChild(ac); bm.appendChild(cab); bm.appendChild(novo("div", "pp-msg", esc(txt)));
+    P.corpo.appendChild(bm);
+    P.rodape.appendChild(volta);
+    return;
+  }
+  P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-quando">Cadastro do profissional</span><h2>' + esc(x.nome) + '</h2>' +
+    '<span class="pp-l1">' + esc(cadFalta(x)) + '</span>'));
+  P.corpo.appendChild(novo("div", "pp-caixa", '<span class="pp-txt">' + (x.tem_acesso
+    ? 'Peça ao profissional e preencha aqui. Sem o <b>celular</b> ele não recebe os avisos da conferência; sem o <b>e-mail</b> ele não consegue entrar no site.'
+    : 'Peça ao profissional o <b>e-mail</b> e o <b>celular</b> e preencha aqui. O acesso é criado na hora, com a senha <b>0000</b>; ele cria a própria senha no primeiro acesso.') + '</span>'));
+  var form = novo("div", "pp-bloco"), campos = {};
+  function campo(k, rot, tipo, ph){
+    var lb = novo("label", "fg", '<span class="fl">' + esc(rot) + '</span>');
+    var inp = novo("input", "fc"); inp.type = tipo; inp.placeholder = ph; inp.autocomplete = "off";
+    lb.appendChild(inp); form.appendChild(lb); campos[k] = inp;
+  }
+  if(!x.tem_acesso || x.falta_telefone) campo("tel", "Celular com DDD", "tel", "(62) 99999-9999");
+  if(!x.tem_acesso || x.falta_email) campo("email", "E-mail", "email", "nome@exemplo.com");
+  if(x.tem_acesso && !x.falta_telefone && x.telefone) form.appendChild(novo("span", "pp-l2", "Celular: " + esc(foneBonito(normTel(x.telefone) || x.telefone))));
+  if(x.tem_acesso && !x.falta_email && x.email) form.appendChild(novo("span", "pp-l2", "E-mail: " + esc(x.email)));
+  if(vista.cadErro) form.appendChild(novo("p", "pp-l2", '<b style="color:#D70015">' + esc(vista.cadErro) + '</b>'));
+  P.corpo.appendChild(form);
+  var bs = botao("btn btn-p", x.tem_acesso ? "Salvar" : "Criar o acesso", function(){
+    var tel = campos.tel ? campos.tel.value.trim() : null, em = campos.email ? campos.email.value.trim() : null;
+    if(campos.tel && !tel){ vista.cadErro = "Preencha o celular."; st.pinta(); return; }
+    if(campos.email && !em){ vista.cadErro = "Preencha o e-mail."; st.pinta(); return; }
+    bs.disabled = true; bs.textContent = "Salvando…";
+    var tk = LAPI.token(), p;
+    if(!x.tem_acesso){
+      p = rpc("prof_balcao_criar_acesso", { p_senha: tk, p_profissional_id: x.profissional_id, p_email: em, p_telefone: tel })
+        .then(function(r){ vista.cadOk = { nome: r.nome || x.nome, email: r.email, telefone: r.telefone, senha: r.senha || "0000" }; });
+    } else {
+      p = Promise.resolve();
+      if(campos.tel) p = p.then(function(){ return rpc("prof_balcao_telefone", { p_senha: tk, p_profissional_id: x.profissional_id, p_telefone: tel }); })
+                          .then(function(r){ x.falta_telefone = false; x.telefone = r && r.telefone; });
+      if(campos.email) p = p.then(function(){ return rpc("prof_balcao_email", { p_senha: tk, p_profissional_id: x.profissional_id, p_email: em }); })
+                            .then(function(r){ x.falta_email = false; x.email = r && r.email; });
+    }
+    p.then(function(){
+      st.cad = st.cad.filter(function(y){ return y !== x; });
+      if(!vista.cadOk) vista.cad = null;
+      vista.cadErro = null; avisa(); st.pinta(); carregar(true);
+    }).catch(function(e){
+      if(e && (e.message === "JA_TEM_ACESSO" || e.message === "SEM_ACESSO")) carregar(true);
+      vista.cadErro = humano(e); st.pinta();
+    });
+  });
+  P.rodape.appendChild(volta);
+  P.rodape.appendChild(bs);
+}
+function sub(){
+  var c = st.cad.length, n = st.itens.length;
+  if(c && !n) return "Completar celular ou e-mail de profissional";
+  if(c && n) return "Cobrar quem não confirmou a agenda e completar cadastros";
+  return "Cobrar pelo WhatsApp quem não confirmou a agenda";
+}
+
 function copia(txt, el, ok, base){
   (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject())
     .then(function(){ el.textContent = ok; setTimeout(function(){ el.textContent = base; }, 2200); },
@@ -288,7 +392,9 @@ setInterval(function(){ carregar(false); }, 15 * 1000);
 document.addEventListener("visibilitychange", function(){ if(!document.hidden) carregar(true); });
 
 return {
-  n: function(){ return st.itens.length; },
+  n: function(){ return st.itens.length + st.cad.length; },
+  nCad: function(){ return st.cad.length; },
+  sub: sub,
   nEnviar: function(){ return aEnviar().length; },
   abrir: abrir,
   carregar: carregar

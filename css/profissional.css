@@ -37,9 +37,6 @@
 .rp-pv tr.rp-conta td{background:#F7F9FC;font-size:12.5px;padding-top:4px;padding-bottom:8px}
 .rp-pv .rp-reg{display:block;font-size:11.5px;color:#777;margin-top:2px}
 .rp-pv .rp-sub{display:block;font-size:11.5px;color:#777}
-.rp-pv label.rp-pago{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
-.rp-pv label.rp-pago input{width:18px;height:18px;margin:0;cursor:pointer;accent-color:var(--ok,#248A3D)}
-.rp-pv tr.rp-pago-sim>td{background:var(--ok-fundo,rgba(36,138,61,.12))}
 #prof-view .pf-semanas{display:none}
 #prof-view .pf-resumo{color:#666;font-size:15px;margin:14px 0 0}
 #prof-view .pf-dia{margin-top:18px}
@@ -180,3 +177,47 @@
 .cf-cons-l .s.falta{color:var(--vermelho);background:var(--vermelho-suave)}
 .cf-cons-l .s.neutro{color:var(--cinza);background:var(--preenche)}
 .gd-marco.ok b{color:var(--verde)}
+/* v3.8 — abas da Conferência (Pagamentos · Agenda da semana · Fechamento do mês) */
+.cf-abas{display:inline-flex;flex-wrap:wrap;gap:2px;padding:3px;background:var(--preenche);margin:0 0 16px}
+.cf-abas>button{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 16px;border:0;background:transparent;font:500 14.5px var(--fn);color:var(--tinta);cursor:pointer;white-space:nowrap}
+.cf-abas>button.on{background:var(--branco);box-shadow:0 1px 3px rgba(0,0,0,.12);font-weight:600}
+.cf-abas .n{min-width:20px;height:20px;padding:0 6px;background:var(--vermelho);color:#fff;font:700 12px/20px var(--fn);text-align:center}
+/* v3.8 — 💵 Pagamentos (administrador): letra grande, três blocos, um botão por linha */
+.pgt{max-width:860px}
+.pgt-topo{display:flex;align-items:center;gap:14px;margin:0 0 16px}
+.pgt-topo h2{margin:0;font:700 26px/1.2 var(--fn);color:var(--tinta);letter-spacing:-.3px}
+.pgt-seta{flex:none;width:40px;height:40px;border:0;background:var(--preenche);color:var(--tinta);font:600 24px/1 var(--fn);cursor:pointer}
+.pgt-seta:hover{background:var(--preenche2)}
+.pgt-seta:disabled{opacity:.3;cursor:default}
+.pgt-resumo{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0 0 22px}
+.pgt-card{background:var(--branco);border:1px solid var(--linha);border-top:4px solid var(--cinza3);padding:14px 16px;display:flex;flex-direction:column;gap:2px}
+.pgt-card small{font:600 13px var(--fn);color:var(--cinza);text-transform:uppercase;letter-spacing:.4px}
+.pgt-card b{font:700 28px/1.15 var(--fn);color:var(--tinta);font-variant-numeric:tabular-nums}
+.pgt-card span{font-size:14px;color:var(--cinza)}
+.pgt-card.vermelho{border-top-color:var(--vermelho)}.pgt-card.vermelho b{color:var(--vermelho)}
+.pgt-card.verde{border-top-color:var(--verde)}.pgt-card.verde b{color:var(--verde)}
+.pgt-sec{background:var(--branco);border:1px solid var(--linha);margin:0 0 16px}
+.pgt-sec h3{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin:0;padding:14px 16px;border-bottom:1px solid var(--linha);font:700 19px var(--fn);color:var(--tinta)}
+.pgt-sec h3 small{flex-basis:100%;font:500 15px var(--fn);color:var(--cinza)}
+.pgt-num{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;background:var(--tinta);color:#fff;font:700 14px var(--fn)}
+.pgt-sec.pagar .pgt-num{background:var(--vermelho)}.pgt-sec.pagos .pgt-num{background:var(--verde)}.pgt-sec.espera .pgt-num{background:var(--cinza3)}
+.pgt-linha{display:flex;align-items:center;gap:14px;padding:14px 16px;border-bottom:1px solid var(--linha)}
+.pgt-linha:last-child{border-bottom:0}
+.pgt-nome{flex:1;min-width:0;font:600 17px/1.3 var(--fn);color:var(--tinta)}
+.pgt-nome small{display:block;font:500 13.5px var(--fn);color:var(--cinza);margin-top:2px}
+.pgt-sec.pagos .pgt-nome small{color:var(--verde);font-weight:600}
+.pgt-valor{flex:none;font:700 20px var(--fn);color:var(--tinta);font-variant-numeric:tabular-nums}
+.pgt-btn{flex:none;height:46px;padding:0 20px;border:0;background:var(--verde);color:#fff;font:700 16px var(--fn);cursor:pointer}
+.pgt-btn:hover{filter:brightness(1.08)}
+.pgt-desfaz{flex:none;border:0;background:transparent;color:var(--cinza);font:500 13.5px var(--fn);text-decoration:underline;cursor:pointer;padding:8px}
+.pgt-st{flex:none;font:500 14.5px var(--fn);color:var(--cinza)}
+.pgt-sec.espera .pgt-nome{color:var(--cinza);font-weight:500}
+.pgt-nada{margin:0;padding:16px;font-size:16px;color:var(--cinza)}
+.pgt-vazio{background:var(--branco);border:1px solid var(--linha);padding:22px 18px;font-size:16px;line-height:1.5;color:var(--cinza)}
+.pgt-vazio b{color:var(--tinta)}
+@media (max-width:640px){
+  .pgt-resumo{grid-template-columns:1fr}
+  .pgt-linha{flex-wrap:wrap}
+  .pgt-nome{flex-basis:100%}
+  .pgt-btn{flex:1}
+}
