@@ -1,0 +1,516 @@
+/* ═══════════════════════════════════════════════════════════════════
+   FIN v3.0 — Financeiro da Administração (05/11/2026)
+   Abas: Contas do mês e Contas fixas (Marinalva e dono); Dívidas e Projeção (só o dono).
+   Tudo pelas funções fin_* do Supabase, com a sessão do PIN. O servidor decide o que cada
+   um recebe: no acesso da Marinalva as parcelas vêm sem "nº X de Y", sem saldo devedor e
+   sem a observação do dono; as funções de dívidas e projeção recusam a sessão dela.
+   Conta "no cartão": aparece no mês, mas fica fora dos totais (já está na fatura do cartão).
+   ═══════════════════════════════════════════════════════════════════ */
+var CONTAS = (function () {
+  'use strict';
+
+  var TZ = 'America/Sao_Paulo';
+  var st = { aba: 'mes', comp: null, filtro: 'aberto', mes: null, mesErro: '', fixas: null, fixasErro: '', cats: null,
+             dividas: null, divErro: '', proj: null, projErro: '', instalado: true, pedidoMes: 0 };
+
+  var MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  var MES3 = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  var BASES = [['informado', 'Valor informado'], ['ultimo', 'Último valor pago'], ['media3', 'Média de 3 meses'], ['media6', 'Média de 6 meses']];
+  var TIPOS = [['imposto_parcelado', 'Imposto parcelado'], ['emprestimo', 'Empréstimo'], ['financiamento', 'Financiamento'], ['outro', 'Outro']];
+  var STATUS = { paga: ['Paga', 'ok'], vencida: ['Vencida', 'pend'], a_vencer: ['A vencer', 'espera'], no_cartao: ['No cartão', 'espera'], sem_data: ['Sem data', 'espera'] };
+
+  /* ── utilidades ── */
+  function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+  function bt(cls, html, fn) { var b = el('button', cls, html); b.type = 'button'; if (fn) b.addEventListener('click', fn); return b; }
+  function esc(s) { var d = document.createElement('span'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+  function svg(d, t, w) { return window.moldura ? moldura.svg(d, t, w) : ''; }
+  function brl(v) { return v == null ? '—' : 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function ehDono() { return typeof CU !== 'undefined' && !!CU && CU.dono === true; }
+  function avisa(msg) { if (typeof toast === 'function') toast(msg, 'ok'); }
+  function resumo(t) { if (window.moldura) moldura.resumo('contas', t); }
+  function raiz() {
+    var s = document.getElementById('s-contas'); if (!s) return null;
+    var r = s.querySelector(':scope > .ct-raiz');
+    if (!r) { r = el('div', 'ct-raiz'); s.appendChild(r); }
+    return r;
+  }
+  function naTela() { var s = document.getElementById('s-contas'); return !!(s && s.classList.contains('active')); }
+  function hojeISO() { return new Date().toLocaleDateString('en-CA', { timeZone: TZ }); }
+  function compAtual() { return hojeISO().slice(0, 7) + '-01'; }
+  function somaMes(comp, n) {
+    var a = Number(comp.slice(0, 4)), m = Number(comp.slice(5, 7)) - 1 + n;
+    a += Math.floor(m / 12); m = ((m % 12) + 12) % 12;
+    return a + '-' + String(m + 1).padStart(2, '0') + '-01';
+  }
+  function nomeMes(comp) { var m = Number(comp.slice(5, 7)) - 1; return MESES[m].charAt(0).toUpperCase() + MESES[m].slice(1) + ' de ' + comp.slice(0, 4); }
+  function mesCurto(comp) { return MES3[Number(comp.slice(5, 7)) - 1] + '/' + comp.slice(2, 4); }
+  function ddmm(iso) { var m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[3] + '/' + m[2] : '—'; }
+  function dia(iso) { var m = String(iso || '').match(/^\d{4}-\d{2}-(\d{2})/); return m ? m[1] : '—'; }
+  function rotulo(lista, cod) { for (var i = 0; i < lista.length; i++) if (lista[i][0] === cod) return lista[i][1]; return cod || ''; }
+  function msgErro(er) {
+    if (er && er.status === 404) { st.instalado = false; return 'O Financeiro ainda não foi instalado no servidor.'; }
+    return (er && er.message) || String(er);
+  }
+  /* "1.234,56", "1234,56" ou "1234.56" → 1234.56; vazio → null; inválido → NaN */
+  function numero(txt) {
+    var s = String(txt == null ? '' : txt).trim().replace(/\s|R\$/g, '');
+    if (!s) return null;
+    if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');
+    if (!/^\d+(\.\d{1,2})?$/.test(s)) return NaN;
+    return Math.round(Number(s) * 100) / 100;
+  }
+  function num2(v) { return v == null ? '' : Number(v).toFixed(2).replace('.', ','); }
+  function inteiro(txt, min, max) {
+    var s = String(txt == null ? '' : txt).trim(); if (!s) return null;
+    if (!/^\d+$/.test(s)) return NaN;
+    var n = Number(s); return n < min || n > max ? NaN : n;
+  }
+  function rodape(P, botoes) { P.rodape.hidden = false; P.rodape.classList.add('fim'); botoes.forEach(function (b) { P.rodape.appendChild(b); }); }
+  function opcoes(lista, atual) {
+    return lista.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === atual ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('');
+  }
+  function campo(rot, html, cls) { return '<label class="ct-campo' + (cls ? ' ' + cls : '') + '"><span>' + rot + '</span>' + html + '</label>'; }
+  function aviso(P) { var a = el('p', 'ct-erro'); a.hidden = true; a.setAttribute('role', 'alert'); P.corpo.appendChild(a); return a; }
+
+  /* ── abrir / sair ── */
+  function abrir() {
+    if (!st.comp) st.comp = compAtual();
+    if ((st.aba === 'dividas' || st.aba === 'projecao') && !ehDono()) st.aba = 'mes';
+    desenhar();
+    carregarAba();
+  }
+  function sair() {
+    st = { aba: 'mes', comp: null, filtro: 'aberto', mes: null, mesErro: '', fixas: null, fixasErro: '', cats: null,
+           dividas: null, divErro: '', proj: null, projErro: '', instalado: true, pedidoMes: 0 };
+    var r = raiz(); if (r) r.innerHTML = '';
+  }
+  function carregarAba() {
+    if (st.aba === 'mes') carregarMes();
+    else if (st.aba === 'fixas') carregarFixas();
+    else if (st.aba === 'dividas') carregarDividas();
+    else if (st.aba === 'projecao') carregarProj();
+  }
+  function trocarAba(a) { st.aba = a; desenhar(); carregarAba(); }
+
+  function carregarMes() {
+    if (!window.LAPI || !LAPI.token()) return;
+    var meu = ++st.pedidoMes, comp = st.comp;
+    LAPI.finContasMes(comp).then(function (j) {
+      if (meu !== st.pedidoMes) return;
+      st.mes = j; st.mesErro = ''; if (naTela()) desenhar();
+    }, function (er) { if (meu !== st.pedidoMes) return; st.mesErro = msgErro(er); if (naTela()) desenhar(); });
+  }
+  function carregarCats() {
+    if (st.cats) return Promise.resolve(st.cats);
+    return LAPI.finCategorias().then(function (c) { st.cats = c; return c; });
+  }
+  function carregarFixas() {
+    if (!window.LAPI || !LAPI.token()) return;
+    Promise.all([LAPI.finContasFixas(), carregarCats()]).then(function (r) {
+      st.fixas = r[0]; st.fixasErro = ''; if (naTela()) desenhar();
+    }, function (er) { st.fixasErro = msgErro(er); if (naTela()) desenhar(); });
+  }
+  function carregarDividas() {
+    if (!ehDono() || !window.LAPI || !LAPI.token()) return;
+    LAPI.finDividas().then(function (d) { st.dividas = d; st.divErro = ''; if (naTela()) desenhar(); },
+      function (er) { st.divErro = msgErro(er); if (naTela()) desenhar(); });
+  }
+  function carregarProj() {
+    if (!ehDono() || !window.LAPI || !LAPI.token()) return;
+    LAPI.finProjecao(12).then(function (p) { st.proj = p; st.projErro = ''; if (naTela()) desenhar(); },
+      function (er) { st.projErro = msgErro(er); if (naTela()) desenhar(); });
+  }
+
+  /* ── tela ── */
+  function desenhar() {
+    var r = raiz(); if (!r) return;
+    r.innerHTML = '';
+    if (!st.instalado) { resumo(''); r.appendChild(el('div', 'lista-vazio', 'O Financeiro ainda não foi instalado no servidor.')); return; }
+    var abas = [['mes', 'Contas do mês'], ['fixas', 'Contas fixas']];
+    if (ehDono()) abas.push(['dividas', 'Dívidas'], ['projecao', 'Projeção']);
+    var barra = el('div', 'seg ct-abas'); barra.setAttribute('role', 'tablist');
+    abas.forEach(function (a) {
+      var b = bt(a[0] === st.aba ? 'on' : '', esc(a[1]), function () { if (st.aba !== a[0]) trocarAba(a[0]); });
+      b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', a[0] === st.aba ? 'true' : 'false');
+      barra.appendChild(b);
+    });
+    r.appendChild(barra);
+    if (st.aba === 'mes') telaMes(r);
+    else if (st.aba === 'fixas') telaFixas(r);
+    else if (st.aba === 'dividas') telaDividas(r);
+    else telaProj(r);
+  }
+
+  /* ═══ Contas do mês ═══ */
+  function emAberto(c) { return c.status === 'a_vencer' || c.status === 'vencida' || c.status === 'sem_data'; }
+  function passa(c) {
+    if (st.filtro === 'aberto') return emAberto(c);
+    if (st.filtro === 'pagas') return c.status === 'paga';
+    if (st.filtro === 'cartao') return c.status === 'no_cartao';
+    return true;
+  }
+  function telaMes(r) {
+    var j = st.mes, contas = (j && j.competencia === st.comp) ? (j.contas || []) : null;
+    var wrap = el('div', 'duas-col');
+    var sec = el('section', 'lista ct-lista'); sec.setAttribute('aria-label', 'Contas de ' + nomeMes(st.comp));
+    var topo = el('div', 'lista-topo');
+    var nav = el('div', 'ct-mesnav');
+    nav.appendChild(bt('ct-seta', svg('M14.5 6l-6 6 6 6', 18, 2), function () { st.comp = somaMes(st.comp, -1); st.mes = null; desenhar(); carregarMes(); }));
+    nav.appendChild(el('b', 'ct-mes', esc(nomeMes(st.comp))));
+    nav.appendChild(bt('ct-seta', svg('M9.5 6l6 6-6 6', 18, 2), function () { st.comp = somaMes(st.comp, 1); st.mes = null; desenhar(); carregarMes(); }));
+    nav.querySelectorAll('.ct-seta')[0].setAttribute('aria-label', 'Mês anterior');
+    nav.querySelectorAll('.ct-seta')[1].setAttribute('aria-label', 'Próximo mês');
+    topo.appendChild(nav);
+    var cont = { aberto: 0, pagas: 0, cartao: 0, tudo: 0 };
+    (contas || []).forEach(function (c) {
+      cont.tudo++; if (emAberto(c)) cont.aberto++; if (c.status === 'paga') cont.pagas++; if (c.status === 'no_cartao') cont.cartao++;
+    });
+    var seg = el('div', 'seg');
+    [['aberto', 'Em aberto'], ['pagas', 'Pagas'], ['cartao', 'No cartão'], ['tudo', 'Tudo']].forEach(function (f) {
+      seg.appendChild(bt(st.filtro === f[0] ? 'on' : '', esc(f[1]) + (contas ? ' <span class="n">' + cont[f[0]] + '</span>' : ''),
+        function () { st.filtro = f[0]; desenhar(); }));
+    });
+    topo.appendChild(seg);
+    sec.appendChild(topo);
+    var corpo = el('div', 'lista-corpo');
+    if (st.mesErro) corpo.appendChild(el('div', 'lista-vazio erro', esc(st.mesErro)));
+    else if (!contas) corpo.appendChild(el('div', 'lista-vazio', 'Carregando…'));
+    else {
+      var vis = contas.filter(passa);
+      if (!vis.length) corpo.appendChild(el('div', 'lista-vazio', st.filtro === 'aberto' ? 'Nada em aberto neste mês.' : 'Nenhuma conta aqui.'));
+      vis.forEach(function (c) { corpo.appendChild(linhaConta(c)); });
+    }
+    sec.appendChild(corpo);
+    wrap.appendChild(sec);
+    wrap.appendChild(ladoMes(contas));
+    r.appendChild(wrap);
+  }
+  function linhaConta(c) {
+    var s = STATUS[c.status] || [c.status, 'espera'];
+    /* parcela de dívida: no acesso do dono, "parcela X de Y" no lugar da categoria (cabe no celular); no da Marinalva vem sem o número */
+    var meta = (c.parcela && c.parcelas_total) ? ['parcela ' + c.parcela + ' de ' + c.parcelas_total] : [c.categoria_nome];
+    if (c.status === 'paga' && c.pago_em) meta.push('paga em ' + ddmm(c.pago_em));
+    if (c.obs_dono) meta.push('com observação sua');
+    var v = c.status === 'paga' ? c.valor_pago : c.valor_previsto;
+    var l = bt('linha ct-l' + (c.status === 'no_cartao' ? ' cartao' : ''), '', function () { popConta(c); });
+    l.innerHTML = '<span class="h">' + esc(c.vencimento ? dia(c.vencimento) : '—') + '</span>' +
+      '<span class="q"><span class="nm">' + esc(c.nome) + '</span><span class="mt">' + esc(meta.join(' · ')) + '</span></span>' +
+      '<span class="dir"><span class="ct-v">' + esc(v == null ? 'sem valor' : brl(v)) + '</span><span class="ct-st ' + s[1] + '">' + esc(s[0]) + '</span></span>';
+    return l;
+  }
+  function ladoMes(contas) {
+    var l = el('div', 'lado');
+    var p = el('section', 'painel');
+    var falta = 0, pago = 0, previsto = 0, venc = 0, semValor = 0, cartao = 0;
+    (contas || []).forEach(function (c) {
+      if (c.status === 'no_cartao') { cartao += Number(c.valor_previsto || 0); return; }
+      if (c.status === 'paga') { pago += Number(c.valor_pago || 0); previsto += Number(c.valor_previsto || c.valor_pago || 0); return; }
+      previsto += Number(c.valor_previsto || 0);
+      falta += Number(c.valor_previsto || 0);
+      if (c.status === 'vencida') venc++;
+      if (c.valor_previsto == null) semValor++;
+    });
+    p.appendChild(el('div', 'lj-grande com-linha', '<h2 class="lj-grande-rot">Falta pagar em ' + esc(MESES[Number(st.comp.slice(5, 7)) - 1]) + '</h2>' +
+      '<span class="lj-grande-n">' + esc(contas ? brl(falta) : '—') + '</span>' +
+      (contas && semValor ? '<span class="lj-grande-l2">' + semValor + (semValor === 1 ? ' conta ainda sem valor' : ' contas ainda sem valor') + '</span>' : '')));
+    var k = el('div', 'lj-kpis ct-kpis');
+    k.innerHTML = '<div><span>Previsto</span><b>' + esc(contas ? brl(previsto) : '—') + '</b></div>' +
+      '<div><span>Pago</span><b>' + esc(contas ? brl(pago) : '—') + '</b></div>' +
+      '<div><span>Vencidas</span><b class="' + (venc ? 'ct-vermelho' : '') + '">' + (contas ? venc : '—') + '</b></div>';
+    p.appendChild(el('div', 'lj-pad', '')).appendChild(k);
+    if (contas && cartao) p.appendChild(el('p', 'ct-nota ct-pad', 'No cartão: ' + esc(brl(cartao)) + '. Já está dentro da fatura do cartão, por isso fica fora da conta acima.'));
+    l.appendChild(p);
+    var prox = (contas || []).filter(function (c) { return emAberto(c) && c.vencimento && c.vencimento >= hojeISO(); }).slice(0, 5);
+    if (contas && st.comp === compAtual()) {
+      var n = el('section', 'painel');
+      n.appendChild(el('div', 'painel-cab', '<h2>Próximos vencimentos</h2>'));
+      if (!prox.length) n.appendChild(el('div', 'lista-vazio', 'Nada a vencer no resto do mês.'));
+      prox.forEach(function (c) {
+        var b = bt('ct-prox', '<span class="d">' + esc(ddmm(c.vencimento)) + '</span><span class="t">' + esc(c.nome) + '</span><span class="v">' +
+          esc(c.valor_previsto == null ? 'sem valor' : brl(c.valor_previsto)) + '</span>', function () { popConta(c); });
+        n.appendChild(b);
+      });
+      l.appendChild(n);
+    }
+    var mes = st.comp === compAtual() ? 'deste mês' : 'de ' + MESES[Number(st.comp.slice(5, 7)) - 1];
+    resumo(contas ? (falta ? 'Falta pagar ' + brl(falta) + ' ' + mes : 'Tudo pago ' + mes) + (venc ? ' · ' + venc + (venc === 1 ? ' vencida' : ' vencidas') : '') : '');
+    return l;
+  }
+
+  function popConta(c) {
+    if (!window.moldura) return;
+    var P = moldura.pop({ largura: '520px', titulo: 'Financeiro', classe: 'ct-pop' });
+    var s = STATUS[c.status] || [c.status, 'espera'];
+    P.corpo.appendChild(el('div', 'pp-cab', '<span class="ct-st ' + s[1] + '">' + esc(s[0]) + '</span><h2>' + esc(c.nome) + '</h2>' +
+      '<span class="pp-sub">' + esc(c.categoria_nome + (c.vencimento ? ' · vence em ' + ddmm(c.vencimento) : ' · sem data de vencimento')) + '</span>'));
+    var cx = el('div', 'ct-info');
+    var linhas = [['Previsto', c.valor_previsto == null ? 'sem valor' : brl(c.valor_previsto)]];
+    if (c.parcela && c.parcelas_total) linhas.push(['Parcela', c.parcela + ' de ' + c.parcelas_total]);
+    if (c.status === 'paga') {
+      linhas.push(['Pago', brl(c.valor_pago)]);
+      linhas.push(['Pago em', ddmm(c.pago_em) + (c.baixa_por ? ' · baixa de ' + c.baixa_por : '')]);
+    }
+    if (c.obs) linhas.push(['Observação', c.obs]);
+    cx.innerHTML = linhas.map(function (x) { return '<div><span>' + esc(x[0]) + '</span><b>' + esc(x[1]) + '</b></div>'; }).join('');
+    P.corpo.appendChild(cx);
+    if (c.obs_dono) P.corpo.appendChild(el('div', 'ct-dono', '<span>Só você vê</span><p>' + esc(c.obs_dono) + '</p>'));
+    var av;
+    if (c.status === 'paga') {
+      av = aviso(P);
+      var desf = bt('btn btn-s', 'Desfazer a baixa', function () {
+        desf.disabled = true;
+        LAPI.finBaixa(c.id, null, null, null, true).then(function () { P.fechar(); avisa('Baixa desfeita.'); carregarMes(); },
+          function (er) { desf.disabled = false; av.textContent = msgErro(er); av.hidden = false; });
+      });
+      rodape(P, [bt('btn btn-s', 'Fechar', function () { P.fechar(); }), desf]);
+      return;
+    }
+    if (c.status === 'no_cartao') {
+      P.corpo.appendChild(el('p', 'ct-nota', 'Esta conta é cobrada no cartão. Ela já entra na fatura do cartão, então não precisa dar baixa aqui.'));
+      rodape(P, [bt('btn btn-s', 'Fechar', function () { P.fechar(); })]);
+      return;
+    }
+    var f = el('div', 'ct-form');
+    f.innerHTML = '<h3 class="ct-sub">Marcar como paga</h3>' +
+      '<div class="ct-dupla">' + campo('Valor pago', '<input type="text" class="fc" id="ct-b-valor" inputmode="decimal" autocomplete="off" placeholder="0,00" value="' + esc(num2(c.valor_previsto)) + '">') +
+      campo('Data do pagamento', '<input type="date" class="fc" id="ct-b-data" value="' + esc(hojeISO()) + '">') + '</div>' +
+      campo('Observação (opcional)', '<input type="text" class="fc" id="ct-b-obs" maxlength="300" autocomplete="off">');
+    P.corpo.appendChild(f);
+    av = aviso(P);
+    var ok = bt('btn btn-p', 'Marcar como paga', enviar), ocupado = false;
+    rodape(P, [bt('btn btn-s', 'Cancelar', function () { P.fechar(); }), ok]);
+    var iv = f.querySelector('#ct-b-valor');
+    iv.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); enviar(); } });
+    function enviar() {
+      if (ocupado) return;
+      var v = numero(iv.value), d = f.querySelector('#ct-b-data').value;
+      if (v == null || isNaN(v) || v <= 0) { av.textContent = 'Informe o valor pago, como 1.250,00.'; av.hidden = false; iv.focus(); return; }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { av.textContent = 'Informe a data do pagamento.'; av.hidden = false; return; }
+      ocupado = true; ok.disabled = true; av.hidden = true;
+      LAPI.finBaixa(c.id, v, d, f.querySelector('#ct-b-obs').value.trim(), false).then(function () {
+        P.fechar(); avisa(c.nome + ': paga, ' + brl(v) + '.'); carregarMes();
+      }, function (er) { ocupado = false; ok.disabled = false; av.textContent = msgErro(er); av.hidden = false; });
+    }
+  }
+
+  /* ═══ Contas fixas ═══ */
+  function telaFixas(r) {
+    var wrap = el('div', 'duas-col');
+    var sec = el('section', 'lista ct-lista'); sec.setAttribute('aria-label', 'Contas fixas');
+    var topo = el('div', 'lista-topo');
+    var ativas = (st.fixas || []).filter(function (c) { return c.ativa; }).length;
+    topo.appendChild(el('span', 'lista-tit', st.fixas ? ativas + (ativas === 1 ? ' conta ativa' : ' contas ativas') : 'Contas fixas'));
+    topo.appendChild(bt('btn btn-p btn-sm', 'Nova conta', function () { popFixa(null); }));
+    sec.appendChild(topo);
+    var corpo = el('div', 'lista-corpo');
+    if (st.fixasErro) corpo.appendChild(el('div', 'lista-vazio erro', esc(st.fixasErro)));
+    else if (!st.fixas) corpo.appendChild(el('div', 'lista-vazio', 'Carregando…'));
+    else if (!st.fixas.length) corpo.appendChild(el('div', 'lista-vazio', 'Nenhuma conta fixa ainda.'));
+    (st.fixas || []).forEach(function (c) {
+      var meta = [c.categoria_nome, rotulo(BASES, c.base_projecao).toLowerCase()];
+      if (c.obs_dono) meta.push('com observação sua');
+      var tags = '';
+      if (c.no_cartao) tags += '<span class="ct-st espera">No cartão</span>';
+      if (!c.ativa) tags += '<span class="ct-st espera">Inativa</span>';
+      var l = bt('linha ct-l' + (c.ativa ? '' : ' inativa'), '', function () { popFixa(c); });
+      l.innerHTML = '<span class="h">' + esc(c.dia_vencimento ? String(c.dia_vencimento).padStart(2, '0') : '—') + '</span>' +
+        '<span class="q"><span class="nm">' + esc(c.nome) + '</span><span class="mt">' + esc(meta.join(' · ')) + '</span></span>' +
+        '<span class="dir"><span class="ct-v">' + esc(c.valor_informado == null ? 'sem valor' : brl(c.valor_informado)) + '</span>' + tags + '</span>';
+      corpo.appendChild(l);
+    });
+    sec.appendChild(corpo);
+    wrap.appendChild(sec);
+    var lado = el('div', 'lado');
+    lado.appendChild(el('section', 'painel nota-lado', '<h2>Como funciona</h2><ul class="ct-ul">' +
+      '<li>Cada conta fixa vira uma conta do mês sozinha, no dia de vencimento.</li>' +
+      '<li>O valor do mês sai da base escolhida: o valor informado, o último pago ou a média de 3 ou 6 meses. Sem histórico, vale o informado.</li>' +
+      '<li>Marque "Paga no cartão" quando a conta já vem na fatura do cartão: ela aparece no mês, mas não soma de novo.</li>' +
+      '<li>Mudou o valor? As contas em aberto deste mês em diante acompanham.</li></ul>'));
+    wrap.appendChild(lado);
+    r.appendChild(wrap);
+    resumo(st.fixas ? ativas + (ativas === 1 ? ' conta fixa ativa' : ' contas fixas ativas') : '');
+  }
+
+  function popFixa(c) {
+    if (!window.moldura) return;
+    carregarCats().then(function (cats) { abrirFixa(c, cats); }, function (er) { if (typeof toast === 'function') toast(msgErro(er), 'ko'); });
+  }
+  function abrirFixa(c, cats) {
+    var nova = !c; c = c || { ativa: true, base_projecao: 'informado', categoria: 'outro' };
+    var P = moldura.pop({ largura: '600px', titulo: 'Financeiro', classe: 'ct-pop' });
+    P.corpo.appendChild(el('div', 'pp-cab', '<h2>' + (nova ? 'Nova conta fixa' : esc(c.nome)) + '</h2>' +
+      '<span class="pp-sub">' + (nova ? 'Conta que se repete todo mês.' : 'Editar a conta fixa.') + '</span>'));
+    var f = el('div', 'ct-form');
+    f.innerHTML = campo('Nome', '<input type="text" class="fc" id="ct-f-nome" maxlength="120" autocomplete="off" value="' + esc(c.nome || '') + '">') +
+      '<div class="ct-dupla">' +
+      campo('Categoria', '<select class="fc" id="ct-f-cat">' + opcoes(cats.map(function (x) { return [x.codigo, x.nome]; }), c.categoria) + '</select>') +
+      campo('Dia de vencimento', '<input type="text" class="fc" id="ct-f-dia" inputmode="numeric" maxlength="2" autocomplete="off" placeholder="1 a 31" value="' + esc(c.dia_vencimento || '') + '">') +
+      '</div><div class="ct-dupla">' +
+      campo('Valor', '<input type="text" class="fc" id="ct-f-valor" inputmode="decimal" autocomplete="off" placeholder="0,00" value="' + esc(num2(c.valor_informado)) + '">') +
+      campo('Base para os próximos meses', '<select class="fc" id="ct-f-base">' + opcoes(BASES, c.base_projecao) + '</select>') +
+      '</div><div class="ct-dupla">' +
+      campo('CNPJ ou CPF de quem recebe <small>(opcional)</small>', '<input type="text" class="fc" id="ct-f-doc" inputmode="numeric" maxlength="18" autocomplete="off" value="' + esc(c.recebedor_doc || '') + '">') +
+      campo('Nome de quem recebe <small>(opcional)</small>', '<input type="text" class="fc" id="ct-f-rec" maxlength="120" autocomplete="off" value="' + esc(c.recebedor_nome || '') + '">') +
+      '</div>' +
+      campo('Observação <small>(a Marinalva e o dono veem)</small>', '<textarea class="fc ct-ta" id="ct-f-obs" maxlength="600" rows="2">' + esc(c.obs || '') + '</textarea>') +
+      (ehDono() ? campo('Observação só sua', '<textarea class="fc ct-ta" id="ct-f-obsd" maxlength="600" rows="2">' + esc(c.obs_dono || '') + '</textarea>', 'ct-dono-campo') : '') +
+      '<div class="ct-checks">' +
+      '<label class="ct-check"><input type="checkbox" id="ct-f-cartao"' + (c.no_cartao ? ' checked' : '') + '><span>Paga no cartão <small>(fica fora dos totais: já está na fatura)</small></span></label>' +
+      '<label class="ct-check"><input type="checkbox" id="ct-f-ativa"' + (c.ativa !== false ? ' checked' : '') + '><span>Ativa <small>(desmarque quando a conta acabar)</small></span></label>' +
+      '</div>';
+    P.corpo.appendChild(f);
+    var av = aviso(P);
+    var ok = bt('btn btn-p', nova ? 'Criar conta' : 'Salvar', salvar), ocupado = false;
+    rodape(P, [bt('btn btn-s', 'Cancelar', function () { P.fechar(); }), ok]);
+    setTimeout(function () { if (P.aberto && nova) f.querySelector('#ct-f-nome').focus(); }, 30);
+    function q(id) { return f.querySelector('#' + id); }
+    function erro(t, foco) { av.textContent = t; av.hidden = false; if (foco) foco.focus(); }
+    function salvar() {
+      if (ocupado) return;
+      var nome = q('ct-f-nome').value.trim(), d = inteiro(q('ct-f-dia').value, 1, 31), v = numero(q('ct-f-valor').value);
+      if (!nome) return erro('Informe o nome da conta.', q('ct-f-nome'));
+      if (isNaN(d)) return erro('Dia de vencimento entre 1 e 31, ou deixe em branco.', q('ct-f-dia'));
+      if (isNaN(v)) return erro('Informe o valor como 1.250,00, ou deixe em branco.', q('ct-f-valor'));
+      var doc = q('ct-f-doc').value.replace(/\D/g, '');
+      if (doc && doc.length !== 11 && doc.length !== 14) return erro('CPF tem 11 números e CNPJ tem 14.', q('ct-f-doc'));
+      var cartao = q('ct-f-cartao').checked, obsD = ehDono() ? q('ct-f-obsd').value.trim() : null;
+      ocupado = true; ok.disabled = true; av.hidden = true;
+      LAPI.finContaFixaSalvar({ id: c.id, nome: nome, categoria: q('ct-f-cat').value, dia: d, valor: v, base: q('ct-f-base').value,
+        doc: doc, recebedor: q('ct-f-rec').value.trim(), obs: q('ct-f-obs').value.trim(), ativa: q('ct-f-ativa').checked })
+        .then(function (j) {
+          var muda = cartao !== !!c.no_cartao || (ehDono() && obsD !== (c.obs_dono || ''));
+          return muda ? LAPI.finContaFixaMarcar(j.id, cartao, ehDono() ? obsD : null) : j;
+        })
+        .then(function () { P.fechar(); avisa(nova ? 'Conta criada.' : 'Conta salva.'); st.mes = null; carregarFixas(); },
+          function (er) { ocupado = false; ok.disabled = false; erro(msgErro(er)); });
+    }
+  }
+
+  /* ═══ Dívidas (só o dono) ═══ */
+  function faltaDe(d) { return d.saldo_estimado != null ? Number(d.saldo_estimado) : (d.saldo_devedor != null ? Number(d.saldo_devedor) : null); }
+  function telaDividas(r) {
+    var wrap = el('div', 'duas-col');
+    var sec = el('section', 'lista ct-lista'); sec.setAttribute('aria-label', 'Dívidas');
+    var topo = el('div', 'lista-topo');
+    var ativas = (st.dividas || []).filter(function (d) { return d.ativa; });
+    topo.appendChild(el('span', 'lista-tit', st.dividas ? ativas.length + (ativas.length === 1 ? ' dívida ativa' : ' dívidas ativas') : 'Dívidas'));
+    topo.appendChild(bt('btn btn-p btn-sm', 'Nova dívida', function () { abrirDivida(null); }));
+    sec.appendChild(topo);
+    var corpo = el('div', 'lista-corpo');
+    if (st.divErro) corpo.appendChild(el('div', 'lista-vazio erro', esc(st.divErro)));
+    else if (!st.dividas) corpo.appendChild(el('div', 'lista-vazio', 'Carregando…'));
+    else if (!st.dividas.length) corpo.appendChild(el('div', 'lista-vazio', 'Nenhuma dívida cadastrada.'));
+    var total = 0, mensal = 0, semDado = 0;
+    (st.dividas || []).forEach(function (d) {
+      var fa = faltaDe(d);
+      if (d.ativa) { if (fa != null) total += fa; else semDado++; mensal += Number(d.valor_parcela || 0); }
+      var meta = [rotulo(TIPOS, d.tipo)];
+      if (d.parcela_atual && d.parcelas_total) meta.push('parcela ' + Math.min(d.parcela_atual, d.parcelas_total) + ' de ' + d.parcelas_total);
+      if (d.parcelas_restantes != null) meta.push(d.parcelas_restantes === 1 ? 'falta 1' : 'faltam ' + d.parcelas_restantes);
+      if (d.dia_vencimento) meta.push('dia ' + d.dia_vencimento);
+      var dir = '<span class="ct-v">' + esc(brl(d.valor_parcela)) + '<small>/mês</small></span>' +
+        '<span class="mt">' + esc(d.saldo_estimado != null ? 'falta ' + brl(d.saldo_estimado) : (d.saldo_devedor != null ? 'saldo ' + brl(d.saldo_devedor) : 'sem prazo')) + '</span>';
+      var l = bt('linha ct-l' + (d.ativa ? '' : ' inativa'), '', function () { abrirDivida(d); });
+      l.innerHTML = '<span class="q"><span class="nm">' + esc(d.credor + (d.descricao ? ' · ' + d.descricao : '')) + '</span><span class="mt">' + esc(meta.join(' · ')) + '</span></span>' +
+        '<span class="dir">' + dir + '</span>';
+      corpo.appendChild(l);
+    });
+    sec.appendChild(corpo);
+    wrap.appendChild(sec);
+    var lado = el('div', 'lado');
+    var p = el('section', 'painel');
+    p.appendChild(el('div', 'lj-grande com-linha', '<h2 class="lj-grande-rot">Falta pagar</h2><span class="lj-grande-n">' + esc(st.dividas ? brl(total) : '—') + '</span>' +
+      '<span class="lj-grande-l2">Parcelas que faltam × valor da parcela; sem prazo cadastrado, vale o saldo devedor informado.' +
+      (semDado ? ' ' + semDado + (semDado === 1 ? ' dívida sem prazo nem saldo fica fora.' : ' dívidas sem prazo nem saldo ficam fora.') : '') + '</span>'));
+    p.appendChild(el('div', 'lj-grande', '<h2 class="lj-grande-rot">Parcelas por mês</h2><span class="lj-grande-n ct-n2">' + esc(st.dividas ? brl(mensal) : '—') + '</span>'));
+    lado.appendChild(p);
+    lado.appendChild(el('section', 'painel nota-lado', '<h2>Só você vê</h2><p class="ct-nota">A Marinalva vê cada parcela nas contas do mês, sem o número da parcela, sem o saldo e sem esta aba.</p>'));
+    wrap.appendChild(lado);
+    r.appendChild(wrap);
+    resumo(st.dividas ? 'Falta pagar ' + brl(total) + ' · ' + brl(mensal) + ' por mês' : '');
+  }
+
+  function abrirDivida(d) {
+    if (!window.moldura || !ehDono()) return;
+    var nova = !d; d = d || { ativa: true, base_projecao: 'informado', tipo: 'emprestimo' };
+    var P = moldura.pop({ largura: '600px', titulo: 'Financeiro · só você vê', classe: 'ct-pop' });
+    P.corpo.appendChild(el('div', 'pp-cab', '<h2>' + (nova ? 'Nova dívida' : esc(d.credor + (d.descricao ? ' · ' + d.descricao : ''))) + '</h2>' +
+      '<span class="pp-sub">Imposto parcelado, empréstimo ou financiamento. A parcela entra nas contas do mês da Marinalva sem o número e sem o saldo.</span>'));
+    var f = el('div', 'ct-form');
+    f.innerHTML = '<div class="ct-dupla">' +
+      campo('Credor', '<input type="text" class="fc" id="ct-d-cred" maxlength="120" autocomplete="off" value="' + esc(d.credor || '') + '">') +
+      campo('Tipo', '<select class="fc" id="ct-d-tipo">' + opcoes(TIPOS, d.tipo) + '</select>') + '</div>' +
+      campo('Descrição <small>(a Marinalva vê no nome da conta; não ponha o nº da parcela)</small>', '<input type="text" class="fc" id="ct-d-desc" maxlength="120" autocomplete="off" value="' + esc(d.descricao || '') + '">') +
+      '<div class="ct-dupla">' +
+      campo('Valor da parcela', '<input type="text" class="fc" id="ct-d-parc" inputmode="decimal" autocomplete="off" placeholder="0,00" value="' + esc(num2(d.valor_parcela)) + '">') +
+      campo('Dia de vencimento', '<input type="text" class="fc" id="ct-d-dia" inputmode="numeric" maxlength="2" autocomplete="off" placeholder="1 a 31" value="' + esc(d.dia_vencimento || '') + '">') +
+      '</div><div class="ct-dupla">' +
+      campo('Total de parcelas <small>(opcional)</small>', '<input type="text" class="fc" id="ct-d-tot" inputmode="numeric" maxlength="3" autocomplete="off" value="' + esc(d.parcelas_total || '') + '">') +
+      campo('Mês da 1ª parcela <small>(opcional)</small>', '<input type="month" class="fc" id="ct-d-prim" value="' + esc(d.primeira_competencia ? String(d.primeira_competencia).slice(0, 7) : '') + '">') +
+      '</div><div class="ct-dupla">' +
+      campo('Saldo devedor informado <small>(opcional)</small>', '<input type="text" class="fc" id="ct-d-saldo" inputmode="decimal" autocomplete="off" placeholder="0,00" value="' + esc(num2(d.saldo_devedor)) + '">') +
+      campo('Saldo em', '<input type="date" class="fc" id="ct-d-saldoem" value="' + esc(d.saldo_em || '') + '">') +
+      '</div><div class="ct-dupla">' +
+      campo('Base para os próximos meses', '<select class="fc" id="ct-d-base">' + opcoes(BASES, d.base_projecao) + '</select>') +
+      campo('CNPJ de quem recebe <small>(opcional)</small>', '<input type="text" class="fc" id="ct-d-doc" inputmode="numeric" maxlength="18" autocomplete="off" value="' + esc(d.recebedor_doc || '') + '">') +
+      '</div>' +
+      campo('Observação <small>(só você vê)</small>', '<textarea class="fc ct-ta" id="ct-d-obs" maxlength="800" rows="3">' + esc(d.obs || '') + '</textarea>') +
+      '<div class="ct-checks"><label class="ct-check"><input type="checkbox" id="ct-d-ativa"' + (d.ativa !== false ? ' checked' : '') + '><span>Ativa <small>(desmarque quando quitar)</small></span></label></div>';
+    P.corpo.appendChild(f);
+    var av = aviso(P);
+    var ok = bt('btn btn-p', nova ? 'Criar dívida' : 'Salvar', salvar), ocupado = false;
+    rodape(P, [bt('btn btn-s', 'Cancelar', function () { P.fechar(); }), ok]);
+    function q(id) { return f.querySelector('#' + id); }
+    function erro(t, foco) { av.textContent = t; av.hidden = false; if (foco) foco.focus(); }
+    function salvar() {
+      if (ocupado) return;
+      var cred = q('ct-d-cred').value.trim(), parc = numero(q('ct-d-parc').value), dd = inteiro(q('ct-d-dia').value, 1, 31),
+          tot = inteiro(q('ct-d-tot').value, 1, 600), saldo = numero(q('ct-d-saldo').value), prim = q('ct-d-prim').value;
+      if (!cred) return erro('Informe o credor.', q('ct-d-cred'));
+      if (parc == null || isNaN(parc)) return erro('Informe o valor da parcela, como 1.250,00.', q('ct-d-parc'));
+      if (isNaN(dd)) return erro('Dia de vencimento entre 1 e 31, ou deixe em branco.', q('ct-d-dia'));
+      if (isNaN(tot)) return erro('Total de parcelas: só números, ou deixe em branco.', q('ct-d-tot'));
+      if (isNaN(saldo)) return erro('Informe o saldo como 75.543,58, ou deixe em branco.', q('ct-d-saldo'));
+      if (prim && !/^\d{4}-\d{2}$/.test(prim)) return erro('Mês da 1ª parcela inválido.', q('ct-d-prim'));
+      var doc = q('ct-d-doc').value.replace(/\D/g, '');
+      if (doc && doc.length !== 11 && doc.length !== 14) return erro('CPF tem 11 números e CNPJ tem 14.', q('ct-d-doc'));
+      ocupado = true; ok.disabled = true; av.hidden = true;
+      LAPI.finDividaSalvar({ id: d.id, credor: cred, tipo: q('ct-d-tipo').value, descricao: q('ct-d-desc').value.trim(), dia: dd, parcela: parc,
+        base: q('ct-d-base').value, total: tot, primeira: prim ? prim + '-01' : null, saldo: saldo, saldoEm: q('ct-d-saldoem').value || null,
+        doc: doc, obs: q('ct-d-obs').value.trim(), ativa: q('ct-d-ativa').checked })
+        .then(function () { P.fechar(); avisa(nova ? 'Dívida criada.' : 'Dívida salva.'); st.mes = null; st.proj = null; carregarDividas(); },
+          function (er) { ocupado = false; ok.disabled = false; erro(msgErro(er)); });
+    }
+  }
+
+  /* ═══ Projeção (só o dono) ═══ */
+  function telaProj(r) {
+    var p = st.proj, meses = (p && p.meses) || [];
+    var sec = el('section', 'lista ct-proj'); sec.setAttribute('aria-label', 'Projeção de 12 meses');
+    sec.appendChild(el('div', 'painel-cab', '<h2>Saídas dos próximos 12 meses</h2><span>' +
+      esc(p && p.saldo_hoje != null ? 'Saldo nos bancos ligados: ' + brl(p.saldo_hoje) : 'Entradas ainda não ligadas') + '</span>'));
+    if (st.projErro) { sec.appendChild(el('div', 'lista-vazio erro', esc(st.projErro))); r.appendChild(sec); resumo(''); return; }
+    if (!p) { sec.appendChild(el('div', 'lista-vazio', 'Carregando…')); r.appendChild(sec); resumo(''); return; }
+    var max = 0; meses.forEach(function (m) { max = Math.max(max, Number(m.saidas || 0)); });
+    var cx = el('div', 'ct-tab-cx');
+    var h = '<table class="ct-tab"><thead><tr><th>Mês</th><th class="n">Contas fixas</th><th class="n">Parcelas</th><th class="n">Saídas</th>' +
+      '<th class="ct-barra-th" aria-hidden="true"></th><th class="n">Dívida que sobra</th></tr></thead><tbody>';
+    meses.forEach(function (m, i) {
+      var w = max ? Math.round(Number(m.saidas || 0) / max * 100) : 0;
+      h += '<tr><td>' + esc(mesCurto(m.competencia)) + (i === 0 ? ' <small>(o que falta)</small>' : '') + '</td>' +
+        '<td class="n">' + esc(brl(m.contas_fixas)) + '</td><td class="n">' + esc(brl(m.parcelas)) + '</td><td class="n"><b>' + esc(brl(m.saidas)) + '</b></td>' +
+        '<td class="ct-barra-td" aria-hidden="true"><span class="ct-barra" style="width:' + w + '%"></span></td>' +
+        '<td class="n">' + esc(brl(m.divida_restante_fim)) + '</td></tr>';
+    });
+    h += '</tbody></table>';
+    cx.innerHTML = h;
+    sec.appendChild(cx);
+    sec.appendChild(el('p', 'ct-nota ct-pad', 'Contas no cartão ficam de fora (já estão na fatura). No mês atual entra só o que ainda não foi pago. ' +
+      '"Dívida que sobra" soma as parcelas que faltam depois de cada mês, nas dívidas com prazo cadastrado. As entradas (Unimed, Lev Soul e recepção) entram quando forem ligadas.'));
+    r.appendChild(sec);
+    var tot = meses.reduce(function (s, m) { return s + Number(m.saidas || 0); }, 0);
+    resumo('12 meses: ' + brl(tot) + ' em saídas');
+  }
+
+  return { abrir: abrir, sair: sair };
+})();
