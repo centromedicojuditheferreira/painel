@@ -488,7 +488,7 @@ function pdfLogo(){
   pdfLogoPromessa = new Promise(function(resolve){
     var a = document.querySelector('.lo-bv-luas .lua-maior'), b = document.querySelector('.lo-bv-luas .lua-menor');
     if(!a || !b) return resolve(null);
-    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1756 1646"><path fill="#2C2D6E" d="' + a.getAttribute('d') + '"/><path fill="#B6569C" d="' + b.getAttribute('d') + '"/></svg>';
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1756 1646"><path fill="var(--tint)" d="' + a.getAttribute('d') + '"/><path fill="#B6569C" d="' + b.getAttribute('d') + '"/></svg>';
     var img = new Image();
     img.onload = function(){ try{ var c = document.createElement('canvas'); c.width = 527; c.height = 494; c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); resolve(c.toDataURL('image/png')); }catch(e){ resolve(null); } };
     img.onerror = function(){ resolve(null); };
@@ -697,10 +697,10 @@ function periodoTxt(d){
 }
 function quandoAg(p){ return (p.data ? DIAS[dLocal(p.data).getDay()].slice(0,3) + ' ' + ddmm(p.data) : '') + (p.horario ? ' ' + hhmm(p.horario) : ''); }
 function pedEstado(p){
-  if(p.situacao === 'aberto') return p.mudou_no_feegow ? { rot:'Mudança já chegou', cor:'#248A3D' } : { rot:'Aberto', cor:'#D70015' };
-  if(p.situacao === 'atendido') return { rot:'Corrigido', cor:'#636366' };
-  if(p.situacao === 'recusado') return { rot:'Não procede', cor:'#636366' };
-  return { rot: String(p.situacao || '—'), cor:'#636366' };
+  if(p.situacao === 'aberto') return p.mudou_no_feegow ? { rot:'Mudança já chegou', cor:'var(--verde)' } : { rot:'Aberto', cor:'var(--vermelho)' };
+  if(p.situacao === 'atendido') return { rot:'Corrigido', cor:'var(--cinza)' };
+  if(p.situacao === 'recusado') return { rot:'Não procede', cor:'var(--cinza)' };
+  return { rot: String(p.situacao || '—'), cor:'var(--cinza)' };
 }
 function avisosDe(p){
   var a = p.avisos || [], env = 0, pen = 0, err = 0;
@@ -723,7 +723,7 @@ function linhaProf(p){
     (p.pedidos_abertos ? ' · ' + (p.pedidos_abertos === 1 ? '1 pedido aberto' : p.pedidos_abertos + ' pedidos abertos') : '') +
     (!p.ultimo_acesso_em ? ' · ainda não entrou' : '') + (p.teste_ate ? ' · teste até ' + fmtTs(p.teste_ate) : '');
   var rot = p.confirmado_em ? 'Confirmou ' + quando(p.confirmado_em) : 'Ainda não';
-  var cor = p.confirmado_em ? (p.confirmado_fora_do_prazo ? '#C93400' : '#248A3D') : '#D70015';
+  var cor = p.confirmado_em ? (p.confirmado_fora_do_prazo ? 'var(--laranja)' : 'var(--verde)') : 'var(--vermelho)';
   var av = avisosDe(p);
   return '<span class="cf-ini" aria-hidden="true">' + esc(iniciais(p.nome)) + '</span>' +
     '<span class="q"><span class="nm">' + esc(p.nome) + '</span><span class="mt">' + esc(meta) + '</span></span>' +
@@ -1023,7 +1023,7 @@ function desenhaSec(d){
   var sec = el('section', 'lista alta'); sec.setAttribute('aria-label', 'Profissionais');
   var topo = el('div', 'lista-topo');
   var seg = el('div', 'seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'Mostrar');
-  [['faltam', 'Ainda não confirmaram', '#D70015'], ['confirmaram', 'Confirmaram', '#248A3D'], ['todos', 'Todos', '#AEAEB2']].forEach(function(x){
+  [['faltam', 'Ainda não confirmaram', 'var(--vermelho)'], ['confirmaram', 'Confirmaram', 'var(--verde)'], ['todos', 'Todos', 'var(--cinza3)']].forEach(function(x){
     var on = f === x[0];
     var b = bt(on ? 'on' : '', '<span class="q" style="background:' + x[2] + '"></span>' + x[1] + ' <span class="n">' + cont[x[0]] + '</span>', function(){
       if(cf.filtro === x[0]) return;
@@ -1236,7 +1236,7 @@ function abrirProf(id, ids){
     var cx = el('div', 'pp-caixa');
     var conf = !!p.confirmado_em;
     var tg = el('span', 'pp-tag', esc(conf ? 'Confirmou em ' + quando(p.confirmado_em) : 'Ainda não confirmou'));
-    tg.style.color = conf ? (p.confirmado_fora_do_prazo ? '#C93400' : '#248A3D') : '#D70015';
+    tg.style.color = conf ? (p.confirmado_fora_do_prazo ? 'var(--laranja)' : 'var(--verde)') : 'var(--vermelho)';
     cx.appendChild(tg);
     cx.appendChild(el('span', 'pp-txt', esc(conf ? (p.confirmado_fora_do_prazo ? 'Confirmou depois do prazo.' : 'Dentro do prazo.') + (p.foto ? ' A confirmação tem foto.' : '')
       : (p.ultimo_acesso_em ? 'Já entrou no site dos profissionais (último acesso ' + fmtTs(p.ultimo_acesso_em) + '). ' +

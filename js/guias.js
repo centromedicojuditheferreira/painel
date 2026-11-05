@@ -498,9 +498,9 @@ function badgesTopo(){
   var falhasN = (estado.falhas || []).length;
   b("gv-b-agenda", pend); b("gv-b-fila", prontos); b("gv-b-cad", cadN); b("gv-b-excl", exclN);
   b("gv-b-corte", corteN); b("gv-b-falhas", falhasN);
-  b("gv-sbb", pend + cadN + exclN + corteN + falhasN);
   desenharFaixa();
-  if(estado.tela === "agenda") atualizaLadoAgenda();
+  if(window.INICIO) INICIO.atualizar();   /* v4: o Início e o número do menu (gv-sbb = tudo que há para resolver) */
+  else b("gv-sbb", pend + cadN + exclN + corteN + falhasN);
   if(window.ALERTA) ALERTA.atualizar();   /* ALERTA v1.0: notificações do navegador e aba piscando (js/alerta.js) */
 }
 /* ═══ 🔔 ALERTA v1.0 (30/10/2026) · o que conta como pendência fora da tela ═══
@@ -545,8 +545,113 @@ function pendenciasAgora(){
     poe("excl", x.oc_ref, "Nova pendência · Série apagada inteira", (x.paciente || "—") + (x.profissional ? " · " + x.profissional : ""),
         function(){ irParaTela("excl"); setTimeout(function(){ abrirExclItem(x.oc_ref); }, 400); });
   });
-  P.partes = { agenda: ag.length, corte: co.length, falhas: fa.length, cad: cd.length, excl: ex.length };
+  /* v4: o que não é tela do GV também conta — cobrança dos profissionais (js/cobranca.js), tarefas da gaveta (js/gaveta.js)
+     e, com o FIN v2.0, o Cobrar dos pacientes (js/cobrar.js). Cada módulo entrega chave estável + título + texto + abrir(). */
+  var pr = (window.PCOB && PCOB.pendencias) ? PCOB.pendencias() : [];
+  pr.forEach(function(x){ poe("prof", x.chave, x.titulo, x.corpo, x.abrir); });
+  var gv = (window.GAVETA && GAVETA.pendencias) ? GAVETA.pendencias() : [];
+  gv.forEach(function(x){ poe("gaveta", x.chave, x.titulo, x.corpo, x.abrir); });
+  var fi = (window.FCOB && FCOB.itens) ? FCOB.itens() : [];
+  fi.forEach(function(x){
+    poe("fin", x.chave, "Nova pendência · Cobrar paciente", (x.paciente || "—") + " · " + (x.origem || "") + (FCOB.situacaoCurta ? " · " + FCOB.situacaoCurta(x) : ""),
+        function(){ FCOB.abrir(x.chave); });
+  });
+  P.pronto.prof = true; P.pronto.gaveta = true;
+  P.pronto.fin = window.FCOB && FCOB.pronto ? FCOB.pronto() : true;
+  P.partes = { agenda: ag.length, corte: co.length, falhas: fa.length, cad: cd.length, excl: ex.length, prof: pr.length, gaveta: gv.length, fin: fi.length };
   return P;
+}
+
+/* ═══ v4 · Início: tudo que há para resolver, uma vez só, já com o que cada linha abre ═══
+   "Agora" = o que é de hoje, na hora (aqui só o Hoje sem guia; Cobrar, Gaveta e Profissionais vêm dos módulos deles, em js/inicio.js).
+   "Para resolver" = grupos em ordem fixa de prioridade. Uma consulta de ABA com problema aparece no grupo ABA, não no da situação
+   (antes contava nos dois). Cada item: h (quando), nome, meta, tag, tagCls, tr, desde e abrir() — a janela de sempre daquela tela. */
+function inicioDados(){
+  var D = { pronto: { agenda: estado._carregouEm > 0, corte: estado.corte !== null, falhas: estado.falhas !== null, cad: estado.cad !== null, excl: estado.excl !== null },
+            erros: { agenda: "", corte: estado.corteErro || "", falhas: estado.falhasErro || "", cad: estado.cadErro || "", excl: estado.exclErro || "" },
+            lidoEm: estado._carregouEm, agora: [], grupos: [], numeros: {} };
+  function tom(m){ return m.tom === "r" ? "vermelho" : m.tom === "o" ? "laranja" : m.tom === "v" ? "verde" : "cinza"; }
+  function trAgenda(l){
+    var t = l.tratamento || "pendente";
+    if(voltou(l)) return (TRAT_ROT[t] || t) + " · voltou";
+    return t !== "pendente" ? (TRAT_ROT[t] || t) : "";
+  }
+  function itemAgenda(l, ctx){
+    var m = sitTxt(l.situacao);
+    return { h: quandoCurto(l), nome: l.paciente || "—", meta: metaLinha(l), tag: m.rot, tagCls: tom(m), tr: trAgenda(l),
+             desde: desdeDe("agenda", l.agendamento_id), abrir: function(){ abrirPacAgenda(l.agendamento_id, ctx); } };
+  }
+  /* Agora: consulta de HOJE sem guia (blindagem v1) */
+  var hoje = linhasDaCategoria("hoje_sem_guia").slice().sort(function(a, b){ return String(a.horario||"").localeCompare(String(b.horario||"")); });
+  if(hoje.length){
+    var h0 = hoje[0];
+    D.agora.push({ chave: "hoje_sem_guia", rot: "Hoje sem guia", etq: "não atender", cor: "vermelho", n: hoje.length,
+      l1: (h0.horario || "") + " · " + (h0.paciente || "—"),
+      l2: (ESP_ROT[h0.especialidade] || h0.especialidade || "—") + " · " + (h0.profissional || "—") + (trAgenda(h0) ? " · " + trAgenda(h0) : ""),
+      abrir: function(){ if(hoje.length === 1) abrirPacAgenda(h0.agendamento_id, "hoje_sem_guia"); else abrirCatAgenda("hoje_sem_guia"); } });
+  }
+  /* Para resolver: Agenda por categoria (sem o Hoje sem guia, que está no Agora) */
+  categorias().forEach(function(c){
+    if(c.chave === "hoje_sem_guia") return;
+    var rows = linhasDaCategoria(c.chave);
+    if(c.chave !== "__aba__") rows = rows.filter(function(l){ return !ehProblemaAba(l); });
+    if(!rows.length) return;
+    var m = c.chave === "__aba__" ? ABA_TXT : sitTxt(c.chave);
+    D.grupos.push({ chave: "agenda:" + c.chave, rot: c.rot, sub: m.sub || "", cor: tom(m), n: rows.length, tela: "agenda", telaRot: "Agenda",
+      abrirTela: function(){ abrirCatAgenda(c.chave); },
+      itens: rows.map(function(l){ return itemAgenda(l, c.chave); }) });
+  });
+  /* Corte */
+  var co = corteOrdenada().filter(corteAtivo);
+  if(co.length) D.grupos.push({ chave: "corte", rot: "Corte", sub: "apagar no Feegow e assinar", cor: "vermelho", n: co.length, tela: "corte", telaRot: "Corte",
+    abrirTela: function(){ irParaTela("corte"); },
+    itens: co.map(function(c){
+      var e = corteEst(c), S = corteTxt(e);
+      var h = e === "cortar_hoje" ? (new Date().getDay() === 6 ? "corte até 11h" : "corte até 21h") : e === "cortar_agora" ? "cortar agora" : e === "prazo_vencido" ? "prazo vencido" : "apagou incompleto";
+      return { h: h, nome: c.paciente || "—",
+               meta: (c.hoje_sem_guia ? "HOJE " + (c.hoje_horario || "") + " sem guia · " : "") + (ESP_ROT[c.especialidade] || c.especialidade || "—") + " · " + futSemCob(c.n_descobertos) + (c.datas_fmt ? ": " + c.datas_fmt : ""),
+               tag: S.label, tagCls: "vermelho", tr: c.ja_esperou ? "já aguardou" : "", desde: desdeDe("corte", c.oc_ref),
+               abrir: function(){ abrirCorteItem(c.oc_ref); } };
+    }) });
+  /* Falhas (WhatsApp que não saiu) */
+  var fa = estado.falhas || [];
+  if(fa.length) D.grupos.push({ chave: "falhas", rot: "Falhas", sub: "WhatsApp que não saiu: mandar pelo WhatsApp Web", cor: "vermelho", n: fa.length, tela: "falhas", telaRot: "Falhas",
+    abrirTela: function(){ irParaTela("falhas"); },
+    itens: fa.map(function(x){
+      var S = FALHA_TXT[falhaMotivo(x)] || { label: "Não saiu" };
+      return { h: x.origem === "profissional" ? horaDe(x.ultima_tentativa) : ((x.data_fmt ? x.data_fmt + " · " : "") + (x.horario || "—")),
+               nome: x.nome_paciente || ("ID:" + x.paciente_id), meta: (x.origem === "profissional" ? "" : (x.profissional || "—") + " · ") + tipoMsgRot(x),
+               tag: S.label, tagCls: "vermelho", tr: falhaPrecisaCorrigir(x) ? "corrigir" : "", desde: falhaDesde(x),
+               abrir: function(){ abrirFalhaItem(x.chave); } };
+    }) });
+  /* Cadastros */
+  var cd = (estado.cad || []).filter(cadAberto);
+  if(cd.length) D.grupos.push({ chave: "cad", rot: "Cadastros", sub: "corrigir a ficha no Feegow", cor: "vermelho", n: cd.length, tela: "cad", telaRot: "Cadastros",
+    abrirTela: function(){ irParaTela("cad"); },
+    itens: cd.map(function(c){
+      var tipos = cadTipos(c);
+      return { hHtml: cadFichaTxt(c), nome: c.paciente || "—", meta: futTxt(c.futuras),
+               tag: cadTxt(tipos[0]).curto + (tipos.length > 1 ? " +" + (tipos.length - 1) : ""), tagCls: "vermelho",
+               tr: c.reincidente ? "reincidente" : "", desde: desdeDe("cad", c.oc_ref),
+               abrir: function(){ abrirCadItem(c.paciente_id); } };
+    }) });
+  /* Exclusões */
+  var ex = (estado.excl || []).filter(exclAberta);
+  if(ex.length) D.grupos.push({ chave: "excl", rot: "Exclusões", sub: "série apagada inteira no Feegow", cor: "vermelho", n: ex.length, tela: "excl", telaRot: "Exclusões",
+    abrirTela: function(){ irParaTela("excl"); },
+    itens: ex.map(function(x){
+      var sN = exclSit(x), S = EXCL_SIT[sN] || { label: sN };
+      return { h: (x.dia_semana || "?") + " " + (x.horario || "?"), nome: x.paciente || "—",
+               meta: (x.profissional || "—") + " · " + sessoesTxt(x.n_sessoes) + (x.protegido_em ? " · apagada " + fmtQuando(x.protegido_em) : ""),
+               tag: S.label, tagCls: sN === "aguardando" ? "cinza" : "vermelho",
+               tr: x.reincidente ? "restaurei, e não voltou" : (x.quem_fez ? "quem apagou: " + (QUEM_ROT[x.quem_fez] || x.quem_fez).toLowerCase() : ""),
+               desde: null, abrir: function(){ abrirExclItem(x.oc_ref); } };
+    }) });
+  /* números do dia (para o "Tudo em dia") */
+  var nHoje = 0, nCob = 0;
+  estado.linhas.forEach(function(l){ if(l.dias_ate === 0) nHoje++; if(l.situacao === "coberto") nCob++; });
+  D.numeros = { consultasHoje: nHoje, cobertas: nCob, total: estado.linhas.length, dias: diasUnicos().length };
+  return D;
 }
 /* v3.5: o "Resolver agora" da direita mostra Corte, Falhas, Cadastros e Exclusões assim que cada carga chega
    (antes só aparecia no próximo redesenho da Agenda) */
@@ -586,7 +691,7 @@ function irParaTela(t){
    Mesmos dados e mesma gravação de antes (salvarNota → pre_agenda_notas); só a tela mudou. */
 var ESP_ROT  = { psicologia:"Psicologia", aba:"ABA", nutricao:"Nutrição" };
 var TRAT_ROT = { pendente:"Pendente", guia_solicitada:"Guia solicitada", resolvido:"Resolvido", sem_solucao:"Sem solução", desmarcado:"Desmarcado" };
-var TOM = { r:"#D70015", o:"#C93400", c:"#636366", v:"#248A3D" };
+var TOM = { r:"var(--vermelho)", o:"var(--laranja)", c:"var(--cinza)", v:"var(--verde)" };
 /* textos da tela (voz do modelo novo); as regras continuam no SIT lá de cima */
 var SIT_TXT = {
   hoje_sem_guia:          { rot:"Hoje sem guia", tom:"r", sub:"Não atender: avisar o paciente agora", acao:"A consulta é hoje e nenhuma guia cobre. Regra da casa: sem guia não atende. Avisar o paciente agora; se a guia não entrar no sistema antes do horário, desmarcar no Feegow. Marcar “Resolvido” sem a guia entrar não adianta: em 30 minutos ela volta para cá." },
@@ -711,8 +816,7 @@ function desenharAgenda(){
   estado._agTopo = false;
   main.innerHTML = "";
   var wrap = novo("div", "duas-col");
-  wrap.appendChild(agLista());
-  var lado = novo("div", "lado"); lado.appendChild(agPainel()); wrap.appendChild(lado);
+  wrap.appendChild(agLista());            /* v4: a lista ocupa a tela toda; o "Resolver agora" da direita virou o Início (js/inicio.js) */
   main.appendChild(wrap);
   ajustaAltura();
   var corpo = main.querySelector(".lista-corpo");
@@ -798,7 +902,7 @@ function agLinha(l){
   var b = botao("linha" + (estado._agAberto === l.agendamento_id ? " aberta" : ""),
     '<span class="h">' + escapa(l.horario) + '</span>' +
     '<span class="q"><span class="nm">' + escapa(l.paciente) + '</span><span class="mt">' + escapa(metaLinha(l)) + '</span></span>' +
-    '<span class="dir"><span class="tag" style="color:' + (tratada(l) ? "#AEAEB2" : (TOM[m.tom] || TOM.c)) + '">' + escapa(m.rot) + '</span>' +
+    '<span class="dir"><span class="tag" style="color:' + (tratada(l) ? "var(--cinza3)" : (TOM[m.tom] || TOM.c)) + '">' + escapa(m.rot) + '</span>' +
     (voltou(l) ? '<span class="tr" style="color:' + TOM.r + '">' + escapa((TRAT_ROT[t] || t) + " · voltou") + '</span>'   /* Blindagem v1 */
                : (t !== "pendente" ? '<span class="tr">' + escapa(TRAT_ROT[t] || t) + '</span>' : '')) +
     desdeSpan(desdeDe("agenda", l.agendamento_id)) + '</span>',
@@ -975,11 +1079,11 @@ function abrirPacAgenda(agid, ctx){
     P.corpo.appendChild(blocoN);
     var sv = novo("div", "pp-salvo");
     var txt, cor, est = msgId === atualId ? msg : null;
-    if(est === "salvando"){ txt = "Salvando…"; cor = "#AEAEB2"; }
+    if(est === "salvando"){ txt = "Salvando…"; cor = "var(--cinza3)"; }
     else if(est === "ok"){ txt = "Salvo agora. Fica registrado quem marcou e quando." +
       (marcouResolveu(l) ? " Se em 30 minutos o problema continuar, a consulta volta para a lista." : ""); cor = TOM.v; }   /* Blindagem v1 */
     else if(est === "erro"){ txt = "Não consegui salvar. Confira a internet e tente de novo."; cor = TOM.r; }
-    else { txt = t !== "pendente" ? "Marcado antes como " + (TRAT_ROT[t] || t).toLowerCase() + (l.autora_nota ? ", por " + l.autora_nota : "") + "." : "Ainda pendente."; cor = "#AEAEB2"; }
+    else { txt = t !== "pendente" ? "Marcado antes como " + (TRAT_ROT[t] || t).toLowerCase() + (l.autora_nota ? ", por " + l.autora_nota : "") + "." : "Ainda pendente."; cor = "var(--cinza3)"; }
     sv.innerHTML = ico(IC.ok, 14, 2.2, cor) + '<span' + (est === "erro" ? ' style="color:' + TOM.r + '"' : '') + '>' + escapa(txt) + '</span>';
     sv.setAttribute("aria-live", "polite");
     P.corpo.appendChild(sv);
@@ -1058,17 +1162,17 @@ function abrirBusca(termo){
    recusado na entrada; SGU ainda com a data velha (ou erro) → a guia volta sozinha para o robô depois de
    20 min, 1 h e 4 h; esgotou sem renovar → o Gabriel é avisado pelo Telegram. */
 var FILA_TXT = {
-  aguardando:    { rot:"Na fila do robô", curto:"Na fila do robô", cor:"#636366", sub:"O robô ainda vai olhar", acao:"O robô abre a guia no SGU e confere as duas datas (senha e carteirinha). O resultado aparece na lista em instantes." },
-  conferindo:    { rot:"Robô no SGU agora…", curto:"Na fila do robô", cor:"#636366", sub:"O robô ainda vai olhar", acao:"O robô abre a guia no SGU e confere as duas datas (senha e carteirinha). O resultado aparece na lista em instantes." },
-  espera:        { rot:"Vai conferir de novo", curto:"Vai conferir de novo", cor:"#2C2D6E", sub:"O robô confere de novo sozinho", acao:"O SGU ainda mostrava a data antiga. O robô confere de novo sozinho depois de 20 minutos, de 1 hora e de 4 horas. Não precisa mandar o número de novo." },
-  renovada:      { rot:"Validade atualizada", curto:"Atualizadas", cor:"#248A3D", sub:"Já atualizada no sistema: é só ler", acao:"O robô atualizou a validade no sistema. A Agenda do Cortex atualiza em poucos minutos. É só ler e tirar da tela." },
-  nao_renovou:   { rot:"Não renovou no SGU", curto:"Não renovou", cor:"#D70015", sub:"O Gabriel é avisado pelo Telegram", acao:"O robô conferiu várias vezes, ao longo de umas 5 horas, e o SGU continua com a data antiga. O Gabriel é avisado pelo Telegram. Leu, tire da tela." },
-  sem_mudanca:   { rot:"SGU ainda com a data velha", curto:"Data velha no SGU", cor:"#C93400", sub:"Esperar uns minutos e mandar de novo", acao:"O SGU ainda mostra a data antiga. Se a Unimed confirmou a renovação, aguarde alguns minutos e mande o número de novo." },
-  fora_do_banco: { rot:"Guia fora do nosso banco", curto:"Fora do banco", cor:"#636366", sub:"Conferir se o número foi digitado certo", acao:"Essa guia não está no nosso banco. Se for guia nova da Unimed, o coletor captura sozinho. Se for renovação de guia antiga, confira se o número foi digitado certo." },
-  erro:          { rot:"Erro ao conferir", curto:"Erro", cor:"#D70015", sub:"O robô não conseguiu conferir", acao:"O robô não conseguiu conferir a guia no SGU. Quando ele já tentou todas as vezes, o Gabriel é avisado pelo Telegram." }
+  aguardando:    { rot:"Na fila do robô", curto:"Na fila do robô", cor:"var(--cinza)", sub:"O robô ainda vai olhar", acao:"O robô abre a guia no SGU e confere as duas datas (senha e carteirinha). O resultado aparece na lista em instantes." },
+  conferindo:    { rot:"Robô no SGU agora…", curto:"Na fila do robô", cor:"var(--cinza)", sub:"O robô ainda vai olhar", acao:"O robô abre a guia no SGU e confere as duas datas (senha e carteirinha). O resultado aparece na lista em instantes." },
+  espera:        { rot:"Vai conferir de novo", curto:"Vai conferir de novo", cor:"var(--tint)", sub:"O robô confere de novo sozinho", acao:"O SGU ainda mostrava a data antiga. O robô confere de novo sozinho depois de 20 minutos, de 1 hora e de 4 horas. Não precisa mandar o número de novo." },
+  renovada:      { rot:"Validade atualizada", curto:"Atualizadas", cor:"var(--verde)", sub:"Já atualizada no sistema: é só ler", acao:"O robô atualizou a validade no sistema. A Agenda do Cortex atualiza em poucos minutos. É só ler e tirar da tela." },
+  nao_renovou:   { rot:"Não renovou no SGU", curto:"Não renovou", cor:"var(--vermelho)", sub:"O Gabriel é avisado pelo Telegram", acao:"O robô conferiu várias vezes, ao longo de umas 5 horas, e o SGU continua com a data antiga. O Gabriel é avisado pelo Telegram. Leu, tire da tela." },
+  sem_mudanca:   { rot:"SGU ainda com a data velha", curto:"Data velha no SGU", cor:"var(--laranja)", sub:"Esperar uns minutos e mandar de novo", acao:"O SGU ainda mostra a data antiga. Se a Unimed confirmou a renovação, aguarde alguns minutos e mande o número de novo." },
+  fora_do_banco: { rot:"Guia fora do nosso banco", curto:"Fora do banco", cor:"var(--cinza)", sub:"Conferir se o número foi digitado certo", acao:"Essa guia não está no nosso banco. Se for guia nova da Unimed, o coletor captura sozinho. Se for renovação de guia antiga, confira se o número foi digitado certo." },
+  erro:          { rot:"Erro ao conferir", curto:"Erro", cor:"var(--vermelho)", sub:"O robô não conseguiu conferir", acao:"O robô não conseguiu conferir a guia no SGU. Quando ele já tentou todas as vezes, o Gabriel é avisado pelo Telegram." }
 };
 var FILA_SEMPRE = ["todos", "renovada", "espera", "nao_renovou", "fila"];   /* filtros que aparecem mesmo zerados */
-function filaTxt(s){ return FILA_TXT[s] || { rot:s, curto:s, cor:"#636366", sub:"", acao:"" }; }
+function filaTxt(s){ return FILA_TXT[s] || { rot:s, curto:s, cor:"var(--cinza)", sub:"", acao:"" }; }
 /* chave de tela: fila · espera (vai conferir de novo) · renovada · nao_renovou · e as antigas sem_mudanca/fora_do_banco/erro */
 function filaChave(l){
   if(l.situacao === "aguardando" || l.situacao === "conferindo") return "fila";
@@ -1194,7 +1298,7 @@ function desenharFila(){
   var sec = novo("section", "lista"); sec.setAttribute("aria-label", "Guias mandadas ao robô");
   var topo = novo("div", "lista-topo");
   var seg = novo("div", "seg"); seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "Mostrar");
-  var defs = [["todos","Todos","#AEAEB2"],["renovada",FILA_TXT.renovada.curto,FILA_TXT.renovada.cor],["espera",FILA_TXT.espera.curto,FILA_TXT.espera.cor],
+  var defs = [["todos","Todos","var(--cinza3)"],["renovada",FILA_TXT.renovada.curto,FILA_TXT.renovada.cor],["espera",FILA_TXT.espera.curto,FILA_TXT.espera.cor],
               ["nao_renovou",FILA_TXT.nao_renovou.curto,FILA_TXT.nao_renovou.cor]];
   ["sem_mudanca","fora_do_banco","erro"].forEach(function(k){ if(cont[k]) defs.push([k, FILA_TXT[k].curto, FILA_TXT[k].cor]); });
   defs.push(["fila","Na fila do robô","#D2D2D7"]);
@@ -1461,10 +1565,10 @@ function desenharCad(){
     var tipos = cadTipos(c), t = c.tratamento || "pendente";
     var rot = cadTxt(tipos[0]).curto + (tipos.length > 1 ? " +" + (tipos.length - 1) : "");
     var sub = t !== "pendente" ? (TRAT_CAD_ROT[t] || t) : (c.reincidente ? "Reincidente" : (c.lixo ? "Não juntar" : ""));
-    var subCor = t === "corrigido" ? "#248A3D" : (t !== "pendente" ? "#636366" : "#D70015");
+    var subCor = t === "corrigido" ? "var(--verde)" : (t !== "pendente" ? "var(--cinza)" : "var(--vermelho)");
     var b = botao("linha" + (estado._cadAberta === c.paciente_id ? " aberta" : ""),
       '<span class="q"><span class="nm">' + escapa(c.paciente || "—") + '</span><span class="mt">' + cadFichaTxt(c) + " · " + futTxt(c.futuras) + '</span></span>' +
-      '<span class="dir"><span class="tag" style="color:' + (t === "pendente" ? "#D70015" : "#AEAEB2") + '">' + escapa(rot) + '</span>' +
+      '<span class="dir"><span class="tag" style="color:' + (t === "pendente" ? "var(--vermelho)" : "var(--cinza3)") + '">' + escapa(rot) + '</span>' +
       (sub ? '<span class="tr" style="color:' + subCor + ';font-weight:600">' + escapa(sub) + '</span>' : '') + desdeSpan(desdeDe("cad", c.oc_ref)) + '</span>',
       function(){ abrirCadItem(c.paciente_id); });
     b.setAttribute("aria-haspopup", "dialog"); b.setAttribute("data-cad", c.paciente_id);
@@ -1485,7 +1589,7 @@ function desenharCad(){
   todas.forEach(function(c){ cadTipos(c).forEach(function(t){ contT[t] = (contT[t] || 0) + 1; }); });
   CAD_TIPOS_LISTA.forEach(function(k){
     var T = cadTxt(k);
-    var b = botao("cat", '<span class="q" style="background:#D70015"></span><span class="t"><b>' + escapa(T.titulo) + '</b><small>' + escapa(T.sub) + '</small></span><span class="n">' + (contT[k] || 0) + '</span>' + ico(IC.dir, 16, 2),
+    var b = botao("cat", '<span class="q" style="background:var(--vermelho)"></span><span class="t"><b>' + escapa(T.titulo) + '</b><small>' + escapa(T.sub) + '</small></span><span class="n">' + (contT[k] || 0) + '</span>' + ico(IC.dir, 16, 2),
       function(){ abrirCadCat(k); });
     b.setAttribute("aria-haspopup", "dialog");
     pr.appendChild(b);
@@ -1564,7 +1668,7 @@ function abrirCadItem(id){
     P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-quando">' + cadFichaTxt(c) + '</span><h2>' + escapa(c.paciente || "—") + '</h2>' +
       desdeL2(desdeDe("cad", c.oc_ref)) + (tags ? '<span class="etqs">' + tags + '</span>' : '')));
     c.problemas.forEach(function(p){
-      P.corpo.appendChild(novo("div", "pp-caixa", '<span class="pp-tag" style="color:#D70015">' + escapa(cadTxt(p.tipo).titulo) + '</span><span class="pp-txt">' + textoProblema2(p) + '</span>'));
+      P.corpo.appendChild(novo("div", "pp-caixa", '<span class="pp-tag" style="color:var(--vermelho)">' + escapa(cadTxt(p.tipo).titulo) + '</span><span class="pp-txt">' + textoProblema2(p) + '</span>'));
     });
     var fe = novo("a", "btn-claro", "Abrir Pacientes no Feegow " + ico(IC.fora, 14, 2));
     fe.href = "https://app.feegow.com/main/?P=Pacientes&Pers=1"; fe.target = "_blank"; fe.rel = "noopener";
@@ -1593,11 +1697,11 @@ function abrirCadItem(id){
     blocoN.appendChild(notaEl);
     P.corpo.appendChild(blocoN);
     var est = msgId === c.paciente_id ? msg : null, txt, cor;
-    if(est === "salvando"){ txt = "Salvando…"; cor = "#AEAEB2"; }
-    else if(est === "ok"){ txt = "Salvo agora · por " + (autora() || "você"); cor = "#248A3D"; }
-    else if(est === "erro"){ txt = "Não consegui salvar. Confira a internet e tente de novo."; cor = "#D70015"; }
-    else { txt = t !== "pendente" ? "Marcado antes como " + (TRAT_CAD_ROT[t] || t).toLowerCase() + (c.autora ? ", por " + c.autora : "") + "." : "Marque o que fez: salva sozinho"; cor = "#AEAEB2"; }
-    var sv = novo("div", "pp-salvo", ico(IC.ok, 14, 2.2, cor) + '<span' + (est === "erro" ? ' style="color:#D70015"' : '') + '>' + escapa(txt) + '</span>');
+    if(est === "salvando"){ txt = "Salvando…"; cor = "var(--cinza3)"; }
+    else if(est === "ok"){ txt = "Salvo agora · por " + (autora() || "você"); cor = "var(--verde)"; }
+    else if(est === "erro"){ txt = "Não consegui salvar. Confira a internet e tente de novo."; cor = "var(--vermelho)"; }
+    else { txt = t !== "pendente" ? "Marcado antes como " + (TRAT_CAD_ROT[t] || t).toLowerCase() + (c.autora ? ", por " + c.autora : "") + "." : "Marque o que fez: salva sozinho"; cor = "var(--cinza3)"; }
+    var sv = novo("div", "pp-salvo", ico(IC.ok, 14, 2.2, cor) + '<span' + (est === "erro" ? ' style="color:var(--vermelho)"' : '') + '>' + escapa(txt) + '</span>');
     sv.setAttribute("aria-live", "polite");
     P.corpo.appendChild(sv);
     P.rodape.hidden = false; P.rodape.innerHTML = "";
@@ -1629,11 +1733,11 @@ function abrirCadItem(id){
    Gravação igual à de antes: salvarOcNota("exclusao", ref, {quem_fez, tratamento, nota}) → oc_notas;
    o dono continua com aprovarExclusao (libera a proteção) e dispensarExclusao (tira da tela). */
 var EXCL_SIT = {
-  aberta:     { label:"Sem resposta", cor:"#D70015", sub:"Restaurar no Feegow ou confirmar que era para apagar",
+  aberta:     { label:"Sem resposta", cor:"var(--vermelho)", sub:"Restaurar no Feegow ou confirmar que era para apagar",
                 acao:"Abrir o Feegow e conferir. Apagou sem querer? Restaure os agendamentos e marque “Restaurei”. Era para apagar mesmo? Marque “Estava certo apagar”." },
-  aguardando: { label:"Aguardando o dono", cor:"#C93400", sub:"A secretária disse que era para apagar",
+  aguardando: { label:"Aguardando o dono", cor:"var(--laranja)", sub:"A secretária disse que era para apagar",
                 acao:"A secretária marcou “Estava certo apagar”. O administrador confere e aprova: aí a proteção é solta e a linha sai sozinha na próxima rodada." },
-  resolvida:  { label:"Resolvidas", cor:"#248A3D", sub:"Restauradas ou sem solução, esperando a conferência",
+  resolvida:  { label:"Resolvidas", cor:"var(--verde)", sub:"Restauradas ou sem solução, esperando a conferência",
                 acao:"Restaurou no Feegow? A conferência da madrugada vê que as sessões voltaram e a linha some sozinha." }
 };
 var TRAT_EXCL_ROT = { pendente:"Pendente", restaurei:"Restaurei no Feegow", estava_certo:"Estava certo apagar", sem_solucao:"Sem solução" };
@@ -1673,7 +1777,7 @@ function desenharExcl(){
   var sec = novo("section", "lista alta"); sec.setAttribute("aria-label", "Séries apagadas");
   var topo = novo("div", "lista-topo");
   var seg = novo("div", "seg"); seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "Mostrar");
-  [["aberta","Sem resposta",EXCL_SIT.aberta.cor],["aguardando","Aguardando o dono",EXCL_SIT.aguardando.cor],["resolvida","Resolvidas",EXCL_SIT.resolvida.cor],["todas","Todas","#AEAEB2"]].forEach(function(d){
+  [["aberta","Sem resposta",EXCL_SIT.aberta.cor],["aguardando","Aguardando o dono",EXCL_SIT.aguardando.cor],["resolvida","Resolvidas",EXCL_SIT.resolvida.cor],["todas","Todas","var(--cinza3)"]].forEach(function(d){
     var on = filtro === d[0];
     var b = botao(on ? "on" : "", '<span class="q" style="background:' + d[2] + '"></span>' + d[1] + ' <span class="n">' + cont[d[0]] + '</span>',
       function(){ estado.exclFiltro = d[0]; estado._exclTopo = true; desenharExcl(); });
@@ -1694,7 +1798,7 @@ function desenharExcl(){
     if(dia !== k){ dia = k; corpo.appendChild(novo("div", "dia-cab", '<b>' + escapa(k) + '</b><span>' + (porDia[k] === 1 ? "1 série" : porDia[k] + " séries") + '</span>')); }
     var s = exclSit(x), S = EXCL_SIT[s];
     var rot = s === "resolvida" ? (TRAT_EXCL_ROT[x.tratamento] || x.tratamento) : S.label;
-    var sub = x.reincidente ? '<span class="tr" style="color:#D70015;font-weight:600">Restaurei, e não voltou</span>' :
+    var sub = x.reincidente ? '<span class="tr" style="color:var(--vermelho);font-weight:600">Restaurei, e não voltou</span>' :
       (x.quem_fez ? '<span class="tr">Quem apagou: ' + escapa((QUEM_ROT[x.quem_fez] || x.quem_fez).toLowerCase()) + '</span>' : '');
     var b = botao("linha" + (estado._exclAberta === x.oc_ref ? " aberta" : ""),
       '<span class="h">' + escapa(horaDe(x.protegido_em)) + '</span>' +
@@ -1811,11 +1915,11 @@ function abrirExclItem(ref, filtro){
     bn.appendChild(notaEl);
     P.corpo.appendChild(bn);
     var est = msgId === x.oc_ref ? msg : null, txt, cor;
-    if(est === "salvando"){ txt = "Salvando…"; cor = "#AEAEB2"; }
-    else if(est === "ok"){ txt = "Salvo agora · por " + (autora() || "você"); cor = "#248A3D"; }
-    else if(est === "erro"){ txt = "Não consegui salvar. Confira a internet e tente de novo."; cor = "#D70015"; }
-    else { txt = (t !== "pendente" || x.quem_fez) ? "Marcado antes" + (x.autora ? " por " + x.autora : "") + "." : "Marque quem apagou e o que fez: salva sozinho"; cor = "#AEAEB2"; }
-    var sv = novo("div", "pp-salvo", ico(IC.ok, 14, 2.2, cor) + '<span' + (est === "erro" ? ' style="color:#D70015"' : '') + '>' + escapa(txt) + '</span>');
+    if(est === "salvando"){ txt = "Salvando…"; cor = "var(--cinza3)"; }
+    else if(est === "ok"){ txt = "Salvo agora · por " + (autora() || "você"); cor = "var(--verde)"; }
+    else if(est === "erro"){ txt = "Não consegui salvar. Confira a internet e tente de novo."; cor = "var(--vermelho)"; }
+    else { txt = (t !== "pendente" || x.quem_fez) ? "Marcado antes" + (x.autora ? " por " + x.autora : "") + "." : "Marque quem apagou e o que fez: salva sozinho"; cor = "var(--cinza3)"; }
+    var sv = novo("div", "pp-salvo", ico(IC.ok, 14, 2.2, cor) + '<span' + (est === "erro" ? ' style="color:var(--vermelho)"' : '') + '>' + escapa(txt) + '</span>');
     sv.setAttribute("aria-live", "polite");
     P.corpo.appendChild(sv);
     if(ehDono()){
@@ -2120,21 +2224,21 @@ function salvarCorteNota(ref, campos, aoSalvar){
    e recusa a segunda espera para a mesma consulta sem guia. O "Segurar o corte" (indulto) saiu da tela;
    indulto antigo ainda aparece até vencer. */
 var CORTE_TXT = {
-  cortar_hoje:       { label:"Cortar hoje", grupo:"Cortar hoje, até as 21h", cor:"#D70015", ordem:0, sub:"A última consulta coberta já passou: corte até as 21h (sábado, 11h)",
+  cortar_hoje:       { label:"Cortar hoje", grupo:"Cortar hoje, até as 21h", cor:"var(--vermelho)", ordem:0, sub:"A última consulta coberta já passou: corte até as 21h (sábado, 11h)",
                        acao:"A última consulta coberta foi no dia útil anterior e a guia nova não entrou. Sem guia nova até as 21h (sábado, 11h), abrir o próximo agendamento no Feegow, apagar “este e os próximos” e assinar aqui." },
-  prazo_vencido:     { label:"Prazo vencido", grupo:"Prazo vencido", cor:"#D70015", ordem:1, sub:"A guia solicitada não chegou em 2 dias",
+  prazo_vencido:     { label:"Prazo vencido", grupo:"Prazo vencido", cor:"var(--vermelho)", ordem:1, sub:"A guia solicitada não chegou em 2 dias",
                        acao:"A guia foi solicitada, mas o prazo de 2 dias venceu. Cortar: abrir o próximo agendamento no Feegow, apagar “este e os próximos” e assinar aqui." },
-  cortar_agora:      { label:"Cortar agora", grupo:"Cortar agora", cor:"#D70015", ordem:2, sub:"Os próximos atendimentos já estão sem guia",
+  cortar_agora:      { label:"Cortar agora", grupo:"Cortar agora", cor:"var(--vermelho)", ordem:2, sub:"Os próximos atendimentos já estão sem guia",
                        acao:"Os próximos atendimentos já estão sem cobertura. Abrir o próximo agendamento no Feegow, apagar “este e os próximos” (nunca os anteriores) e assinar aqui." },
-  incompleto:        { label:"Apagou incompleto", grupo:"Apagou incompleto", cor:"#D70015", ordem:3, sub:"Assinada como excluída, mas os futuros ainda existem",
+  incompleto:        { label:"Apagou incompleto", grupo:"Apagou incompleto", cor:"var(--vermelho)", ordem:3, sub:"Assinada como excluída, mas os futuros ainda existem",
                        acao:"Alguém assinou “Excluí”, mas os futuros continuam no Feegow: provavelmente apagou só um. Abrir o Feegow e apagar “este e os próximos”." },
-  excluido_conferir: { label:"Excluída, conferindo", grupo:"Excluída, conferindo", cor:"#C93400", ordem:4, sub:"Assinada: some quando o espelho confirmar (até 30 min)",
+  excluido_conferir: { label:"Excluída, conferindo", grupo:"Excluída, conferindo", cor:"var(--laranja)", ordem:4, sub:"Assinada: some quando o espelho confirmar (até 30 min)",
                        acao:"A exclusão foi assinada. A linha some sozinha quando o espelho do Feegow confirmar que os futuros saíram. Se em 30 minutos eles continuarem lá, volta como “Apagou incompleto” (assinar de novo não muda o prazo)." },
-  em_espera:         { label:"Aguardando", grupo:"Aguardando", cor:"#636366", ordem:5, sub:"Guia a caminho: volta para a lista se não entrar no sistema",
+  em_espera:         { label:"Aguardando", grupo:"Aguardando", cor:"var(--cinza)", ordem:5, sub:"Guia a caminho: volta para a lista se não entrar no sistema",
                        acao:"A recepção marcou que a guia está a caminho. Se ela não entrar no sistema até o fim do prazo, o paciente volta para a lista e aí é cortar: só se aguarda uma vez." },
-  aguardando:        { label:"Aguardando guia", grupo:"Aguardando guia", cor:"#636366", ordem:6, sub:"Guia solicitada: prazo máximo de 2 dias",
+  aguardando:        { label:"Aguardando guia", grupo:"Aguardando guia", cor:"var(--cinza)", ordem:6, sub:"Guia solicitada: prazo máximo de 2 dias",
                        acao:"A guia foi solicitada e está segurando o corte por no máximo 2 dias. Venceu o prazo, corta." },
-  indulto:           { label:"Indulto ativo", grupo:"Indulto ativo", cor:"#636366", ordem:7, sub:"Corte segurado por alguns dias, assinado",
+  indulto:           { label:"Indulto ativo", grupo:"Indulto ativo", cor:"var(--cinza)", ordem:7, sub:"Corte segurado por alguns dias, assinado",
                        acao:"Alguém segurou o corte por alguns dias, com motivo registrado. Quando o indulto vence, o paciente volta para a tesoura." }
 };
 var MOTIVO_ROT = { guia_vencida:"Guia vencida", sessao_em_feriado:"Cai no feriado", sem_saldo_na_fila:"Fila passa do saldo", saldo_esgotado:"Saldo esgotado", sem_guia:"Sem guia" };
@@ -2148,7 +2252,7 @@ function hEsp(){ var r = (estado.corte || []).find(function(x){ return x.espera_
 function corteEst(c){ return c.apagou_incompleto ? "incompleto" : c.estado; }
 function corteTxt(e){
   if(e === "em_espera"){ var t = Object.assign({}, CORTE_TXT.em_espera); t.label = t.grupo = "Aguardando " + (hEsp() || 20) + "h"; return t; }
-  return CORTE_TXT[e] || { label:e, grupo:e, cor:"#636366", ordem:9, sub:"", acao:"" };
+  return CORTE_TXT[e] || { label:e, grupo:e, cor:"var(--cinza)", ordem:9, sub:"", acao:"" };
 }
 function motivosTxt(t){ return String(t || "").split(" · ").filter(Boolean).map(function(m){ return MOTIVO_ROT[m] || (SIT[m] && SIT[m].rot) || m; }).join(" · "); }
 function corteAssinatura(c){
@@ -2194,7 +2298,7 @@ function desenharCorte(){
   var sec = novo("section", "lista alta"); sec.setAttribute("aria-label", "Pacientes para cortar");
   var topo = novo("div", "lista-topo");
   var seg = novo("div", "seg"); seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "Mostrar");
-  var defs = [["todos","Todos","#AEAEB2"],["cortar_hoje","Cortar hoje",TOM.r],["cortar_agora","Cortar agora",TOM.r],["incompleto","Apagou incompleto",TOM.r]];
+  var defs = [["todos","Todos","var(--cinza3)"],["cortar_hoje","Cortar hoje",TOM.r],["cortar_agora","Cortar agora",TOM.r],["incompleto","Apagou incompleto",TOM.r]];
   ["prazo_vencido","excluido_conferir","em_espera","aguardando","indulto"].forEach(function(k){ if(cont[k] > 0) defs.push([k, corteTxt(k).label, corteTxt(k).cor]); });
   defs.forEach(function(d){
     var on = filtro === d[0];
@@ -2220,7 +2324,7 @@ function desenharCorte(){
               motivosTxt(c.motivos) + (c.ja_esperou ? " · já aguardou" : "");
     var b = botao("linha" + (estado._corteAberta === c.oc_ref ? " aberta" : "") + (e === "indulto" || e === "em_espera" ? " apagada" : ""),
       '<span class="q"><span class="nm">' + escapa(c.paciente || "—") + '</span><span class="mt">' +
-        (c.hoje_sem_guia ? '<b style="color:#D70015">HOJE ' + escapa(c.hoje_horario || "") + ' sem guia · </b>' : '') +   /* Blindagem v1 */
+        (c.hoje_sem_guia ? '<b style="color:var(--vermelho)">HOJE ' + escapa(c.hoje_horario || "") + ' sem guia · </b>' : '') +   /* Blindagem v1 */
         escapa((ESP_ROT[c.especialidade] || c.especialidade || "—") + " · " + futSemCob(c.n_descobertos) + ": " + (c.datas_fmt || "—")) + '</span></span>' +
       '<span class="dir"><span class="tag" style="color:' + S.cor + '">' + escapa(S.label) + '</span>' + (sub ? '<span class="tr">' + escapa(sub) + '</span>' : '') +
         desdeSpan(desdeDe("corte", c.oc_ref)) + '</span>',
@@ -2330,16 +2434,16 @@ function abrirCorteItem(ref){
                  e === "incompleto" ? "Assinou, mas os futuros continuam no Feegow" :
                  e === "cortar_agora" ? "Sem cobertura: cortar agora" : S.sub;
     P.corpo.innerHTML = "";
-    P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-quando" style="color:' + (ativo ? "#D70015" : "#636366") + ';font-weight:600">' + escapa(quando) + '</span>' +
+    P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-quando" style="color:' + (ativo ? "var(--vermelho)" : "var(--cinza)") + ';font-weight:600">' + escapa(quando) + '</span>' +
       '<h2>' + escapa(c.paciente || "—") + '</h2><span class="pp-l1">' + escapa(ESP_ROT[c.especialidade] || c.especialidade || "—") + '</span>' +
       (sumiu ? '' : desdeL2(desdeDe("corte", c.oc_ref)))));
     var cx = novo("div", "pp-caixa", '<span class="pp-tag" style="color:' + S.cor + '">' + escapa(S.label) + '</span>' +
       '<span class="pp-txt"><b>' + futSemCob(c.n_descobertos) + ':</b> ' + escapa(c.datas_fmt || "—") + '</span>' +
       (c.motivos ? '<span class="pp-txt cinza">Motivo: ' + escapa(motivosTxt(c.motivos)) + '</span>' : '') +
       (c.ultima_consulta ? '<span class="pp-txt cinza">Última consulta: ' + escapa(fmtData(c.ultima_consulta).slice(0, 5)) + '</span>' : ''));   /* CORTE v2.3: corte no dia útil seguinte a ela */
-    if(c.hoje_sem_guia) cx.appendChild(novo("span", "pp-txt", '<b style="color:#D70015">Consulta HOJE' + (c.hoje_horario ? " às " + escapa(c.hoje_horario) : "") +
+    if(c.hoje_sem_guia) cx.appendChild(novo("span", "pp-txt", '<b style="color:var(--vermelho)">Consulta HOJE' + (c.hoje_horario ? " às " + escapa(c.hoje_horario) : "") +
       ' sem guia: não atender.</b> Avisar o paciente agora; sem a guia entrar no sistema antes do horário, ela também sai no corte.'));   /* Blindagem v1 */
-    if(e === "incompleto") cx.appendChild(novo("span", "pp-txt", '<b style="color:#D70015">Apagou incompleto:</b> foi assinada como excluída, mas os futuros ainda existem. Foi apagado só um? Abrir o Feegow e apagar “este e os próximos”.'));
+    if(e === "incompleto") cx.appendChild(novo("span", "pp-txt", '<b style="color:var(--vermelho)">Apagou incompleto:</b> foi assinada como excluída, mas os futuros ainda existem. Foi apagado só um? Abrir o Feegow e apagar “este e os próximos”.'));
     if(e === "aguardando") cx.appendChild(novo("span", "pp-txt", "Guia " + (c.hold_fila_em ? "na fila do robô" : "solicitada no balcão") + ": segurando o corte uma vez só, até o prazo; marcar de novo não estica."));
     var ass = corteAssinatura(c);
     if(ass) cx.appendChild(novo("span", "pp-txt cinza", escapa(ass)));
@@ -2415,7 +2519,7 @@ function abrirCorteItem(ref){
       ac.appendChild(novo("span", "pp-txt", "O paciente sai da lista por " + h + " horas. Se a guia não entrar no sistema até <b>" + escapa(fmtPrazo(volta)) +
         "</b>, ele volta, e aí é cortar: só se aguarda uma vez."));
       if(c.primeiro_descoberto && c.primeiro_descoberto <= isoDia(volta))
-        ac.appendChild(novo("span", "pp-txt", '<b style="color:#D70015">Atenção:</b> a próxima consulta sem guia é ' + escapa(fmtData(c.primeiro_descoberto).slice(0, 5)) +
+        ac.appendChild(novo("span", "pp-txt", '<b style="color:var(--vermelho)">Atenção:</b> a próxima consulta sem guia é ' + escapa(fmtData(c.primeiro_descoberto).slice(0, 5)) +
           ', dentro desse prazo. Se a guia não entrar até lá, o paciente pode ser atendido sem guia.'));
       var lw = novo("div", "pp-adm-bt");
       lw.appendChild(botao("btn btn-s", "Cancelar", function(){ modo = "acoes"; motEsp = null; pinta(); }));
@@ -2436,7 +2540,7 @@ function abrirCorteItem(ref){
     P.corpo.appendChild(ac);
     if(aviso){
       var ok = aviso.indexOf("ok:") === 0;
-      P.corpo.appendChild(novo("div", "pp-salvo", ico(ok ? IC.ok : IC_ALERTA, 14, 2.2, ok ? "#248A3D" : "#D70015") + '<span style="color:' + (ok ? "#248A3D" : "#D70015") + '">' + escapa(ok ? aviso.slice(3) : aviso) + '</span>'));
+      P.corpo.appendChild(novo("div", "pp-salvo", ico(ok ? IC.ok : IC_ALERTA, 14, 2.2, ok ? "var(--verde)" : "var(--vermelho)") + '<span style="color:' + (ok ? "var(--verde)" : "var(--vermelho)") + '">' + escapa(ok ? aviso.slice(3) : aviso) + '</span>'));
     }
     P.corpo.scrollTop = mesmo ? rol : 0;
     P.rodape.hidden = false; P.rodape.innerHTML = "";
@@ -2583,23 +2687,23 @@ function textoAvisoGuia(f){
    v3.5: o motivo vem em destaque; quando o erro tem correção, a tela diz o que CORRIGIR. Para mandar, um link abre o
    WhatsApp Web já na conversa e com a mensagem pronta escrita. Continua sem gravar nada. */
 var FALHA_TXT = {
-  sem_celular:  { label:"Sem celular", cor:"#D70015", sub:"Corrigir o cadastro e depois mandar",
+  sem_celular:  { label:"Sem celular", cor:"var(--vermelho)", sub:"Corrigir o cadastro e depois mandar",
                   porque:"O cadastro não tem um número de celular que sirva para WhatsApp.",
                   corrigir:"Cadastrar o celular do paciente no Feegow.",
                   passo:"Depois de corrigir, abra o WhatsApp com a mensagem pronta, envie e aperte Mandei." },
-  guia_vencida: { label:"Guia vencida", cor:"#C93400", sub:"Avisar que a consulta não vai acontecer",
+  guia_vencida: { label:"Guia vencida", cor:"var(--laranja)", sub:"Avisar que a consulta não vai acontecer",
                   porque:"O robô não manda confirmação quando a guia está vencida.",
                   passo:"Abra o WhatsApp com a mensagem pronta e envie: ela avisa que a consulta não vai acontecer porque a guia venceu. Depois, aperte Mandei." },
-  sem_guia:     { label:"Sem guia", cor:"#C93400", sub:"Avisar que a consulta não vai acontecer",
+  sem_guia:     { label:"Sem guia", cor:"var(--laranja)", sub:"Avisar que a consulta não vai acontecer",
                   porque:"O robô não manda confirmação de consulta sem guia Unimed.",
                   passo:"Abra o WhatsApp com a mensagem pronta e envie: ela avisa que a consulta não vai acontecer porque não tem guia. Depois, aperte Mandei." },
-  erro_envio:   { label:"Erro no envio", cor:"#636366", sub:"Não tem o que corrigir: é só mandar",
+  erro_envio:   { label:"Erro no envio", cor:"var(--cinza)", sub:"Não tem o que corrigir: é só mandar",
                   porque:"A plataforma de WhatsApp recusou ou caiu na hora do envio.",
                   passo:"Não tem o que corrigir. Abra o WhatsApp com a mensagem pronta, envie e aperte Mandei." },
-  nao_enviado:  { label:"Não enviado", cor:"#636366", sub:"Mandar a mensagem pronta",
+  nao_enviado:  { label:"Não enviado", cor:"var(--cinza)", sub:"Mandar a mensagem pronta",
                   porque:"O robô não mandou esta mensagem.",
                   passo:"Abra o WhatsApp com a mensagem pronta, envie e aperte Mandei." },
-  prof:         { label:"Aviso ao profissional", cor:"#2C2D6E", sub:"Mandar o aviso para o profissional",
+  prof:         { label:"Aviso ao profissional", cor:"var(--tint)", sub:"Mandar o aviso para o profissional",
                   porque:"O robô tentou mandar o aviso da conferência da agenda e a plataforma não entregou.",
                   passo:"Não tem o que corrigir. Abra o WhatsApp com a mensagem pronta e envie para o profissional." }
 };
@@ -2685,7 +2789,7 @@ function desenharFalhas(){
   var sec = novo("section", "lista alta"); sec.setAttribute("aria-label", "Mensagens que não saíram");
   var topo = novo("div", "lista-topo");
   var seg = novo("div", "seg"); seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "Mostrar");
-  [["todos", "Todas", "#AEAEB2"]].concat(FALHA_ORDEM.filter(function(k){ return cont[k]; }).map(function(k){ return [k, FALHA_TXT[k].label, FALHA_TXT[k].cor]; }))
+  [["todos", "Todas", "var(--cinza3)"]].concat(FALHA_ORDEM.filter(function(k){ return cont[k]; }).map(function(k){ return [k, FALHA_TXT[k].label, FALHA_TXT[k].cor]; }))
     .forEach(function(d){
       var on = filtro === d[0];
       var b = botao(on ? "on" : "", '<span class="q" style="background:' + d[2] + '"></span>' + escapa(d[1]) + ' <span class="n">' + (cont[d[0]] || 0) + '</span>',
@@ -3139,16 +3243,16 @@ var IC_MAL = {
   rej:    "M12 3.5 21.5 20h-19zM12 10v4.5M12 17.2h.01"
 };
 var MAL_EST = {
-  fechado:                 { rot:"Fechado, esperando o XML do lote", cor:"#C93400",
+  fechado:                 { rot:"Fechado, esperando o XML do lote", cor:"var(--laranja)",
                              explica:"A lista está congelada. Baixe o XML do lote no Feegow e confira aqui: só malote 100% limpo segue para o SGU." },
-  conferido_ok:            { rot:"Conferido, pronto para o SGU", cor:"#248A3D",
+  conferido_ok:            { rot:"Conferido, pronto para o SGU", cor:"var(--verde)",
                              explica:"Suba o lote no SGU. Marque “Enviado” só quando o SGU aceitar." },
-  conferido_com_problemas: { rot:"Barrado na conferência", cor:"#D70015",
+  conferido_com_problemas: { rot:"Barrado na conferência", cor:"var(--vermelho)",
                              explica:"Nada foi gravado. Corrija no Feegow ou no SGU e suba o XML de novo." },
-  em_correcao:             { rot:"Aguardando XML corrigido", cor:"#D70015",
+  em_correcao:             { rot:"Aguardando XML corrigido", cor:"var(--vermelho)",
                              explica:"Suba o XML corrigido para conferir de novo." }
 };
-function malEst(e){ return MAL_EST[e] || { rot: String(e || "—"), cor:"#636366", explica:"" }; }
+function malEst(e){ return MAL_EST[e] || { rot: String(e || "—"), cor:"var(--cinza)", explica:"" }; }
 function malConv(id){ return id === 8 ? "Unimed Intercâmbio" : "Unimed Local"; }
 function malN(n, um, varios){ n = Number(n) || 0; return n === 1 ? "1 " + um : n + " " + varios; }
 /* data e hora de carimbos (timestamptz) no fuso de quem está olhando; datas puras seguem com fx4Data */
@@ -3191,20 +3295,20 @@ function malLinha(it){
     var b = it.b;
     ic = IC_MAL.bloco; tit = malConv(b.convenio_id) + " · Bloco " + b.bloco;
     meta = malN(b.guias.length, "guia", "guias") + " · datas de " + fx4Data(b.d1) + " a " + fx4Data(b.d2) + " · a mais velha primeiro";
-    valor = fx4Dinheiro(b.soma); rot = "Pronto para fechar"; cor = "#248A3D";
+    valor = fx4Dinheiro(b.soma); rot = "Pronto para fechar"; cor = "var(--verde)";
   } else if(it.m){
     var m = it.m, E = malEst(m.estado), u = estado.malotesUlt[m.id], c = fx4UltConf(m.id);
     ic = IC_MAL.malote; tit = "Malote #" + m.id + (m.numero_lote ? " · lote " + m.numero_lote : "");
     meta = malN(m.qt_guias, "guia congelada", "guias congeladas") + " · " + malConv(m.convenio_id) +
            (m.criado_por ? " · fechado por " + m.criado_por : "") + " · " + malDia(m.criado_em);
     if(c && c.valor_total != null) valor = fx4Dinheiro(c.valor_total);
-    if(u && u.rodando){ rot = "Conferindo o XML…"; cor = "#636366"; } else { rot = E.rot; cor = E.cor; }
+    if(u && u.rodando){ rot = "Conferindo o XML…"; cor = "var(--cinza)"; } else { rot = E.rot; cor = E.cor; }
   } else {
     var r = it.r;
     ic = IC_MAL.rej; tit = "Guia " + r.numero_guia_prestador + (r.numero_lote ? " · lote " + r.numero_lote : "");
     meta = [r.paciente_nome, malDia(r.criada_em), r.autora ? "por " + r.autora : "", "SGU: " + (r.motivo_sgu || "—")]
              .filter(Boolean).join(" · ");
-    rot = r.tratada ? "Tratada" : "Pendente, análise do dono"; cor = r.tratada ? "#248A3D" : "#D70015";
+    rot = r.tratada ? "Tratada" : "Pendente, análise do dono"; cor = r.tratada ? "var(--verde)" : "var(--vermelho)";
   }
   return '<span class="mal-ic">' + ico(ic, 18, 1.7) + '</span>' +
     '<span class="q"><span class="nm">' + escapa(tit) + '</span><span class="mt">' + escapa(meta) + '</span></span>' +
@@ -3243,9 +3347,9 @@ function desenharMalotes(){
   var sec = novo("section", "lista alta"); sec.setAttribute("aria-label", "Malotes");
   var topo = novo("div", "lista-topo");
   var seg = novo("div", "seg"); seg.setAttribute("role", "group"); seg.setAttribute("aria-label", "Mostrar");
-  [["prontos", "Prontos para fechar", "#248A3D", blocos.length],
-   ["andamento", "Em andamento", "#C93400", vivos.length],
-   ["rejeicoes", "Rejeições do SGU", "#D70015", rej.length]].forEach(function(d){
+  [["prontos", "Prontos para fechar", "var(--verde)", blocos.length],
+   ["andamento", "Em andamento", "var(--laranja)", vivos.length],
+   ["rejeicoes", "Rejeições do SGU", "var(--vermelho)", rej.length]].forEach(function(d){
     var on = f === d[0];
     var b = botao(on ? "on" : "", '<span class="q" style="background:' + d[2] + '"></span>' + d[1] + ' <span class="n">' + d[3] + '</span>', function(){
       if((estado.malFiltro || "prontos") === d[0]) return;
@@ -3374,7 +3478,7 @@ function abrirMalItem(chave){
       '<h2>' + escapa(malConv(b.convenio_id) + " · Bloco " + b.bloco) + '</h2>' +
       '<span class="pp-l1">' + escapa(malN(b.guias.length, "guia", "guias") + " · datas de " + fx4Data(b.d1) + " a " + fx4Data(b.d2) +
         " · valor esperado " + fx4Dinheiro(b.soma)) + '</span>'));
-    P.corpo.appendChild(novo("div", "pp-caixa", '<span class="pp-tag" style="color:#248A3D">Pronto para fechar</span>' +
+    P.corpo.appendChild(novo("div", "pp-caixa", '<span class="pp-tag" style="color:var(--verde)">Pronto para fechar</span>' +
       '<span class="pp-txt">Copie os números, feche o malote no Feegow com essas guias e assine aqui.</span>'));
     var gb = novo("div", "pp-bloco mal-guias");
     var cab = novo("div", "mal-guias-cab", '<span class="pp-rot">Guias do bloco, da data mais velha para a mais nova</span>');
@@ -3498,7 +3602,7 @@ function abrirMalItem(chave){
       (r.paciente_nome ? '<span class="pp-l1">' + escapa(r.paciente_nome) + '</span>' : '') +
       (r.numero_guia_operadora ? '<span class="pp-l2">Guia na operadora: ' + escapa(r.numero_guia_operadora) + '</span>' : '')));
     var cx = novo("div", "pp-caixa");
-    var tg = novo("span", "pp-tag", r.tratada ? "Tratada" : "Pendente, análise do dono"); tg.style.color = r.tratada ? "#248A3D" : "#D70015"; cx.appendChild(tg);
+    var tg = novo("span", "pp-tag", r.tratada ? "Tratada" : "Pendente, análise do dono"); tg.style.color = r.tratada ? "var(--verde)" : "var(--vermelho)"; cx.appendChild(tg);
     cx.appendChild(novo("span", "pp-txt", "<b>O que o SGU falou:</b> " + escapa(r.motivo_sgu || "—")));
     if(r.tratada){
       var quem = ["Tratada", r.tratada_por ? "por " + r.tratada_por : "", r.tratada_em ? "em " + malDia(r.tratada_em) : ""].filter(Boolean).join(" ");
@@ -3545,8 +3649,8 @@ function abrirMalItem(chave){
 }
 
 function trocaTela(t){
-  if((t === "dono" || t === "malotes") && !ehDono()) t = "agenda";   /* Malotes: só a Administração (24/10/26) */
-  if(t === "fila"){ t = "agenda"; setTimeout(abrirRenovacoes, 0); }   /* v3.4: Renovações saiu do menu e virou o popup da Agenda */
+  if((t === "dono" || t === "malotes") && !ehDono()) t = "inicio";   /* Malotes: só a Administração (24/10/26) */
+  if(t === "fila"){ t = "inicio"; setTimeout(abrirRenovacoes, 0); }   /* v3.4: Renovações saiu do menu e virou o popup (v4: do Início) */
   estado.tela = t;
   if(window.moldura) moldura.aoTrocarTela(t);      /* cabeçalho primeiro: a tela pode pôr controles nele */
   var abas = document.querySelectorAll("#s-guias .gv-aba");
@@ -3557,8 +3661,9 @@ function trocaTela(t){
   if(rg) rg.style.display = (t === "agenda") ? "" : "none";
   var fx = document.getElementById("gv-faixa");
   if(fx && t !== "agenda") fx.hidden = true;
-  if(t === "agenda" || t === "cad" || t === "corte" || t === "falhas") carregarDesde();   /* "desde 14:32" das pendências (no máximo 1 leitura por minuto) */
-  if(t === "agenda"){ desenharAgenda(); }      /* a fila do robô só é consultada de 20 em 20 s com o popup aberto */
+  if(t === "inicio" || t === "agenda" || t === "cad" || t === "corte" || t === "falhas") carregarDesde();   /* "desde 14:32" das pendências (no máximo 1 leitura por minuto) */
+  if(t === "inicio"){ if(window.INICIO) INICIO.desenhar(); }   /* v4: a primeira tela (js/inicio.js) lê o estado daqui por inicioDados() */
+  else if(t === "agenda"){ desenharAgenda(); }      /* a fila do robô só é consultada de 20 em 20 s com o popup aberto */
   else if(t === "cad"){ desenharCad(); loadCad(); }
   else if(t === "excl"){ desenharExcl(); loadExcl(); }
   else if(t === "corte"){ desenharCorte(); loadCorte(); }
@@ -3598,7 +3703,7 @@ function boot(t){
     if(rc) rc.addEventListener("click", recarregarTudo);
   }
   refreshDonoAba();
-  trocaTela(t || "agenda");
+  trocaTela(t || "inicio");
   if(Date.now() - estado._carregouEm > 45*1000) recarregarTudo();
 }
 /* Blindagem v1 · de minuto em minuto: se algum "Resolvido"/"Desmarcado" passou do prazo (30 min), relê a agenda
@@ -3618,7 +3723,7 @@ function startTimers(){
   if(GV._t10) return;
   GV._t10 = setInterval(function(){
     if(typeof CU === "undefined" || !CU) return;   /* deslogado: não faz nada */
-    try{ nav("guias"); }catch(e){ boot(); }        /* volta pra tela principal e recarrega */
+    recarregarTudo();                              /* v4: só relê o banco; antes puxava a secretária de volta para a Agenda a cada 10 min */
   }, 10*60*1000);
   if(!GV._t1) GV._t1 = setInterval(checaVolta, 60*1000);
 }
@@ -3634,5 +3739,6 @@ return { boot: boot, startTimers: startTimers, stopTimers: stopTimers, recarrega
          filtroTipo: function(){ return estado.filtroTipo; }, ehDono: ehDono,
          limparFiltroTipo: function(){ estado.filtroTipo = null; agMudou(); },
          abrirRenovacoes: abrirRenovacoes, abrirBusca: abrirBusca, pendenciasAgora: pendenciasAgora,
-         chipsMudaram: function(){ desenharFaixa(); if(estado.tela === "agenda") atualizaLadoAgenda(); } };   /* PROF_COBRA v1.0 + ALERTA v1.0 */
+         chipsMudaram: function(){ desenharFaixa(); if(window.INICIO) INICIO.atualizar(); },   /* PROF_COBRA v1.0 + ALERTA v1.0 + v4 Início */
+         inicioDados: inicioDados, abrirCatAgenda: abrirCatAgenda, abrirPacAgenda: abrirPacAgenda, irParaTela: irParaTela };
 })();

@@ -273,7 +273,15 @@ var GAVETA = (function () {
                  acao: function () { abrirContagem('fechamento'); } });
       }
     }
+    st.chips = L;
     moldura.alertasExtra(L);
+    if (window.INICIO) INICIO.atualizar();   /* v4: o cartão Gaveta do Início e a contagem dos avisos */
+  }
+  /* v4 (Início/ALERTA): as tarefas da gaveta como pendências, com chave estável */
+  function pendencias() {
+    return (st.chips || []).map(function (c) {
+      return { chave: c.chave, rot: c.rot, titulo: 'Nova pendência · ' + c.rot, corpo: c.dica || '', l2: c.dica || '', abrir: c.acao };
+    });
   }
 
   /* janela da contagem dentro do Cortex: chegada (se não contou na entrada), recontagem ou fechamento */
@@ -725,10 +733,11 @@ var GAVETA = (function () {
     st.pedido++; st.pedidoDono++;
     st.estado = null; st.vistos = {}; st.dono = null; st.movs = null; st.movsErro = ''; st.donoErro = ''; st.portaErro = '';
     st.enviouNaEntrada = false; st.verTodos = false; st.senhaLocal = null;
+    st.chips = [];
     if (window.moldura && moldura.alertasExtra) moldura.alertasExtra([]);
     limparLo();
     var r = raiz(); if (r) r.innerHTML = '';
   }
 
-  return { naEntrada: naEntrada, iniciar: iniciar, abrir: abrir, atualizar: atualizar, sair: sair, soRegistrar: soReg };
+  return { naEntrada: naEntrada, iniciar: iniciar, abrir: abrir, atualizar: atualizar, sair: sair, soRegistrar: soReg, pendencias: pendencias };
 })();

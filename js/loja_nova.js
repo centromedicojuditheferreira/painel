@@ -75,8 +75,8 @@ var LJ = (function () {
   var TIPO_ROT = { venda_paciente: 'Venda', venda_profissional: 'Notinha', entrada_estoque: 'Entrada de estoque', pagamento_notinha: 'Pagamento de notinha',
     bonificacao: 'Bonificação', sangria: 'Sangria', suprimento: 'Suprimento', edicao_profissional: 'Edição de profissional',
     ajuste_estoque: 'Balanço de estoque', edicao_produto: 'Edição de produto' };
-  var TIPO_COR = { venda_paciente: '#248A3D', venda_profissional: '#2C2D6E', pagamento_notinha: '#248A3D', bonificacao: '#C93400', entrada_estoque: '#636366',
-    sangria: '#D70015', suprimento: '#248A3D', edicao_profissional: '#AEAEB2', ajuste_estoque: '#636366', edicao_produto: '#AEAEB2' };
+  var TIPO_COR = { venda_paciente: 'var(--verde)', venda_profissional: 'var(--tint)', pagamento_notinha: 'var(--verde)', bonificacao: 'var(--laranja)', entrada_estoque: 'var(--cinza)',
+    sangria: 'var(--vermelho)', suprimento: 'var(--verde)', edicao_profissional: 'var(--cinza3)', ajuste_estoque: 'var(--cinza)', edicao_produto: 'var(--cinza3)' };
   function tipoRot(t) { return TIPO_ROT[t] || t || '—'; }
   function formaRot(f) { return { dinheiro: 'Dinheiro', pix: 'PIX', debito: 'Débito', credito: 'Crédito', notinha: 'Notinha' }[f] || '—'; }
   function grupoRot(g) { return g === 'livraria' ? 'Livraria' : g === 'conveniencia' ? 'Conveniência' : (g || '—'); }
@@ -85,9 +85,9 @@ var LJ = (function () {
   function taxaDe(forma, v) { return forma === 'debito' ? v * (CFG.taxa_debito || 0) / 100 : forma === 'credito' ? v * (CFG.taxa_credito || 0) / 100 : 0; }
   function pct(v) { return String(v == null ? 0 : v).replace('.', ',') + '%'; }
   function saldoTxt(s) {
-    if (s > 0.004) return { txt: fmt(s), cor: '#D70015', rot: 'Deve' };
-    if (s < -0.004) return { txt: 'Crédito ' + fmt(-s), cor: '#248A3D', rot: 'Tem crédito' };
-    return { txt: 'Em dia', cor: '#636366', rot: 'Saldo' };
+    if (s > 0.004) return { txt: fmt(s), cor: 'var(--vermelho)', rot: 'Deve' };
+    if (s < -0.004) return { txt: 'Crédito ' + fmt(-s), cor: 'var(--verde)', rot: 'Tem crédito' };
+    return { txt: 'Em dia', cor: 'var(--cinza)', rot: 'Saldo' };
   }
   function bonifPadrao() { return CFG.valor_bonificacao_padrao != null ? CFG.valor_bonificacao_padrao : 100; }
   function descMov(m) {
@@ -240,7 +240,7 @@ var LJ = (function () {
     P.corpo.appendChild(el('div', 'pp-cab', '<span class="pp-quando">' + esc(quandoTxt(d)) + '</span>' +
       '<h2' + (erro ? ' class="lj-risco"' : '') + '>' + esc(descMov(m)) + '</h2>'));
     var tg = el('span', 'pp-tag', esc(erro ? 'Marcado como erro' : tipoRot(m.tipo)));
-    tg.style.color = erro ? '#D70015' : (TIPO_COR[m.tipo] || '#636366');
+    tg.style.color = erro ? 'var(--vermelho)' : (TIPO_COR[m.tipo] || 'var(--cinza)');
     P.corpo.lastChild.appendChild(tg);
     var lista = [['Tipo', tipoRot(m.tipo)]];
     var cli = clienteDe(m); if (cli) lista.push(['Cliente', cli]);
@@ -343,7 +343,7 @@ var LJ = (function () {
       .sort(function (a, b) { var x = (b.saldo_devedor || 0) - (a.saldo_devedor || 0); return x || String(a.nome).localeCompare(String(b.nome), 'pt-BR'); });
     nt.vis = vis.map(function (p) { return p.id; });
     var topo = el('div', 'lista-topo');
-    topo.appendChild(seg([['devendo', 'Devendo', '#D70015', cont.devendo], ['emdia', 'Em dia', '#248A3D', cont.emdia], ['todos', 'Todos', '#AEAEB2', cont.todos]], nt.filtro,
+    topo.appendChild(seg([['devendo', 'Devendo', 'var(--vermelho)', cont.devendo], ['emdia', 'Em dia', 'var(--verde)', cont.emdia], ['todos', 'Todos', 'var(--cinza3)', cont.todos]], nt.filtro,
       function (v) { nt.filtro = v; nt.topo = true; desenhaNotinhas(); }));
     var bu = el('label', 'busca busca-p', svg(IC.busca, 14, 2) + '<input type="search" class="lj-busca-in" placeholder="Buscar" aria-label="Buscar profissional" autocomplete="off">');
     var bi = bu.querySelector('input'); bi.value = nt.busca;
@@ -365,7 +365,7 @@ var LJ = (function () {
     sec.appendChild(corpo);
     wrap.appendChild(sec);
     var lado = el('div', 'lado');
-    if (admin) lado.appendChild(el('section', 'painel lj-grande', '<h2 class="lj-grande-rot">Em aberto hoje</h2><span class="lj-grande-n" style="color:#D70015">' + esc(fmt(aberto)) + '</span>' +
+    if (admin) lado.appendChild(el('section', 'painel lj-grande', '<h2 class="lj-grande-rot">Em aberto hoje</h2><span class="lj-grande-n" style="color:var(--vermelho)">' + esc(fmt(aberto)) + '</span>' +
       '<span class="lj-grande-l1">' + esc((nDev === 1 ? '1 profissional devendo' : nDev + ' profissionais devendo') + ' de ' + nt.profs.length) + '</span>' +
       '<span class="lj-grande-l2">' + esc('Em ' + MESES[new Date().getMonth()] + ': ' + fmt(D.comp) + ' em compras e ' + fmt(D.pag) + ' em pagamentos') + '</span>'));
     var novoP = el('section', 'painel nota-lado', '<h2>Profissional novo na conveniência?</h2><p class="cinza">Cadastre aqui para poder vender na notinha dele.</p>');
@@ -550,7 +550,7 @@ var LJ = (function () {
           'por ' + (m.secretaria_nome || '—') + (err ? ' · marcado como erro' : '');
         var desc = m.tipo === 'edicao_profissional' ? (m.descricao || 'Edição') : descMov(m);
         var b = bt('lj-lanc-l' + (err ? ' err' : ''), '<span class="w">' + esc(ddmm(d) + ' ' + hhmm(d)) + '</span><span class="q"><b>' + esc(desc) + '</b><small>' + esc(meta) + '</small></span>' +
-          '<span class="v" style="color:' + (compra ? '#D70015' : baixa ? '#248A3D' : '#636366') + '">' + esc(semValor(m.tipo) ? '—' : (compra ? '+ ' : baixa ? '− ' : '') + fmt(m.valor_total)) + '</span>',
+          '<span class="v" style="color:' + (compra ? 'var(--vermelho)' : baixa ? 'var(--verde)' : 'var(--cinza)') + '">' + esc(semValor(m.tipo) ? '—' : (compra ? '+ ' : baixa ? '− ' : '') + fmt(m.valor_total)) + '</span>',
           function () { lancAtual = m; ctxL = null; pinta(); });
         box.appendChild(b);
       });
@@ -841,15 +841,15 @@ var LJ = (function () {
     listaPorDia(corpo, vis, function (m) {
       var cli = clienteDe(m);
       return { hora: hhmm(dataDe(m.timestamp)), desc: descMov(m), meta: [tipoRot(m.tipo), cli, 'por ' + (m.secretaria_nome || '—')].filter(Boolean).join(' · '),
-        valor: valorTxt(m), cor: m.tipo === 'sangria' ? '#D70015' : '', sub: formaRot(m.forma_pagamento) + ((m.taxa_valor || 0) > 0 ? ' · líquido ' + fmt(m.valor_liquido) : '') };
+        valor: valorTxt(m), cor: m.tipo === 'sangria' ? 'var(--vermelho)' : '', sub: formaRot(m.forma_pagamento) + ((m.taxa_valor || 0) > 0 ? ' · líquido ' + fmt(m.valor_liquido) : '') };
     }, 'movimentação', 'movimentações', cx, function (id) { abrirMov('caixa', id); });
     sec.appendChild(corpo);
     wrap.appendChild(sec);
     var lado = el('div', 'lado');
-    [['Caixa físico · dinheiro', fis, [['Vendas em dinheiro', fmt(edin)], ['Pagamentos de notinha em dinheiro', fmt(pnot)], ['Suprimentos', fmt(supr), '#248A3D'], ['Sangrias', '− ' + fmt(sang), '#D70015']]],
-     ['Caixa banco · PIX e cartão, líquido', ban, [['PIX', fmt(pix)], ['Débito (líquido)', fmt(deb)], ['Crédito (líquido)', fmt(cred)], ['Taxas descontadas', '− ' + fmt(tax), '#D70015']]]].forEach(function (c) {
+    [['Caixa físico · dinheiro', fis, [['Vendas em dinheiro', fmt(edin)], ['Pagamentos de notinha em dinheiro', fmt(pnot)], ['Suprimentos', fmt(supr), 'var(--verde)'], ['Sangrias', '− ' + fmt(sang), 'var(--vermelho)']]],
+     ['Caixa banco · PIX e cartão, líquido', ban, [['PIX', fmt(pix)], ['Débito (líquido)', fmt(deb)], ['Crédito (líquido)', fmt(cred)], ['Taxas descontadas', '− ' + fmt(tax), 'var(--vermelho)']]]].forEach(function (c) {
       var s = el('section', 'painel lj-cx');
-      s.appendChild(el('div', 'lj-grande' + (admin ? ' com-linha' : ''), '<h2 class="lj-grande-rot">' + esc(c[0]) + '</h2><span class="lj-grande-n"' + (c[1] < 0 ? ' style="color:#D70015"' : '') + '>' + esc(fmt(c[1])) + '</span>' +
+      s.appendChild(el('div', 'lj-grande' + (admin ? ' com-linha' : ''), '<h2 class="lj-grande-rot">' + esc(c[0]) + '</h2><span class="lj-grande-n"' + (c[1] < 0 ? ' style="color:var(--vermelho)"' : '') + '>' + esc(fmt(c[1])) + '</span>' +
         '<span class="lj-grande-l2">' + esc(per.rot) + '</span>'));
       if (admin) c[2].forEach(function (l) { s.appendChild(el('div', 'lj-cx-l', '<span>' + esc(l[0]) + '</span><b' + (l[2] ? ' style="color:' + l[2] + '"' : '') + '>' + esc(l[1]) + '</b>')); });
       lado.appendChild(s);
@@ -973,7 +973,7 @@ var LJ = (function () {
     }).catch(function (e) { es.erro = e.message || String(e); es.carregado = true; if (naTela('estoque')) desenhaEstoque(); });
   }
   function prodDe(id) { for (var i = 0; i < es.prods.length; i++) if (es.prods[i].id === id) return es.prods[i]; for (var j = 0; j < PC.length; j++) if (PC[j].id === id) return PC[j]; return null; }
-  function corEst(n) { return n <= 0 ? '#D70015' : n <= 5 ? '#C93400' : '#248A3D'; }
+  function corEst(n) { return n <= 0 ? 'var(--vermelho)' : n <= 5 ? 'var(--laranja)' : 'var(--verde)'; }
   function desenhaEstoque() {
     var r = raiz('estoque'); if (!r) return;
     var admin = isAdmin();
@@ -1197,12 +1197,12 @@ var LJ = (function () {
     }).catch(function (e) { hs.erro = e.message || String(e); hs.carregado = true; if (naTela('historico')) desenhaHistorico(); });
   }
   var CATS = [
-    ['vendas', 'Vendas pagas', '#248A3D', function (m) { return m.tipo === 'venda_paciente'; }, 'vendas'],
-    ['notinha', 'Compras na notinha', '#2C2D6E', function (m) { return m.tipo === 'venda_profissional'; }, 'notinhas'],
-    ['pagamentos', 'Pagamentos de notinha', '#248A3D', function (m) { return m.tipo === 'pagamento_notinha'; }, 'notinhas'],
-    ['bonif', 'Bonificações', '#C93400', function (m) { return m.tipo === 'bonificacao'; }, 'notinhas'],
-    ['estoque', 'Entradas de estoque', '#636366', function (m) { return m.tipo === 'entrada_estoque'; }, 'estoque'],
-    ['caixa', 'Sangrias e suprimentos', '#D70015', function (m) { return m.tipo === 'sangria' || m.tipo === 'suprimento'; }, 'caixa']
+    ['vendas', 'Vendas pagas', 'var(--verde)', function (m) { return m.tipo === 'venda_paciente'; }, 'vendas'],
+    ['notinha', 'Compras na notinha', 'var(--tint)', function (m) { return m.tipo === 'venda_profissional'; }, 'notinhas'],
+    ['pagamentos', 'Pagamentos de notinha', 'var(--verde)', function (m) { return m.tipo === 'pagamento_notinha'; }, 'notinhas'],
+    ['bonif', 'Bonificações', 'var(--laranja)', function (m) { return m.tipo === 'bonificacao'; }, 'notinhas'],
+    ['estoque', 'Entradas de estoque', 'var(--cinza)', function (m) { return m.tipo === 'entrada_estoque'; }, 'estoque'],
+    ['caixa', 'Sangrias e suprimentos', 'var(--vermelho)', function (m) { return m.tipo === 'sangria' || m.tipo === 'suprimento'; }, 'caixa']
   ];
   function metaHs(m) {
     var p = [tipoRot(m.tipo)], c = clienteDe(m);
@@ -1237,7 +1237,7 @@ var LJ = (function () {
     listaPorDia(corpo, vis, function (m) {
       var err = m.marcado_erro === true;
       return { hora: hhmm(dataDe(m.timestamp)), desc: m.tipo === 'edicao_profissional' || m.tipo === 'edicao_produto' ? (m.descricao || tipoRot(m.tipo)) : descMov(m), meta: metaHs(m),
-        valor: admin ? valorTxt(m) : '', cor: m.tipo === 'sangria' ? '#D70015' : '', tag: err ? 'Erro: ' + (m.motivo_erro || '') : tipoRot(m.tipo), tagCor: err ? '#D70015' : (TIPO_COR[m.tipo] || '#636366') };
+        valor: admin ? valorTxt(m) : '', cor: m.tipo === 'sangria' ? 'var(--vermelho)' : '', tag: err ? 'Erro: ' + (m.motivo_erro || '') : tipoRot(m.tipo), tagCor: err ? 'var(--vermelho)' : (TIPO_COR[m.tipo] || 'var(--cinza)') };
     }, 'lançamento', 'lançamentos', hs, function (id) { abrirMov('historico', id); });
     sec.appendChild(corpo);
     wrap.appendChild(sec);

@@ -197,8 +197,9 @@ async function doLogin(){
   const u={id:r.usuario.id,nome:r.usuario.nome,admin:r.usuario.admin===true};
   const seguir=()=>{CU=u;entrarApp();};
   const gaveta=()=>{if(window.GAVETA)GAVETA.naEntrada(u,seguir);else seguir();};   /* FIN v1.5: primeira entrada do dia conta a gaveta antes de abrir o Cortex */
-  if(r.pin_trocar&&window.LOGIN_LOJA){LOGIN_LOJA.trocarPin(u,pin,gaveta);return;}   /* PIN provisório: cria o seu antes de entrar */
-  gaveta();
+  const porta=()=>{if(window.ALERTA&&ALERTA.porta)ALERTA.porta(u,gaveta);else gaveta();};   /* ALERTA v2: secretária só entra com os avisos do navegador ligados */
+  if(r.pin_trocar&&window.LOGIN_LOJA){LOGIN_LOJA.trocarPin(u,pin,porta);return;}   /* PIN provisório: cria o seu antes de entrar */
+  porta();
 }
 document.getElementById('lo-pin').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 

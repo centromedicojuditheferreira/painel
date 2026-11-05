@@ -32,6 +32,8 @@ var moldura = (function () {
     fixar: 'M4 5h16v14H4zM9.5 5v14',
     sair: 'M10 4.5H6.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2H10M14.5 8l4 4-4 4M18.5 12h-9',
     alerta: 'M12 3.5 21.5 20h-19zM12 10v4.5M12 17.2h.01',
+    lua: 'M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z', sol: 'M12 7.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 1 0 0-9M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4',
+    inicio: 'M4 11.5 12 5l8 6.5V20H4zM10 20v-6h4v6',
     esq: 'M14.5 6l-6 6 6 6', dir: 'M9.5 6l6 6-6 6'
   };
   function svg(d, tam, traco) {
@@ -41,6 +43,7 @@ var moldura = (function () {
 
   /* destino → onde fica no painel antigo (s = seção de nav(), t = tela do GV) */
   var DEST = {
+    inicio:        { s: 'guias', t: 'inicio',  secao: 'Início', titulo: 'Início', busca: true },        /* v4: a primeira tela (js/inicio.js); saudação no lugar do título */
     agenda:        { s: 'guias', t: 'agenda',  secao: 'Faturamento', titulo: 'Agenda', busca: true },   /* busca: lupa + Renovação de validade Unimed no topo */
     cadastros:     { s: 'guias', t: 'cad',     secao: 'Faturamento', titulo: 'Cadastros' },
     exclusoes:     { s: 'guias', t: 'excl',    secao: 'Faturamento', titulo: 'Exclusões' },
@@ -52,14 +55,15 @@ var moldura = (function () {
     notinhas:      { s: 'notinhas',  secao: 'Conveniência', titulo: 'Notinhas',
                      acoes: [['Profissionais', function () { irPara('profissionais'); }], ['Relatório', function () { if (window.LJ) LJ.relatorio(); else abrirRel(); }],
                              ['Bonificação do mês', function () { if (window.LJ) LJ.bonificacao(); else abrirBonif(); }]] },
-    caixa:         { s: 'caixa',     secao: 'Conveniência', titulo: 'Caixa', adm: true },
+    caixa_conv:    { s: 'caixa',     secao: 'Conveniência', titulo: 'Caixa da conveniência', adm: true },   /* v4: fora do menu (sangria/suprimento do tempo do Firebase); a Gaveta faz isso */
     estoque:       { s: 'estoque',   secao: 'Conveniência', titulo: 'Estoque', acoes: [['Balanço', function () { irPara('balanco'); }]] },
     balanco:       { s: 'balanco',   secao: 'Conveniência', titulo: 'Balanço', menu: 'estoque', acoes: [['Voltar ao estoque', function () { irPara('estoque'); }]] },
     historico:     { s: 'historico', secao: 'Conveniência', titulo: 'Histórico' },
     venda:         { s: 'venda',     secao: 'Conveniência', titulo: 'Nova venda', semFab: true },
     profissionais: { s: 'profissionais', secao: 'Conveniência', titulo: 'Profissionais', menu: 'notinhas' },
     extrato:       { s: 'financeiro', secao: 'Financeiro', titulo: 'Extrato', adm: true },   /* FIN v1.3: só o administrador, por enquanto */
-    gaveta:        { s: 'gaveta',     secao: 'Financeiro', titulo: 'Gaveta' },    /* FIN v1.5: contagem às cegas (todos); retirada e histórico (administrador) */
+    gaveta:        { s: 'gaveta',     secao: 'Caixa', titulo: 'Caixa', menu: 'caixa' },   /* nome antigo: cai no Caixa */
+    caixa:         { s: 'gaveta',     secao: 'Caixa', titulo: 'Caixa' },   /* v4: Caixa = gaveta (contagem às cegas; retirada e histórico do administrador) e, com o FIN v2.0, Cobrar + lançamentos do dia */
     visao:         { s: 'dashboard', secao: 'Administração', titulo: 'Visão geral' },
     posicao:       { s: 'posicao',   secao: 'Administração', titulo: 'Estoque atual' },
     exportar:      { s: 'exportar',  secao: 'Administração', titulo: 'Exportar' },
@@ -73,15 +77,16 @@ var moldura = (function () {
 
   /* itens do menu: [destino, rótulo, id do contador, contador em vermelho?, id do botão]; item só da Administração: adm no DEST
      grupo: [nome, itens, grupo inteiro só da Administração?] */
+  /* v4 (05/11/2026): Início primeiro, com o total de tudo; Agenda sem número (as pendências dela se resolvem no Início);
+     Caixa entra para todos (gaveta + Cobrar); Malotes e Extrato só a Administração; o "Caixa" antigo da conveniência saiu do menu. */
   var MENU = [
-    ['Faturamento', [['agenda', 'Agenda', 'gv-b-agenda', true], ['cadastros', 'Cadastros', 'gv-b-cad', true],
-      ['exclusoes', 'Exclusões', 'gv-b-excl', true], ['corte', 'Corte', 'gv-b-corte', true], ['falhas', 'Falhas', 'gv-b-falhas', true],
+    ['', [['inicio', 'Início', 'gv-sbb', true], ['agenda', 'Agenda'], ['corte', 'Corte', 'gv-b-corte', true], ['falhas', 'Falhas', 'gv-b-falhas', true],
+      ['cadastros', 'Cadastros', 'gv-b-cad', true], ['exclusoes', 'Exclusões', 'gv-b-excl', true], ['caixa', 'Caixa', 'gv-b-caixa', true],
       ['malotes', 'Malotes', 'gv-b-malotes']]],
-    ['Conveniência', [['notinhas', 'Notinhas'], ['caixa', 'Caixa'], ['estoque', 'Estoque'], ['historico', 'Histórico']]],
     ['Profissionais', [['conferencia', 'Conferência', 'gv-b-prof', true]]],
-    ['Financeiro', [['gaveta', 'Gaveta'], ['extrato', 'Extrato']]],
+    ['Conveniência', [['notinhas', 'Notinhas'], ['estoque', 'Estoque'], ['historico', 'Histórico']]],
     ['Ajuda', [['tutoriais', 'Tutoriais']]],
-    ['Administração', [['visao', 'Visão geral'], ['posicao', 'Estoque atual'], ['exportar', 'Exportar'], ['cfg', 'Configurações'],
+    ['Administração', [['extrato', 'Extrato'], ['visao', 'Visão geral'], ['posicao', 'Estoque atual'], ['exportar', 'Exportar'], ['cfg', 'Configurações'],
       ['dono', 'Dono', null, false, 'gv-aba-dono']], true]
   ];
 
@@ -98,12 +103,12 @@ var moldura = (function () {
   function montarMenu() {
     var h = '<div class="menu-in">' +
       '<div class="menu-marca"><span class="menu-logo">' +
-      '<img class="menu-o" src="img/levsoul-marca.png" alt="" aria-hidden="true" width="32" height="32">' +
-      '<span class="menu-nome"><img src="img/levsoul-logo.png" alt="Lev Soul" width="115" height="18"><span>Centro Médico Judithe Ferreira</span></span>' +
+      '<span class="menu-o" aria-hidden="true">C</span>' +
+      '<span class="menu-nome"><b>Cortex</b><img src="img/levsoul-logo-branco.svg" alt="Lev Soul" width="62" height="9"></span>' +
       '</span><button type="button" class="menu-fixar" id="menu-fixar">' + svg(I.fixar) + '</button></div>';
     MENU.forEach(function (g) {
       var adm = g[2] ? ' menu-admin' : '';
-      h += '<div class="menu-grupo' + adm + '"><span>' + g[0] + '</span><i aria-hidden="true"></i></div>';
+      if (g[0]) h += '<div class="menu-grupo' + adm + '"><span>' + g[0] + '</span><i aria-hidden="true"></i></div>';
       g[1].forEach(function (it) {
         var admIt = adm || (DEST[it[0]] && DEST[it[0]].adm ? ' menu-admin' : '');   /* item só da Administração num grupo de todos (Malotes, Caixa) */
         h += '<button type="button" class="menu-item' + admIt + (it[3] ? ' urg' : '') + '" data-ir="' + it[0] + '" title="' + it[1] + '"' +
@@ -115,8 +120,11 @@ var moldura = (function () {
     });
     h += '<div class="menu-user"><span class="menu-av" id="sb-av" aria-hidden="true">?</span>' +
       '<span class="menu-quem"><b id="sb-nm">—</b><small id="sb-papel">Secretária</small></span>' +
+      '<button type="button" class="menu-tema" id="menu-tema" title="Tema claro ou escuro" aria-label="Tema claro ou escuro"></button>' +
       '<button type="button" class="menu-sair" title="Sair" aria-label="Sair" onclick="doLogout()">' + svg(I.sair) + '</button></div></div>';
     menu.innerHTML = h;
+    document.getElementById('menu-tema').addEventListener('click', function () { tema(temaAtual() === 'escuro' ? 'claro' : 'escuro'); });
+    pintaTema();
     menu.addEventListener('click', function (ev) {
       var b = ev.target.closest('[data-ir]');
       if (b) { irPara(b.getAttribute('data-ir')); if (!fixo) abrir(false); }
@@ -153,14 +161,14 @@ var moldura = (function () {
   function irPara(d) {
     if (d === 'venda' && window.LJ) { LJ.abrirVenda(); return; }     /* Nova venda é a janela no canto */
     var x = DEST[d]; if (!x) return;
-    if (x.adm && !ehAdm()) { d = 'agenda'; x = DEST.agenda; }       /* tela só da Administração: a secretária cai na Agenda */
+    if (x.adm && !ehAdm()) { d = 'inicio'; x = DEST.inicio; }       /* tela só da Administração: a secretária cai no Início */
     if (x.s === 'guias') {
       if (secaoAtual() === 'guias' && window.GV && GV.tela) GV.tela(x.t); else nav('guias', x.t);
     } else nav(x.s);
   }
-  function irTelaGuias(t) { irPara(TELA_GV[t] || 'agenda'); }
-  function aoNavegar(s, sub) { definir(s === 'guias' ? (TELA_GV[sub || 'agenda'] || 'agenda') : (SEC_LOJA[s] || s)); }
-  function aoTrocarTela(t) { if (secaoAtual() === 'guias') definir(TELA_GV[t] || 'agenda'); }
+  function irTelaGuias(t) { irPara(TELA_GV[t] || 'inicio'); }
+  function aoNavegar(s, sub) { definir(s === 'guias' ? (TELA_GV[sub || 'inicio'] || 'inicio') : (SEC_LOJA[s] || s)); }
+  function aoTrocarTela(t) { if (secaoAtual() === 'guias') definir(TELA_GV[t] || 'inicio'); }
   function definir(d) {
     var x = DEST[d]; if (!x) return;
     var mudou = d !== atual;
@@ -190,9 +198,9 @@ var moldura = (function () {
       if (on) it.setAttribute('aria-current', 'page'); else it.removeAttribute('aria-current');
     });
     document.getElementById('fab').hidden = !!x.semFab;
-    var ola = d === 'agenda';                     /* v3.3: na Agenda, "Bom dia / Boa tarde / Boa noite, <nome>" no lugar do título */
+    var ola = d === 'inicio';                     /* v4: no Início, "Bom dia, <nome>" no lugar do título (v3.3 fazia isso na Agenda) */
     document.querySelector('.pg-tit').classList.toggle('ola', ola);
-    if (ola) document.getElementById('pg-titulo').textContent = saudacao();
+    if (ola) document.getElementById('pg-titulo').innerHTML = saudacao();
     desenharAlertas();
     if (mudou && window.TUT) TUT.aoTrocarTela(d);   /* TUT v1.0: botão "?" e abertura automática do tutorial da tela */
     if (mudou) window.scrollTo(0, 0);
@@ -201,57 +209,75 @@ var moldura = (function () {
     var h = new Date().getHours();
     var s = h < 12 ? 'Bom dia' : (h < 18 ? 'Boa tarde' : 'Boa noite');
     var nome = (typeof CU !== 'undefined' && CU && CU.nome) ? CU.nome : '';
-    return nome ? s + ', ' + nome : s;
+    if (/^administrador$/i.test(nome.trim())) nome = 'Marinalva';   /* a conta Administrador é da sócia (js/entrada.js faz o mesmo na saudação) */
+    return nome ? s + ', <em>' + esc(nome) + '</em>' : s;
   }
+
+  /* ── tema claro / escuro (TEMA v4): escolha por navegador; vazio = segue o sistema ── */
+  function temaAtual() { return document.documentElement.getAttribute('data-tema') === 'escuro' ? 'escuro' : 'claro'; }
+  function temaSistema() { try { return matchMedia('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro'; } catch (e) { return 'claro'; } }
+  function tema(t) {
+    try { if (t) localStorage.setItem('cortex.tema', t); else localStorage.removeItem('cortex.tema'); } catch (e) {}
+    document.documentElement.setAttribute('data-tema', t || temaSistema());
+    pintaTema();
+    if (window.ENTRADA && ENTRADA.corBarra) ENTRADA.corBarra();
+  }
+  function pintaTema() {
+    var b = document.getElementById('menu-tema'); if (!b) return;
+    var esc_ = temaAtual() === 'escuro';
+    b.innerHTML = svg(esc_ ? I.sol : I.lua, 16, 1.8);
+    b.title = esc_ ? 'Mudar para o tema claro' : 'Mudar para o tema escuro';
+  }
+  try {
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+      var g = null; try { g = localStorage.getItem('cortex.tema'); } catch (e) {}
+      if (g !== 'claro' && g !== 'escuro') tema(null);   /* sem escolha guardada: acompanha o sistema */
+    });
+  } catch (e) {}
   function acoesDe(d) { return d === atual ? document.getElementById('pg-acoes') : null; }
   function resumo(d, txt) { resumos[d] = txt || ''; if (d === atual) document.getElementById('pg-resumo').textContent = resumos[d]; }
 
-  /* ── barra dos quadrados de alerta (os chips vêm do GV; aparece em todas as telas) ──
-     v3.4: sem o rótulo "Resolver agora"; os quadrados começam na margem esquerda. */
+  /* ── linha "N para resolver" (v4, no lugar dos quadrados pulantes) ──
+     Os chips do GV continuam chegando por alertas(); aqui só se soma o total. No Início a linha não aparece
+     (a lista inteira está lá). Nas outras telas: o total, que leva ao Início, e os quadrados da gaveta
+     (alertasExtra: contar / contar de novo / diferença / fechar), que são tarefas da hora. Nada pula. */
   var ra = document.getElementById('ra');
   function alertas(lista) { chipsGV = lista || []; desenharAlertas(); }
   function alertasExtra(lista) { chipsExtra = lista || []; desenharAlertas(); }
+  function totalPendencias() {
+    if (window.INICIO && INICIO.total) return INICIO.total();
+    return chipsGV.reduce(function (s, c) { return s + (c.sep ? 0 : (Number(c.n) || 0)); }, 0);
+  }
   function desenharAlertas() {
-    var todos = chipsExtra.concat(chipsExtra.length && chipsGV.length ? [{ sep: true }] : [], chipsGV);
-    if (!todos.length) { ra.hidden = true; ra.innerHTML = ''; return; }
+    var n = totalPendencias();
     var filtro = (window.GV && GV.filtroTipo) ? GV.filtroTipo() : null;
+    ra.innerHTML = '';
+    if (atual === 'inicio' || (!n && !chipsExtra.length && !filtro)) { ra.hidden = true; return; }
     ra.hidden = false;
-    ra.innerHTML =
-      '<button type="button" class="ra-seta some" data-l="-1" aria-label="Ver alertas anteriores">' + svg(I.esq, 16, 2.2) + '</button>' +
-      '<div class="ra-trilho"></div>' +
-      '<button type="button" class="ra-seta some" data-l="1" aria-label="Ver mais alertas">' + svg(I.dir, 16, 2.2) + '</button>';
-    var tr = ra.querySelector('.ra-trilho');
-    var j = 0;
-    todos.forEach(function (c) {
-      if (c.sep) { var s = document.createElement('span'); s.className = 'ra-sep'; s.setAttribute('aria-hidden', 'true'); tr.appendChild(s); return; }
-      var aqui = c.chave === atual;
-      var on = atual === 'agenda' && filtro === c.chave;   /* v3.4: o filtro "Só X" da lista mora no próprio quadrado */
-      var b = document.createElement('button'); b.type = 'button';
-      b.className = 'ra-chip' + (aqui ? ' aqui' : '') + (on ? ' on' : '');
-      b.innerHTML = esc(c.rot) + (c.n != null && c.n !== '' ? ' <b>' + c.n + '</b>' : '') + (on ? svg('M6 6l12 12M18 6 6 18', 12, 2.6) : '');
-      b.title = aqui ? 'Você está nesta tela' : (on ? 'A lista mostra só estes. Clique para tirar o filtro' : (c.dica || ''));
-      if (on) b.setAttribute('aria-pressed', 'true');
-      if (aqui) b.setAttribute('aria-current', 'page');
-      else b.addEventListener('click', on ? function () { if (window.GV && GV.limparFiltroTipo) GV.limparFiltroTipo(); } : c.acao);
-      b.style.animationDelay = (j++ * 120) + 'ms';
-      tr.appendChild(b);
+    if (n) {
+      var r = document.createElement('button'); r.type = 'button'; r.className = 'ra-resumo';
+      r.innerHTML = '<b>' + n + '</b> para resolver <span>Início ›</span>';
+      r.title = 'Abrir o Início: tudo o que há para resolver, numa lista só';
+      r.addEventListener('click', function () { irPara('inicio'); });
+      ra.appendChild(r);
+    }
+    if (filtro && atual === 'agenda') {   /* v3.4: o filtro "Só X" da lista da Agenda, agora como um quadrado só, com o ✕ */
+      var c0 = null; chipsGV.forEach(function (c) { if (!c.sep && c.chave === filtro) c0 = c; });
+      var f = document.createElement('button'); f.type = 'button'; f.className = 'ra-chip on';
+      f.innerHTML = 'Só ' + esc(c0 ? c0.rot : filtro) + (c0 && c0.n != null ? ' <b>' + c0.n + '</b>' : '') + svg('M6 6l12 12M18 6 6 18', 12, 2.6);
+      f.title = 'A lista mostra só estes. Clique para tirar o filtro'; f.setAttribute('aria-pressed', 'true');
+      f.addEventListener('click', function () { if (window.GV && GV.limparFiltroTipo) GV.limparFiltroTipo(); });
+      ra.appendChild(f);
+    }
+    chipsExtra.forEach(function (c) {
+      if (c.sep) return;
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'ra-chip';
+      b.innerHTML = esc(c.rot) + (c.n != null && c.n !== '' ? ' <b>' + c.n + '</b>' : '');
+      b.title = c.dica || '';
+      b.addEventListener('click', c.acao);
+      ra.appendChild(b);
     });
-    ra.querySelectorAll('.ra-seta').forEach(function (s) {
-      s.addEventListener('click', function () {
-        var passo = Math.max(160, Math.round(tr.clientWidth * 0.7)) * Number(s.getAttribute('data-l'));
-        tr.scrollBy({ left: passo, behavior: 'smooth' });
-      });
-    });
-    tr.addEventListener('scroll', setas);
-    setas();
   }
-  function setas() {
-    var tr = ra.querySelector('.ra-trilho'); if (!tr) return;
-    var s = ra.querySelectorAll('.ra-seta');
-    s[0].classList.toggle('some', !(tr.scrollLeft > 2));
-    s[1].classList.toggle('some', !(tr.scrollLeft + tr.clientWidth < tr.scrollWidth - 2));
-  }
-  window.addEventListener('resize', setas);
   function esc(t) { var d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; }
 
   /* ── janela de detalhe (pop): uma por vez, Esc e clique fora fecham ──
@@ -310,5 +336,6 @@ var moldura = (function () {
   });
   window.irPara = irPara;
   return { aoNavegar: aoNavegar, aoTrocarTela: aoTrocarTela, alertas: alertas, alertasExtra: alertasExtra, resumo: resumo,
-           irTelaGuias: irTelaGuias, atual: function () { return atual; }, pop: pop, svg: svg, I: I, acoesDe: acoesDe };
+           irTelaGuias: irTelaGuias, atual: function () { return atual; }, pop: pop, svg: svg, I: I, acoesDe: acoesDe,
+           tema: tema, temaAtual: temaAtual, chipsExtra: function () { return chipsExtra.slice(); }, redesenharAlertas: desenharAlertas };
 })();
