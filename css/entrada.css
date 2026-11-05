@@ -37,7 +37,7 @@
 .lo-caixa{grid-area:caixa;align-self:center;width:100%;padding:24px 0}
 .lo-logo{grid-area:logo;align-self:center;justify-self:center;display:block;width:min(100%,620px);height:auto;opacity:.4;user-select:none;-webkit-user-drag:none}
 .lo-cortex{grid-area:cortex;align-self:end;margin:0;font-family:var(--lo-display);font-weight:700;
-  font-size:clamp(64px,7.4vw,124px);line-height:.82;letter-spacing:.01em;color:#fff;user-select:none}
+  font-size:clamp(46px,5vw,84px);line-height:.82;letter-spacing:.01em;color:#fff;user-select:none}   /* v4.1: menor, a pedido do dono */
 
 /* ── os nomes ── */
 .lo-ops{display:flex;flex-direction:column;gap:10px}
@@ -114,7 +114,7 @@
   .lo-caixa{padding:12px 0}
   .lo-op{min-height:56px;font-size:17px}
   .lo-senha input,#lo .btn-lo{height:56px}
-  .lo-cortex{font-size:clamp(52px,15vw,72px)}
+  .lo-cortex{font-size:clamp(40px,11vw,56px)}
 }
 
 /* ── quem pede menos movimento no aparelho ── */
@@ -145,3 +145,9 @@ html[data-tema="escuro"] .lo-senha input::placeholder{color:rgba(255,255,255,.45
 html[data-tema="escuro"] .lo-senha input:focus{background:#17132A;box-shadow:0 0 0 3px rgba(220,143,199,.35)}
 html[data-tema="escuro"] #lo .lerr{background:#2A1A2E;color:#FF8A94}
 html[data-tema="escuro"] .lo-logo{opacity:.5}
+
+/* ── botão claro/escuro na entrada (v4.1) ── */
+.lo-tema{position:absolute;top:16px;right:16px;z-index:3;width:40px;height:40px;border:0;background:rgba(255,255,255,.18);color:#fff;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.lo-tema:hover{background:rgba(255,255,255,.3)}
+#lo.bv .lo-tema{display:none}

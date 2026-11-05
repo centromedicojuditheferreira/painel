@@ -11,7 +11,7 @@ var ENTRADA = (function () {
 
   var PADRAO = 'administrador';                   /* conta que já vem marcada */
   var SAUDA = { administrador: 'Marinalva' };     /* conta → nome dito na saudação; as demais usam o próprio nome */
-  var COR = { claro: { login: '#D47AB2', app: '#F4F1F7' }, escuro: { login: '#5A1F55', app: '#15122A' } };   /* cor da barra do navegador no celular, por tema (TEMA v4) */
+  var COR = { claro: { login: '#D47AB2', app: '#FBF4F8' }, escuro: { login: '#5A1F55', app: '#1C0F1A' } };   /* cor da barra do navegador no celular, por tema (TEMA v4.1) */
 
   var lo = document.getElementById('lo'), sel = document.getElementById('lo-usr'), ops = document.getElementById('lo-ops'),
       senha = document.getElementById('lo-senha'), pin = document.getElementById('lo-pin'), err = document.getElementById('lo-err'),
