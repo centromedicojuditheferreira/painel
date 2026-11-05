@@ -2,6 +2,8 @@
    FIN v3.0 — Financeiro da Administração (05/11/2026)
    Abas: Contas do mês e Contas fixas (Marinalva e dono); Dívidas e Projeção (só o dono).
    FIN v3.1: a Projeção abre com as parcelas de dívida mês a mês (colunas empilhadas, cartão incluso) até a última parcela.
+   FIN v4.0: a Projeção ganha o caixa mês a mês do dono (fin_projecao_chefe): Unimed por estágio e competência, repasse por profissional,
+            conveniência (dinheiro; notinha à parte), fixas, parcelas e cartão — sem saldo inicial até plugar o banco.
    FIN v3.2: "Como é pago" (alguém paga ou débito automático em qual banco), "Deixar nos bancos" no mês e lembretes no Telegram (servidor).
    Tudo pelas funções fin_* do Supabase, com a sessão do PIN. O servidor decide o que cada
    um recebe: no acesso da Marinalva as parcelas vêm sem "nº X de Y", sem saldo devedor e
@@ -123,7 +125,7 @@ var CONTAS = (function () {
   }
   function carregarProj() {
     if (!ehDono() || !window.LAPI || !LAPI.token()) return;
-    LAPI.finProjecao(12).then(function (p) { st.proj = p; st.projErro = ''; if (naTela()) desenhar(); },
+    LAPI.finProjecaoChefe().then(function (p) { st.proj = p; st.projErro = ''; if (naTela()) desenhar(); },
       function (er) { st.projErro = msgErro(er); if (naTela()) desenhar(); });
     LAPI.finDividasProjecao().then(function (p) { st.dvp = p; st.dvpErro = ''; if (naTela()) desenhar(); },
       function (er) { st.dvpErro = msgErro(er); if (naTela()) desenhar(); });
@@ -731,35 +733,130 @@ var CONTAS = (function () {
     return wrap;
   }
 
+  /* ═══ FIN v4.0 — Caixa mês a mês (só o dono) ═══
+     Servidor: fin_projecao_chefe. Colunas = meses do calendário (mês atual → 1 mês depois da Unimed da última competência).
+     Entradas: Unimed (cai 2 meses depois da competência, com o estágio em que o número está) + conveniência em dinheiro (média de 3 meses).
+     A notinha aparece à parte e NÃO soma: é venda a prazo para o profissional.
+     Saídas: repasse (motor do recibo: lacrado / do dia / estimado pela agenda × comparecimento), contas fixas, parcelas de dívida e parcelas do cartão.
+     Sem saldo inicial até plugar o banco: a tela mostra o resultado de cada mês, não o saldo acumulado. */
+  var ESTAGIO = {
+    definitiva: ['Definitiva', 'Recibo da Unimed (F5): é o que ela pagou de fato.'],
+    enviada:    ['Enviada', 'Malotes já na Unimed. Até vir o recibo, projeta 100 % do enviado.'],
+    lancador:   ['Lançador', 'Guias lançadas no Feegow, ainda não enviadas.'],
+    planejador: ['Planejador', 'O planejador já decidiu o que cabe faturar.'],
+    dia:        ['Do dia', 'Espelho do Feegow: o que já aconteceu + o que falta marcado × comparecimento.'],
+    estimado:   ['Estimado', 'Só agenda marcada × comparecimento. Mês com pouca agenda marcada fica subestimado.']
+  };
+  var SELO_REP = { lacrado: 'lacrado', fechado: 'mês fechado', dia: 'do dia', estimado: 'estimado', sem_agenda: 'sem agenda', sem_regime: 'sem regime' };
+  function sinal(v) { return v < 0 ? 'neg' : (v > 0 ? 'pos' : ''); }
+  function brlS(v) { return (v < 0 ? '−' : '') + brl(Math.abs(v)); }
+  function montarPj(p) {
+    var meses = p.meses || [], n = meses.length, i;
+    var uni = (p.unimed && p.unimed.por_coluna) || [], est = (p.unimed && p.unimed.estagio) || [];
+    var rep = (p.repasse && p.repasse.por_coluna) || [];
+    var conv = p.conveniencia || {}, din = Number(conv.dinheiro || 0), nota = Number(conv.notinha || 0);
+    var L = { uni: [], conv: [], ent: [], rep: [], fix: [], parc: [], cart: [], sai: [], res: [] };
+    for (i = 0; i < n; i++) {
+      L.uni[i] = centavos(uni[i]); L.conv[i] = centavos(din);
+      L.ent[i] = centavos(L.uni[i] + L.conv[i]);
+      L.rep[i] = centavos(rep[i]); L.fix[i] = centavos((p.fixas || [])[i]); L.parc[i] = centavos((p.parcelas || [])[i]); L.cart[i] = centavos((p.cartao || [])[i]);
+      L.sai[i] = centavos(L.rep[i] + L.fix[i] + L.parc[i] + L.cart[i]);
+      L.res[i] = centavos(L.ent[i] - L.sai[i]);
+    }
+    return { meses: meses, n: n, L: L, est: est, nota: nota, uniComp: (p.unimed && p.unimed.competencias) || [], profs: (p.repasse && p.repasse.profissionais) || [] };
+  }
+  function celulaEst(e) {
+    if (!e) return '';
+    var d = ESTAGIO[e] || [e, '']; return '<small class="ct-est ' + esc(e) + '" title="' + esc(d[1]) + '">' + esc(d[0]) + '</small>';
+  }
   function telaProj(r) {
     var dv = telaDv();
     r.appendChild(dv.sec);
     if (dv.desenha) { dv.desenha(); r.appendChild(telaMarcos(dv.M)); }
-    var p = st.proj, meses = (p && p.meses) || [];
-    var sec = el('section', 'lista ct-proj'); sec.setAttribute('aria-label', 'Projeção de 12 meses');
-    sec.appendChild(el('div', 'painel-cab', '<h2>Saídas dos próximos 12 meses</h2><span>' +
-      esc(p && p.saldo_hoje != null ? 'Saldo nos bancos ligados: ' + brl(p.saldo_hoje) : 'Entradas ainda não ligadas') + '</span>'));
+
+    var p = st.proj;
+    var sec = el('section', 'lista ct-pj'); sec.setAttribute('aria-label', 'Caixa mês a mês');
+    sec.appendChild(el('div', 'painel-cab', '<h2>Caixa, mês a mês</h2><span>' +
+      esc(p && p.ok ? mesCurto(p.inicio) + ' a ' + mesCurto(p.fim) + ' · sem saldo inicial até plugar o banco' : '') + '</span>'));
     if (st.projErro) { sec.appendChild(el('div', 'lista-vazio erro', esc(st.projErro))); r.appendChild(sec); resumo(''); return; }
-    if (!p) { sec.appendChild(el('div', 'lista-vazio', 'Carregando…')); r.appendChild(sec); resumo(''); return; }
-    var max = 0; meses.forEach(function (m) { max = Math.max(max, Number(m.saidas || 0)); });
-    var cx = el('div', 'ct-tab-cx');
-    var h = '<table class="ct-tab"><thead><tr><th>Mês</th><th class="n">Contas fixas</th><th class="n">Parcelas</th><th class="n">Saídas</th>' +
-      '<th class="ct-barra-th" aria-hidden="true"></th><th class="n">Dívida que sobra</th></tr></thead><tbody>';
-    meses.forEach(function (m, i) {
-      var w = max ? Math.round(Number(m.saidas || 0) / max * 100) : 0;
-      h += '<tr><td>' + esc(mesCurto(m.competencia)) + (i === 0 ? ' <small>(o que falta)</small>' : '') + '</td>' +
-        '<td class="n">' + esc(brl(m.contas_fixas)) + '</td><td class="n">' + esc(brl(m.parcelas)) + '</td><td class="n"><b>' + esc(brl(m.saidas)) + '</b></td>' +
-        '<td class="ct-barra-td" aria-hidden="true"><span class="ct-barra" style="width:' + w + '%"></span></td>' +
-        '<td class="n">' + esc(brl(m.divida_restante_fim)) + '</td></tr>';
-    });
-    h += '</tbody></table>';
-    cx.innerHTML = h;
+    if (!p) { sec.appendChild(el('div', 'lista-vazio', 'Carregando… (o repasse é calculado profissional por profissional)')); r.appendChild(sec); resumo(''); return; }
+    if (!p.ok) { sec.appendChild(el('div', 'lista-vazio erro', esc(p.msg || p.erro || 'Não consegui montar a projeção.'))); r.appendChild(sec); resumo(''); return; }
+    var M = montarPj(p), L = M.L, i;
+
+    /* quatro números: este mês, o pior mês, Unimed a cair nos próximos 3 e repasse deste mês */
+    var pior = 0; for (i = 1; i < M.n; i++) if (L.res[i] < L.res[pior]) pior = i;
+    var uni3 = 0; for (i = 0; i < Math.min(3, M.n); i++) uni3 += L.uni[i];
+    var k = el('div', 'ct-dv-kpis');
+    k.innerHTML =
+      '<div><span>Este mês</span><b class="' + sinal(L.res[0]) + '">' + esc(brlS(L.res[0])) + '</b><small>' + esc(brl(L.ent[0]) + ' entra · ' + brl(L.sai[0]) + ' sai') + '</small></div>' +
+      '<div><span>Mês mais apertado</span><b class="' + sinal(L.res[pior]) + '">' + esc(brlS(L.res[pior])) + '</b><small>' + esc(nomeMes(M.meses[pior])) + '</small></div>' +
+      '<div><span>Unimed nos próximos 3 meses</span><b>' + esc(brl(uni3)) + '</b><small>' + esc(p.imposto_aplicado ? 'líquido de ' + p.imposto_pct + '% de imposto' : 'bruto; o Simples está nas contas fixas') + '</small></div>' +
+      '<div><span>Repasse deste mês</span><b>' + esc(brl(L.rep[0])) + '</b><small>' + esc(M.profs.length + ' profissionais · comparecimento Unimed ' + Math.round(Number(p.taxa_unimed || 0) * 100) + '%') + '</small></div>';
+    sec.appendChild(k);
+
+    /* a tabela: uma linha por bloco, uma coluna por mês */
+    function linha(cls, rot, vals, fmt, extra) {
+      var h = '<tr class="' + cls + '"><th scope="row">' + rot + '</th>';
+      for (var j = 0; j < M.n; j++) h += '<td class="n">' + (fmt ? fmt(vals[j], j) : (vals[j] ? esc(brl(vals[j])) : '<small>—</small>')) + (extra ? extra(j) : '') + '</td>';
+      return h + '</tr>';
+    }
+    var th = '<tr><th></th>' + M.meses.map(function (m, j) { return '<th class="n' + (j === 0 ? ' atual' : '') + '">' + esc(mesCurto(m)) + (j === 0 ? '<small>o que falta</small>' : '') + '</th>'; }).join('') + '</tr>';
+    var tb = '<tr class="grupo"><th scope="rowgroup" colspan="' + (M.n + 1) + '">Entra</th></tr>' +
+      linha('', 'Unimed', L.uni, null, function (j) { return celulaEst(M.est[j]); }) +
+      linha('', 'Conveniência <small>dinheiro, média de 3 meses</small>', L.conv) +
+      linha('info', 'Notinha <small>venda a prazo aos profissionais — não soma</small>', L.conv.map(function () { return M.nota; }), function (v) { return '<small>' + esc(brl(v)) + '</small>'; }) +
+      linha('tot', 'Entradas', L.ent) +
+      '<tr class="grupo"><th scope="rowgroup" colspan="' + (M.n + 1) + '">Sai</th></tr>' +
+      linha('', 'Repasse aos profissionais', L.rep) +
+      linha('', 'Contas fixas', L.fix) +
+      linha('', 'Parcelas de dívidas', L.parc) +
+      linha('', 'Cartão <small>parcelas já compradas</small>', L.cart) +
+      linha('tot', 'Saídas', L.sai) +
+      linha('res', 'Resultado do mês', L.res, function (v) { return '<b class="' + sinal(v) + '">' + esc(brlS(v)) + '</b>'; });
+    var cx = el('div', 'ct-tab-cx ct-pj-cx');
+    cx.innerHTML = '<table class="ct-tab ct-pj-tab"><thead>' + th + '</thead><tbody>' + tb + '</tbody></table>';
     sec.appendChild(cx);
-    sec.appendChild(el('p', 'ct-nota ct-pad', 'Contas no cartão ficam de fora (já estão na fatura). No mês atual entra só o que ainda não foi pago. ' +
-      '"Dívida que sobra" soma as parcelas que faltam depois de cada mês, nas dívidas com prazo cadastrado. As entradas (Unimed, Lev Soul e recepção) entram quando forem ligadas.'));
+    sec.appendChild(el('p', 'ct-nota ct-pad', 'Cada mês mostra o que entra e o que sai nele; sem saldo inicial, o resultado não acumula. ' +
+      'Nos últimos meses do quadro, a agenda ainda está pouco marcada: repasse e Unimed "estimados" tendem a subir conforme a recepção marcar.'));
     r.appendChild(sec);
-    var tot = meses.reduce(function (s, m) { return s + Number(m.saidas || 0); }, 0);
-    resumo('12 meses: ' + brl(tot) + ' em saídas');
+
+    /* Unimed por competência: onde cada mês de atendimento está na esteira e quando cai */
+    var su = el('section', 'lista ct-pj-uni'); su.setAttribute('aria-label', 'Unimed por competência');
+    su.appendChild(el('div', 'painel-cab', '<h2>Unimed: cada mês de atendimento, do dia ao recibo</h2><span>paga no último dia útil do 2º mês seguinte</span>'));
+    var hu = '<table class="ct-tab"><thead><tr><th>Atendimentos de</th><th>Cai em</th><th>Estágio</th><th class="n">Do dia</th><th class="n">Planejador</th><th class="n">Lançador</th><th class="n">Enviada</th><th class="n">Definitiva</th><th class="n">Na projeção</th></tr></thead><tbody>';
+    M.uniComp.forEach(function (u) {
+      function c(v, ativo) { return '<td class="n' + (ativo ? ' on' : '') + '">' + (Number(v) ? esc(brl(v)) : '<small>—</small>') + '</td>'; }
+      var diaTxt = Number(u.dia) ? esc(brl(u.dia)) + (u.marcadas ? '<br><small>' + esc(brl(u.dia_realizado) + ' feito + ' + u.marcadas + ' marcadas') + '</small>' : '') : '<small>—</small>';
+      hu += '<tr' + (u.coluna == null ? ' class="fora"' : '') + '><td>' + esc(nomeMes(u.competencia)) + '</td><td>' + esc(mesCurto(u.cai_em)) + '</td><td>' + celulaEst(u.estagio) + '</td>' +
+        '<td class="n' + (u.estagio === 'dia' || u.estagio === 'estimado' ? ' on' : '') + '">' + diaTxt + '</td>' +
+        c(u.planejador, u.estagio === 'planejador') + c(u.lancador, u.estagio === 'lancador') + c(u.enviada, u.estagio === 'enviada') + c(u.definitiva, u.estagio === 'definitiva') +
+        '<td class="n"><b>' + esc(brl(u.liquido)) + '</b></td></tr>';
+    });
+    hu += '</tbody></table>';
+    var cu = el('div', 'ct-tab-cx'); cu.innerHTML = hu; su.appendChild(cu);
+    su.appendChild(el('p', 'ct-nota ct-pad', 'O número avança pela esteira: do dia → planejador → lançador → enviada → definitiva. A coluna destacada é a que está valendo. ' +
+      'Competência que já caiu fora do quadro aparece esmaecida.'));
+    r.appendChild(su);
+
+    /* repasse por profissional */
+    var sr = el('section', 'lista ct-pj-rep'); sr.setAttribute('aria-label', 'Repasse por profissional');
+    var det = el('details', 'ct-dv-det');
+    var hr = '<table class="ct-tab"><thead><tr><th>Profissional</th><th class="n">Compar.</th><th class="n">R$/sessão</th>' + M.meses.map(function (m) { return '<th class="n">' + esc(mesCurto(m)) + '</th>'; }).join('') + '</tr></thead><tbody>';
+    M.profs.forEach(function (pf) {
+      hr += '<tr><td>' + esc(String(pf.nome || '').trim()) + '</td><td class="n">' + esc(Math.round(Number(pf.taxa || 0) * 100) + '%') + '</td><td class="n">' + esc(brl(pf.media_sessao)) + '</td>' +
+        (pf.valores || []).map(function (v, j) {
+          var s = (pf.selos || [])[j];
+          return '<td class="n">' + (Number(v) ? esc(brl(v)) : '<small>—</small>') + (s && s !== 'estimado' && s !== 'sem_agenda' ? '<small class="ct-selo ' + esc(s) + '">' + esc(SELO_REP[s] || s) + '</small>' : '') + '</td>';
+        }).join('') + '</tr>';
+    });
+    hr += '<tr class="tot"><th scope="row">Total</th><td></td><td></td>' + L.rep.map(function (v) { return '<td class="n"><b>' + esc(brl(v)) + '</b></td>'; }).join('') + '</tr></tbody></table>';
+    det.innerHTML = '<summary>Repasse por profissional (' + M.profs.length + ')</summary><div class="ct-tab-cx">' + hr + '</div>' +
+      '<p class="ct-nota ct-pad">Mês corrente: motor do recibo até hoje + o que falta marcado × comparecimento do profissional (últimos 3 meses). ' +
+      'Semana confirmada pelo profissional lacra o valor; recibo gerado aparece como "lacrado". Meses seguintes: agenda marcada × comparecimento × R$/sessão do último recibo.</p>';
+    sr.appendChild(det);
+    r.appendChild(sr);
+
+    resumo('Este mês: ' + brlS(L.res[0]) + ' · pior mês ' + mesCurto(M.meses[pior]) + ' ' + brlS(L.res[pior]));
   }
 
   /* gráfico das dívidas acompanha a largura da tela (girar o celular, abrir o menu) */
