@@ -230,7 +230,7 @@ LAPI.aoCair(function(codigo,msg){   /* sessão caiu no meio do uso: volta para a
 function updateDate(){document.getElementById('tb-dt').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});}
 function setDatas(){const t=todayISO(),f=firstISO();['cx-ini','h-ini','ex-ini','rel-ini'].forEach(id=>{const e=document.getElementById(id);if(e)e.value=f;});['cx-fim','h-fim','ex-fim','rel-fim'].forEach(id=>{const e=document.getElementById(id);if(e)e.value=t;});}
 
-const TTLS={guias:'Guias da Agenda',dashboard:'Dashboard',venda:'Nova Venda',estoque:'Entrada de Estoque',balanco:'Balanço de Estoque',notinhas:'Notinhas',caixa:'Caixa',posicao:'Estoque Atual',profissionais:'Profissionais',historico:'Historico',exportar:'Exportar CSV',cfg:'Configuracoes'};
+const TTLS={guias:'Guias da Agenda',dashboard:'Dashboard',venda:'Nova Venda',estoque:'Entrada de Estoque',balanco:'Balanço de Estoque',notinhas:'Notinhas',caixa:'Caixa',posicao:'Estoque Atual',profissionais:'Profissionais',historico:'Historico',saldo:'Guias',exportar:'Exportar CSV',cfg:'Configuracoes'};
 function nav(s,sub){
   if(s==='venda'&&window.LJ){LJ.abrirVenda();return;}   /* Nova venda agora é a janela no canto (js/loja_nova.js) */
   if((s==='caixa'||s==='contas')&&!isAdmin()){s='guias';sub=undefined;}   /* Caixa e Financeiro: só a Administração */   /* Caixa: só a Administração (24/10/26) */
@@ -238,7 +238,7 @@ function nav(s,sub){
   document.getElementById('s-'+s).classList.add('active');
   document.getElementById('tb-ttl').textContent=TTLS[s]||s;
   if(window.moldura)moldura.aoNavegar(s,sub);
-  const fn={guias:function(){GV.boot(sub);},dashboard:loadDashboard,estoque:function(){LJ.estoque();},balanco:loadBalanco,notinhas:function(){LJ.notinhas();},caixa:function(){LJ.caixa();},posicao:loadPosicao,profissionais:loadProfTable,historico:function(){LJ.historico();},cfg:loadCfg,financeiro:function(){if(window.FIN)FIN.abrir();},gaveta:function(){if(window.GAVETA)GAVETA.abrir();},tutoriais:function(){if(window.TUT)TUT.tela();}};
+  const fn={guias:function(){GV.boot(sub);},dashboard:loadDashboard,estoque:function(){LJ.estoque();},balanco:loadBalanco,notinhas:function(){LJ.notinhas();},caixa:function(){LJ.caixa();},posicao:loadPosicao,profissionais:loadProfTable,historico:function(){LJ.historico();},cfg:loadCfg,financeiro:function(){if(window.FIN)FIN.abrir();},gaveta:function(){if(window.GAVETA)GAVETA.abrir();},tutoriais:function(){if(window.TUT)TUT.tela();},saldo:function(){if(window.SALDO)SALDO.abrir();}};
   if(fn[s])fn[s]();
 }
 

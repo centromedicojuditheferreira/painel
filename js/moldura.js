@@ -35,6 +35,7 @@ var moldura = (function () {
     alerta: 'M12 3.5 21.5 20h-19zM12 10v4.5M12 17.2h.01',
     lua: 'M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z', sol: 'M12 7.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 1 0 0-9M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4',
     inicio: 'M4 11.5 12 5l8 6.5V20H4zM10 20v-6h4v6',
+    saldo: 'M4 6h16v12H4zM4 10h16M7.5 14.5h4.5M15.5 14.5h1',   /* GUIAS v1.0: as guias de cada paciente e quanto resta */
     esq: 'M14.5 6l-6 6 6 6', dir: 'M9.5 6l6 6-6 6'
   };
   function svg(d, tam, traco) {
@@ -46,6 +47,7 @@ var moldura = (function () {
   var DEST = {
     inicio:        { s: 'guias', t: 'inicio',  secao: 'Início', titulo: 'Início', busca: true },        /* v4: a primeira tela (js/inicio.js); saudação no lugar do título */
     agenda:        { s: 'guias', t: 'agenda',  secao: 'Faturamento', titulo: 'Agenda', busca: true },   /* busca: lupa + Renovação de validade Unimed no topo */
+    saldo:         { s: 'saldo',  secao: 'Faturamento', titulo: 'Guias' },   /* GUIAS v1.0 (js/guias_saldo.js): guias do paciente, quanto resta, acusar guia que falta */
     cadastros:     { s: 'guias', t: 'cad',     secao: 'Faturamento', titulo: 'Cadastros' },
     exclusoes:     { s: 'guias', t: 'excl',    secao: 'Faturamento', titulo: 'Exclusões' },
     corte:         { s: 'guias', t: 'corte',   secao: 'Faturamento', titulo: 'Corte' },
@@ -82,7 +84,7 @@ var moldura = (function () {
   /* v4 (05/11/2026): Início primeiro, com o total de tudo; Agenda sem número (as pendências dela se resolvem no Início);
      Caixa entra para todos (gaveta + Cobrar); Malotes e Extrato só a Administração; o "Caixa" antigo da conveniência saiu do menu. */
   var MENU = [
-    ['', [['inicio', 'Início', 'gv-sbb', true], ['agenda', 'Agenda'], ['corte', 'Corte', 'gv-b-corte', true], ['falhas', 'Falhas', 'gv-b-falhas', true],
+    ['', [['inicio', 'Início', 'gv-sbb', true], ['agenda', 'Agenda'], ['saldo', 'Guias'], ['corte', 'Corte', 'gv-b-corte', true], ['falhas', 'Falhas', 'gv-b-falhas', true],
       ['cadastros', 'Cadastros', 'gv-b-cad', true], ['exclusoes', 'Exclusões', 'gv-b-excl', true], ['caixa', 'Caixa', 'gv-b-caixa', true],
       ['malotes', 'Malotes', 'gv-b-malotes']]],
     ['Profissionais', [['conferencia', 'Conferência', 'gv-b-prof', true]]],
