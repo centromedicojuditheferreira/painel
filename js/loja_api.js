@@ -124,6 +124,32 @@ var LAPI = (function () {
     gavetaMovErro: function (id, motivo) { return comSessao('fin_gaveta_mov_erro', { p_id: id, p_motivo: motivo }); },
     gavetaMovs: function (dias) { return comSessao('fin_gaveta_movs', { p_dias: dias || 31 }).then(function (j) { return j.movimentos; }); },
 
+    /* FIN v3.0 — Financeiro da Administração (contas do mês, contas fixas; dívidas e projeção só no acesso do dono).
+       O servidor decide o que cada um vê: a Marinalva recebe as parcelas sem "nº X de Y" e sem a observação do dono. */
+    finCategorias: function () { return comSessao('fin_categorias').then(function (j) { return j.categorias; }); },
+    finContasMes: function (competencia) { return comSessao('fin_contas_mes', { p_competencia: competencia || null }); },
+    finBaixa: function (id, valor, data, obs, desfazer) {
+      return comSessao('fin_baixa', { p_id: id, p_valor: valor == null ? null : valor, p_data: data || null, p_obs: obs || null, p_desfazer: !!desfazer });
+    },
+    finContasFixas: function () { return comSessao('fin_contas_fixas').then(function (j) { return j.contas; }); },
+    finContaFixaSalvar: function (c) {
+      return comSessao('fin_conta_fixa_salvar', { p_id: c.id || null, p_nome: c.nome, p_categoria: c.categoria, p_dia: c.dia == null ? null : c.dia,
+        p_valor: c.valor == null ? null : c.valor, p_base: c.base || 'informado', p_doc: c.doc || null, p_recebedor: c.recebedor || null,
+        p_obs: c.obs || null, p_ativa: c.ativa !== false });
+    },
+    /* "no cartão" (os dois) e a observação que só o dono vê (obsDono null = não mexe; '' = apaga) */
+    finContaFixaMarcar: function (id, noCartao, obsDono) {
+      return comSessao('fin_conta_fixa_marcar', { p_id: id, p_no_cartao: noCartao == null ? null : !!noCartao, p_obs_dono: obsDono == null ? null : obsDono });
+    },
+    finDividas: function () { return comSessao('fin_dividas').then(function (j) { return j.dividas; }); },
+    finDividaSalvar: function (d) {
+      return comSessao('fin_divida_salvar', { p_id: d.id || null, p_credor: d.credor, p_tipo: d.tipo, p_descricao: d.descricao || null,
+        p_dia: d.dia == null ? null : d.dia, p_parcela: d.parcela == null ? null : d.parcela, p_base: d.base || 'informado',
+        p_parcelas_total: d.total == null ? null : d.total, p_primeira: d.primeira || null, p_saldo: d.saldo == null ? null : d.saldo,
+        p_saldo_em: d.saldoEm || null, p_doc: d.doc || null, p_obs: d.obs || null, p_ativa: d.ativa !== false });
+    },
+    finProjecao: function (meses) { return comSessao('fin_projecao', { p_meses: meses || 12 }); },
+
     /* migração do Firebase (com a senha de administração) */
     viradaImportar: function (senha, colecao, docs) { return chamar('loja_virada_importar', { p_senha: senha, p_colecao: colecao, p_docs: docs }); },
     viradaConcluir: function (senha, contagens, pins) { return chamar('loja_virada_concluir', { p_senha: senha, p_contagens: contagens, p_pins: pins }); }

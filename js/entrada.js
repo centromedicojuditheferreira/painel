@@ -118,6 +118,7 @@ var ENTRADA = (function () {
     var nome = String((cu && cu.nome) || '').trim();
     nome = SAUDA[norm(nome)] || nome;
     var frase = nome ? 'Bem-vinda, ' + nome + '!' : 'Bem-vinda!';
+    if (cu && cu.dono) frase = 'Bem-vindo, chefe!';   /* FIN v3.0: o acesso do dono entra pela Administração com o PIN dele */
     if (txt) txt.innerHTML = frase.split(' ').map(function (p, i) {   /* uma palavra de cada vez */
       return '<span style="animation-delay:' + (0.64 + i * 0.13).toFixed(2) + 's">' + esc(p) + '</span>';
     }).join(' ');

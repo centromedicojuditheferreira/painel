@@ -28,6 +28,7 @@ var moldura = (function () {
     dono: 'M4 8.5l4 3.5 4-6.5 4 6.5 4-3.5-1.8 10H5.8z',
     extrato: 'M6 3.5h12v17l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4-2 1.4zM9 8h6M9 11.5h6M9 15h3.5',
     gaveta: 'M3.5 9.5h17v9h-17zM3.5 9.5l2-4h13l2 4M10 13.5h4M7 7.5h10',
+    contas: 'M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v12A1.5 1.5 0 0 1 19 20.5H5A1.5 1.5 0 0 1 3.5 19V7A1.5 1.5 0 0 1 5 5.5zM3.5 10h17M8 3.5v4M16 3.5v4M7.5 14h4M7.5 17h7',   /* FIN v3.0 */
     venda: 'M6 8h12l-1 12.5H7zM9 8V6.5a3 3 0 0 1 6 0V8',
     fixar: 'M4 5h16v14H4zM9.5 5v14',
     sair: 'M10 4.5H6.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2H10M14.5 8l4 4-4 4M18.5 12h-9',
@@ -61,6 +62,7 @@ var moldura = (function () {
     historico:     { s: 'historico', secao: 'Conveniência', titulo: 'Histórico' },
     venda:         { s: 'venda',     secao: 'Conveniência', titulo: 'Nova venda', semFab: true },
     profissionais: { s: 'profissionais', secao: 'Conveniência', titulo: 'Profissionais', menu: 'notinhas' },
+    contas:        { s: 'contas',     secao: 'Administração', titulo: 'Financeiro', adm: true },   /* FIN v3.0: contas do mês, contas fixas; dívidas e projeção só no acesso do dono */
     extrato:       { s: 'financeiro', secao: 'Financeiro', titulo: 'Extrato', adm: true },   /* FIN v1.3: só o administrador, por enquanto */
     gaveta:        { s: 'gaveta',     secao: 'Caixa', titulo: 'Caixa', menu: 'caixa' },   /* nome antigo: cai no Caixa */
     caixa:         { s: 'gaveta',     secao: 'Caixa', titulo: 'Caixa' },   /* v4: Caixa = gaveta (contagem às cegas; retirada e histórico do administrador) e, com o FIN v2.0, Cobrar + lançamentos do dia */
@@ -86,7 +88,7 @@ var moldura = (function () {
     ['Profissionais', [['conferencia', 'Conferência', 'gv-b-prof', true]]],
     ['Conveniência', [['notinhas', 'Notinhas'], ['estoque', 'Estoque'], ['historico', 'Histórico']]],
     ['Ajuda', [['tutoriais', 'Tutoriais']]],
-    ['Administração', [['extrato', 'Extrato'], ['visao', 'Visão geral'], ['posicao', 'Estoque atual'], ['exportar', 'Exportar'], ['cfg', 'Configurações'],
+    ['Administração', [['contas', 'Financeiro'], ['extrato', 'Extrato'], ['visao', 'Visão geral'], ['posicao', 'Estoque atual'], ['exportar', 'Exportar'], ['cfg', 'Configurações'],
       ['dono', 'Dono', null, false, 'gv-aba-dono']], true]
   ];
 
@@ -211,6 +213,7 @@ var moldura = (function () {
     var s = h < 12 ? 'Bom dia' : (h < 18 ? 'Boa tarde' : 'Boa noite');
     var nome = (typeof CU !== 'undefined' && CU && CU.nome) ? CU.nome : '';
     if (/^administrador$/i.test(nome.trim())) nome = 'Marinalva';   /* a conta Administrador é da sócia (js/entrada.js faz o mesmo na saudação) */
+    if (typeof CU !== 'undefined' && CU && CU.dono) nome = 'chefe';   /* FIN v3.0: o acesso do dono */
     return nome ? s + ', <em>' + esc(nome) + '</em>' : s;
   }
 

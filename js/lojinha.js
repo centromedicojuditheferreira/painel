@@ -194,7 +194,7 @@ async function doLogin(){
   try{r=await LAPI.entrar(uid,pin);}
   catch(e){err.textContent=e.message||String(e);err.style.display='block';if(e.codigo==='PIN_INCORRETO')document.getElementById('lo-pin').value='';return;}
   LAPI.definirToken(r.token);
-  const u={id:r.usuario.id,nome:r.usuario.nome,admin:r.usuario.admin===true};
+  const u={id:r.usuario.id,nome:r.usuario.nome,admin:r.usuario.admin===true,dono:r.usuario.dono===true};   /* FIN v3.0: dono = o acesso do Gabriel, que entra pela Administração com o PIN dele */
   const seguir=()=>{CU=u;entrarApp();};
   const gaveta=()=>{if(window.GAVETA)GAVETA.naEntrada(u,seguir);else seguir();};   /* FIN v1.5: primeira entrada do dia conta a gaveta antes de abrir o Cortex */
   const porta=()=>{if(window.ALERTA&&ALERTA.porta)ALERTA.porta(u,gaveta);else gaveta();};   /* ALERTA v2: secretária só entra com os avisos do navegador ligados */
@@ -221,7 +221,7 @@ function aplicarPermissoes(){
   ['cx-detalhes-fis','cx-detalhes-ban'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display=admin?'':'none';});
   const cxa=document.getElementById('cx-acoes');if(cxa)cxa.style.display=admin?'flex':'none';
 }
-function doLogout(){try{GV.stopTimers();}catch(e){}try{LJ.sair();}catch(e){}try{FIN.sair();}catch(e){}try{GAVETA.sair();}catch(e){}try{FCOB.sair();}catch(e){}try{TUT.aoSair();}catch(e){}LAPI.sair();CU=null;PC=[];PRC=[];document.getElementById('app').style.display='none';document.getElementById('lo').style.display='flex';document.getElementById('lo-pin').value='';return loadLoginUsers();}
+function doLogout(){try{GV.stopTimers();}catch(e){}try{LJ.sair();}catch(e){}try{FIN.sair();}catch(e){}try{GAVETA.sair();}catch(e){}try{FCOB.sair();}catch(e){}try{TUT.aoSair();}catch(e){}try{CONTAS.sair();}catch(e){}LAPI.sair();CU=null;PC=[];PRC=[];document.getElementById('app').style.display='none';document.getElementById('lo').style.display='flex';document.getElementById('lo-pin').value='';return loadLoginUsers();}
 LAPI.aoCair(function(codigo,msg){   /* sessão caiu no meio do uso: volta para a entrada e diz por quê (depois que a lista de nomes recarrega) */
   if(!CU)return;
   const txt=codigo==='TROCAR_PIN'?'O administrador definiu um PIN novo para você. Entre com ele.':(msg||'Sua sessão terminou. Entre de novo.');
@@ -233,7 +233,7 @@ function setDatas(){const t=todayISO(),f=firstISO();['cx-ini','h-ini','ex-ini','
 const TTLS={guias:'Guias da Agenda',dashboard:'Dashboard',venda:'Nova Venda',estoque:'Entrada de Estoque',balanco:'Balanço de Estoque',notinhas:'Notinhas',caixa:'Caixa',posicao:'Estoque Atual',profissionais:'Profissionais',historico:'Historico',exportar:'Exportar CSV',cfg:'Configuracoes'};
 function nav(s,sub){
   if(s==='venda'&&window.LJ){LJ.abrirVenda();return;}   /* Nova venda agora é a janela no canto (js/loja_nova.js) */
-  if(s==='caixa'&&!isAdmin()){s='guias';sub=undefined;}   /* Caixa: só a Administração (24/10/26) */
+  if((s==='caixa'||s==='contas')&&!isAdmin()){s='guias';sub=undefined;}   /* Caixa e Financeiro: só a Administração */   /* Caixa: só a Administração (24/10/26) */
   document.querySelectorAll('.sec').forEach(x=>x.classList.remove('active'));
   document.getElementById('s-'+s).classList.add('active');
   document.getElementById('tb-ttl').textContent=TTLS[s]||s;
