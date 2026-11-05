@@ -104,7 +104,8 @@ var moldura = (function () {
     var h = '<div class="menu-in">' +
       '<div class="menu-marca"><span class="menu-logo">' +
       '<span class="menu-o" aria-hidden="true">C</span>' +
-      '<span class="menu-nome"><b>Cortex</b><img src="img/levsoul-logo-branco.svg" alt="Lev Soul" width="62" height="9"></span>' +
+      '<span class="menu-nome"><b>Cortex</b><img class="lg-claro" src="img/levsoul-logo.png" alt="Lev Soul" width="72" height="11">' +
+      '<img class="lg-escuro" src="img/levsoul-logo-branco.svg" alt="" aria-hidden="true" width="72" height="11"></span>' +
       '</span><button type="button" class="menu-fixar" id="menu-fixar">' + svg(I.fixar) + '</button></div>';
     MENU.forEach(function (g) {
       var adm = g[2] ? ' menu-admin' : '';
@@ -123,7 +124,7 @@ var moldura = (function () {
       '<button type="button" class="menu-tema" id="menu-tema" title="Tema claro ou escuro" aria-label="Tema claro ou escuro"></button>' +
       '<button type="button" class="menu-sair" title="Sair" aria-label="Sair" onclick="doLogout()">' + svg(I.sair) + '</button></div></div>';
     menu.innerHTML = h;
-    document.getElementById('menu-tema').addEventListener('click', function () { tema(temaAtual() === 'escuro' ? 'claro' : 'escuro'); });
+    document.getElementById('menu-tema').addEventListener('click', trocaTema);
     pintaTema();
     menu.addEventListener('click', function (ev) {
       var b = ev.target.closest('[data-ir]');
@@ -213,27 +214,27 @@ var moldura = (function () {
     return nome ? s + ', <em>' + esc(nome) + '</em>' : s;
   }
 
-  /* ── tema claro / escuro (TEMA v4): escolha por navegador; vazio = segue o sistema ── */
+  /* ── tema claro / escuro (TEMA v4.1): começa CLARO; o escuro é escolha, guardada por navegador (cortex.tema).
+     O botão sol/lua fica no alto de toda tela (pg-tema), no rodapé do menu (menu-tema) e na entrada (lo-tema). ── */
   function temaAtual() { return document.documentElement.getAttribute('data-tema') === 'escuro' ? 'escuro' : 'claro'; }
-  function temaSistema() { try { return matchMedia('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro'; } catch (e) { return 'claro'; } }
   function tema(t) {
-    try { if (t) localStorage.setItem('cortex.tema', t); else localStorage.removeItem('cortex.tema'); } catch (e) {}
-    document.documentElement.setAttribute('data-tema', t || temaSistema());
+    t = t === 'escuro' ? 'escuro' : 'claro';
+    try { localStorage.setItem('cortex.tema', t); } catch (e) {}
+    document.documentElement.setAttribute('data-tema', t);
     pintaTema();
     if (window.ENTRADA && ENTRADA.corBarra) ENTRADA.corBarra();
   }
+  function trocaTema() { tema(temaAtual() === 'escuro' ? 'claro' : 'escuro'); }
   function pintaTema() {
-    var b = document.getElementById('menu-tema'); if (!b) return;
     var esc_ = temaAtual() === 'escuro';
-    b.innerHTML = svg(esc_ ? I.sol : I.lua, 16, 1.8);
-    b.title = esc_ ? 'Mudar para o tema claro' : 'Mudar para o tema escuro';
-  }
-  try {
-    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
-      var g = null; try { g = localStorage.getItem('cortex.tema'); } catch (e) {}
-      if (g !== 'claro' && g !== 'escuro') tema(null);   /* sem escolha guardada: acompanha o sistema */
+    ['menu-tema', 'pg-tema', 'lo-tema'].forEach(function (id) {
+      var b = document.getElementById(id); if (!b) return;
+      b.innerHTML = svg(esc_ ? I.sol : I.lua, id === 'menu-tema' ? 16 : 18, 1.8);
+      var r = esc_ ? 'Mudar para o tema claro' : 'Mudar para o tema escuro';
+      b.title = r; b.setAttribute('aria-label', r);
     });
-  } catch (e) {}
+  }
+  ['pg-tema', 'lo-tema'].forEach(function (id) { var b = document.getElementById(id); if (b) b.addEventListener('click', trocaTema); });
   function acoesDe(d) { return d === atual ? document.getElementById('pg-acoes') : null; }
   function resumo(d, txt) { resumos[d] = txt || ''; if (d === atual) document.getElementById('pg-resumo').textContent = resumos[d]; }
 
@@ -330,6 +331,7 @@ var moldura = (function () {
 
   montarMenu();
   montarFab();
+  pintaTema();
   var rec = document.getElementById('gv-recarregar');
   if (rec) rec.addEventListener('click', function () {
     rec.classList.add('girando'); setTimeout(function () { rec.classList.remove('girando'); }, 1200);

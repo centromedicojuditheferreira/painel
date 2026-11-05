@@ -1,7 +1,9 @@
 /* ═══════════════════════════════════════════════════════════════════
    Painel · base do design novo (Lev Soul)
-   Fonte do sistema, cantos retos; navy #2C2D6E (azul do logo) como tinta e menu,
-   orquídea #B6569C como destaque. Carregado antes de loja.css, guias.css e profissional.css.
+   Fonte do sistema, cantos retos. Carregado antes de loja.css, guias.css e profissional.css.
+   TEMA v4.1 (05/11/2026, pedido do dono: "ficou muito pesado"): o claro trabalha com o rosa da entrada
+   (#C65C9F), menu rosa-claro e sombras leves; o escuro é ameixa, como a entrada vista com o escurecedor.
+   O tema começa CLARO; o escuro é escolha (botão sol/lua no alto da tela e no menu), guardada por navegador.
    TEMA v4 (05/11/2026): dois tons Lev Soul, tema escuro nativo (html[data-tema="escuro"],
    escolhido no menu ou seguindo o sistema) e a fonte Fashion Fetish (--fd) nas vitrines:
    "Cortex", saudação, títulos e números grandes. Texto corrido continua na fonte do sistema.
@@ -15,14 +17,15 @@
   --fd:'Fashion Fetish',var(--fn);   /* vitrine: Cortex, saudação, títulos, números grandes */
   --mono:ui-monospace,'SF Mono','Cascadia Mono',Menlo,Consolas,monospace;
   --mo:var(--fn); /* números na fonte do sistema (algarismos tabulares); --mono só onde precisa alinhar texto */
-  --tinta:#1C1A2E; --cinza:#6B6680; --cinza3:#A9A3B8; --linha:#E6E0EC; --linha2:#D4CCDC;
-  --fundo:#F4F1F7; --branco:#FFFFFF; --sobre:#F9F6FB; --preenche:rgba(108,98,140,.12); --preenche2:rgba(108,98,140,.2);
-  --tint:#2C2D6E; --tint-suave:rgba(44,45,110,.10); --orquidea:#B6569C; --orquidea-suave:rgba(182,86,156,.12);
-  --vermelho:#D70015; --vermelho-suave:rgba(215,0,21,.08); --laranja:#C14F00; --laranja-suave:rgba(193,79,0,.10);
-  --verde:#1F8A3B; --verde-suave:rgba(31,138,59,.12); --azul:#0071E3;
-  --sombra-pop:0 24px 64px rgba(0,0,0,.3); --sombra-menu:0 12px 32px rgba(0,0,0,.18);
-  --sombra-card:0 1px 2px rgba(28,26,46,.05),0 10px 30px -18px rgba(44,45,110,.35);
-  --rail:#2C2D6E; --rail-txt:rgba(255,255,255,.78); --rail-on:#FFFFFF; --rail-sel:rgba(255,255,255,.12); --rail-linha:rgba(255,255,255,.1); --rail-mudo:rgba(255,255,255,.45);
+  --tinta:#2A1626; --cinza:#7A6274; --cinza3:#B7A3B2; --linha:#F0DDE8; --linha2:#E4C9D9;
+  --fundo:#FBF4F8; --branco:#FFFFFF; --sobre:#FDF7FA; --preenche:rgba(182,86,156,.09); --preenche2:rgba(182,86,156,.17);
+  --tint:#A8457F; --tint-suave:rgba(198,92,159,.12); --orquidea:#C65C9F; --orquidea-suave:rgba(198,92,159,.12); --no-tint:#FFFFFF;
+  --vermelho:#D70015; --vermelho-suave:rgba(215,0,21,.07); --laranja:#C14F00; --laranja-suave:rgba(193,79,0,.09);
+  --verde:#1F8A3B; --verde-suave:rgba(31,138,59,.11); --azul:#0071E3;
+  --sombra-pop:0 24px 64px rgba(90,30,75,.22); --sombra-menu:0 12px 32px rgba(90,30,75,.14);
+  --sombra-card:0 1px 2px rgba(120,40,100,.04);
+  --rail:linear-gradient(180deg,#FBEAF4 0%,#F5DCEB 100%); --rail-txt:#5B3552; --rail-on:#2A1626; --rail-sel:rgba(198,92,159,.16);
+  --rail-linha:rgba(120,40,100,.12); --rail-mudo:rgba(91,53,82,.55); --rail-marca:#A8457F;
   --menu-fechado:58px; --menu-aberto:240px;
   /* nomes antigos (lojinha) apontando para a paleta nova */
   --sw:var(--menu-fechado); --sbg:var(--tint); --stxt:var(--cinza);
@@ -36,29 +39,32 @@
 }
 /* ── tema escuro (ametista/marinho): mesmos nomes, outros valores; o resto do CSS não muda ── */
 html[data-tema="escuro"]{
-  --tinta:#F2EEF7; --cinza:#A79FBE; --cinza3:#6E678A; --linha:#2E2950; --linha2:#3B3560;
-  --fundo:#15122A; --branco:#1E1A36; --sobre:#262141; --preenche:rgba(167,159,190,.14); --preenche2:rgba(167,159,190,.24);
-  --tint:#9A9BE8; --tint-suave:rgba(154,155,232,.14); --orquidea:#DC8FC7; --orquidea-suave:rgba(220,143,199,.14);
+  --tinta:#F6EAF2; --cinza:#C2A6BA; --cinza3:#7E6478; --linha:#3A2236; --linha2:#4A2C45;
+  --fundo:#1C0F1A; --branco:#271624; --sobre:#311C2D; --preenche:rgba(229,154,203,.11); --preenche2:rgba(229,154,203,.2);
+  --tint:#E59ACB; --tint-suave:rgba(229,154,203,.14); --orquidea:#E59ACB; --orquidea-suave:rgba(229,154,203,.14); --no-tint:#1C0F1A;
   --vermelho:#FF5C6A; --vermelho-suave:rgba(255,92,106,.12); --laranja:#FF9A4D; --laranja-suave:rgba(255,154,77,.12);
   --verde:#5BD37A; --verde-suave:rgba(91,211,122,.12); --azul:#6AB0FF;
   --sombra-pop:0 24px 64px rgba(0,0,0,.6); --sombra-menu:0 12px 32px rgba(0,0,0,.5);
-  --sombra-card:0 1px 2px rgba(0,0,0,.3),0 12px 32px -16px rgba(0,0,0,.7);
-  --rail:#100D22; --rail-txt:rgba(242,238,247,.7); --rail-on:#FFFFFF; --rail-sel:rgba(220,143,199,.16); --rail-linha:rgba(255,255,255,.08); --rail-mudo:rgba(242,238,247,.42);
-  --txt2:#D5CFE3;
+  --sombra-card:0 1px 2px rgba(0,0,0,.25);
+  --rail:#140A13; --rail-txt:rgba(246,234,242,.72); --rail-on:#FFFFFF; --rail-sel:rgba(229,154,203,.16); --rail-linha:rgba(255,255,255,.08); --rail-mudo:rgba(246,234,242,.42); --rail-marca:#FFFFFF;
+  --txt2:#E6D3E0;
   color-scheme:dark;
 }
-html[data-tema="escuro"] .btn-p,html[data-tema="escuro"] .fab,html[data-tema="escuro"] .btn-d,html[data-tema="escuro"] .toast{color:#15122A}
+html[data-tema="escuro"] .btn-p,html[data-tema="escuro"] .fab,html[data-tema="escuro"] .btn-d,html[data-tema="escuro"] .toast{color:var(--no-tint)}
 html[data-tema="escuro"] .btn-p,html[data-tema="escuro"] .fab{background:var(--tint)}
-html[data-tema="escuro"] .toast{color:#15122A;background:#F2EEF7}
+html[data-tema="escuro"] .toast{color:var(--no-tint);background:var(--tinta)}
 html[data-tema="escuro"] .toast.ok{background:var(--tint)}html[data-tema="escuro"] .toast.ko{background:var(--vermelho)}
 html[data-tema="escuro"] ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.22)}
 html[data-tema="escuro"] .ra-chip.aqui{background:var(--branco)}
 html[data-tema="escuro"] .dia2.on,html[data-tema="escuro"] .dia2.on:hover{background:var(--tint)}
-html[data-tema="escuro"] .dia2.on .s,html[data-tema="escuro"] .dia2.on .d,html[data-tema="escuro"] .dia2.on .r{color:#15122A}
-html[data-tema="escuro"] .mal-passo .n,html[data-tema="escuro"] .pp-op.on .cx,html[data-tema="escuro"] .lj-marca.on .cx{color:#15122A}
-html[data-tema="escuro"] .nv-min,html[data-tema="escuro"] .nv-cab{background:#2C2D6E;color:#fff}
+html[data-tema="escuro"] .dia2.on .s,html[data-tema="escuro"] .dia2.on .d,html[data-tema="escuro"] .dia2.on .r{color:var(--no-tint)}
+html[data-tema="escuro"] .mal-passo .n,html[data-tema="escuro"] .pp-op.on .cx,html[data-tema="escuro"] .lj-marca.on .cx{color:var(--no-tint)}
+html[data-tema="escuro"] .nv-min,html[data-tema="escuro"] .nv-cab{background:#7A2E66;color:#fff}
 html[data-tema="escuro"] .nv-min-tit,html[data-tema="escuro"] .nv-ic{color:#fff}
-html[data-tema="escuro"] img.menu-nome-logo{filter:none}
+/* logo do menu: colorido no claro, branco no escuro */
+.lg-escuro{display:none!important}
+html[data-tema="escuro"] .lg-claro{display:none!important}
+html[data-tema="escuro"] .lg-escuro{display:block!important}
 html{-webkit-text-size-adjust:100%}
 body{font-family:var(--fn);background:var(--fundo);color:var(--tinta);min-height:100vh;font-size:15px;line-height:1.4;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
 button,input,select,textarea{font-family:inherit;color:inherit}
@@ -74,7 +80,7 @@ a{color:var(--tint)}
 
 /* ── menu lateral (TEMA v4: azul-marinho do logo, "Cortex" na Fashion Fetish, contador vermelho de verdade) ── */
 .menu{position:fixed;top:0;left:0;bottom:0;z-index:60;width:var(--menu-fechado);overflow:hidden;background:var(--rail);color:var(--rail-txt);
-  transition:width .18s ease,box-shadow .18s ease}
+  box-shadow:inset -1px 0 0 var(--rail-linha);transition:width .18s ease,box-shadow .18s ease}
 .menu.aberto{width:var(--menu-aberto)}
 .menu.aberto.solto{box-shadow:var(--sombra-menu)}
 .menu-in{width:var(--menu-aberto);height:100%;padding:18px 12px 14px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
@@ -83,17 +89,17 @@ a{color:var(--tint)}
 .menu.aberto .menu-marca{padding-left:8px}
 .menu-logo{position:relative;flex:1;min-width:0;height:42px}
 .menu-o{position:absolute;left:0;top:4px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;transition:opacity .15s ease;
-  font-family:var(--fd);font-weight:700;font-size:30px;line-height:1;color:#fff}
+  font-family:var(--fd);font-weight:700;font-size:30px;line-height:1;color:var(--rail-marca)}
 .menu-nome{position:absolute;left:0;top:0;display:flex;flex-direction:column;gap:3px;white-space:nowrap;opacity:0;transition:opacity .15s ease}
-.menu-nome b{font-family:var(--fd);font-weight:700;font-size:30px;line-height:1;letter-spacing:.01em;color:#fff}
-.menu-nome img{display:block;width:72px;height:auto;opacity:.6}
+.menu-nome b{font-family:var(--fd);font-weight:700;font-size:30px;line-height:1;letter-spacing:.01em;color:var(--rail-marca)}
+.menu-nome img{display:block;width:72px;height:auto;opacity:.7}
 .menu.aberto .menu-o{opacity:0}
 .menu.aberto .menu-nome{opacity:1}
 .menu-fixar,.menu-sair,.menu-tema{flex:none;width:30px;height:30px;border:0;background:transparent;color:var(--rail-mudo);cursor:pointer;
   display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s ease,color .12s ease}
 .menu-sair{width:32px;height:32px}
 .menu.aberto .menu-fixar,.menu.aberto .menu-sair,.menu.aberto .menu-tema{opacity:1}
-.menu-fixar:hover,.menu-sair:hover,.menu-tema:hover{color:#fff}
+.menu-fixar:hover,.menu-sair:hover,.menu-tema:hover{color:var(--rail-on)}
 .menu-grupo{position:relative;padding:14px 8px 5px;font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--rail-mudo);white-space:nowrap}
 .menu-grupo span{opacity:0;transition:opacity .15s ease}
 .menu-grupo i{position:absolute;left:14px;top:18px;width:22px;height:1px;background:var(--rail-linha)}
@@ -111,7 +117,7 @@ a{color:var(--tint)}
 .menu-n{font-size:12.5px;color:var(--rail-mudo);font-variant-numeric:tabular-nums;white-space:nowrap;opacity:0;transition:opacity .15s ease}
 .menu.aberto .menu-rot,.menu.aberto .menu-n{opacity:1}
 .menu-item.urg .menu-n{min-width:22px;height:20px;padding:0 6px;display:inline-flex;align-items:center;justify-content:center;background:var(--vermelho);color:#fff;font-weight:700}
-html[data-tema="escuro"] .menu-item.urg .menu-n{color:#15122A}
+html[data-tema="escuro"] .menu-item.urg .menu-n{color:var(--no-tint)}
 .menu-item.urg .menu-n[hidden]{display:none}
 .menu-admin{display:none!important}
 #app.eh-admin .menu-admin{display:flex!important}
@@ -121,7 +127,7 @@ html[data-tema="escuro"] .menu-item.urg .menu-n{color:#15122A}
 .menu-av{flex:none;width:30px;height:30px;background:var(--orquidea);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
 .menu-quem{flex:1;min-width:0;display:flex;flex-direction:column;white-space:nowrap;opacity:0;transition:opacity .15s ease}
 .menu.aberto .menu-quem{opacity:1}
-.menu-quem b{font-size:13px;font-weight:600;color:#fff;overflow:hidden;text-overflow:ellipsis}
+.menu-quem b{font-size:13px;font-weight:600;color:var(--rail-on);overflow:hidden;text-overflow:ellipsis}
 .menu-quem small{font-size:12px;color:var(--rail-mudo)}
 
 /* ── área principal ── */
@@ -131,14 +137,14 @@ html[data-tema="escuro"] .menu-item.urg .menu-n{color:#15122A}
 .pg-topo{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px;margin-bottom:14px}
 .pg-tit{min-width:0}
 .pg-secao{font-size:13px;font-weight:600;color:var(--tint)}
-.pg-topo h1{margin:2px 0 0;font-family:var(--fd);font-size:40px;line-height:1;font-weight:400;letter-spacing:.005em}
+.pg-topo h1{margin:2px 0 0;font-family:var(--fd);font-size:34px;line-height:1;font-weight:400;letter-spacing:.005em}
 .pg-topo h1 em{font-style:normal;color:var(--orquidea)}   /* TEMA v4: o nome na saudação */
 .pg-resumo{margin:4px 0 0;font-size:15px;color:var(--cinza);font-variant-numeric:tabular-nums}
 .pg-resumo:has(#pg-resumo:empty):has(.pg-atual:empty){display:none}
 #pg-resumo:not(:empty)+.pg-atual:not(:empty)::before{content:" · "}
 .pg-atual[hidden]{display:none}
 .pg-tit.ola .pg-secao{display:none}   /* v4: no Início, saudação grande + data e hora da leitura embaixo */
-.pg-tit.ola h1{font-size:52px;line-height:.95}
+.pg-tit.ola h1{font-size:44px;line-height:.95}
 .pg-tit.ola .pg-resumo{margin-top:8px}
 .pg-dir{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .pg-acoes{display:contents}
@@ -149,7 +155,8 @@ html[data-tema="escuro"] .menu-item.urg .menu-n{color:#15122A}
 .busca input::-webkit-search-cancel-button{cursor:pointer}
 .btn-ic{flex:none;width:36px;height:36px;border:0;background:var(--preenche);color:var(--tint);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
 .btn-ic[hidden]{display:none}
-.btn-ic.btn-sino{color:var(--vermelho);background:var(--vermelho-suave)}   /* ALERTA v1.0: só aparece com os avisos do navegador desligados */
+.btn-ic.btn-sino{color:var(--vermelho);background:var(--vermelho-suave)}
+.btn-ic.btn-tema{color:var(--cinza)}   /* v4.1: claro/escuro sempre à vista no alto */   /* ALERTA v1.0: só aparece com os avisos do navegador desligados */
 .btn-ic:hover{background:var(--preenche2)}
 .btn-ic.girando svg{animation:gira .8s linear infinite}
 /* v3.4: botão "Renovação de validade Unimed" no topo da Agenda (abre o popup grande) */
@@ -182,8 +189,8 @@ html[data-tema="escuro"] .menu-item.urg .menu-n{color:#15122A}
 .ra-chip.on{box-shadow:0 0 0 2px var(--branco),0 0 0 4px var(--vermelho)}
 .ra-chip.on svg{margin-left:2px;opacity:.9}
 .ra-sep{flex:none;width:1px;height:20px;margin:0 2px;background:var(--linha2)}
-html[data-tema="escuro"] .ra-chip{color:#15122A}
-html[data-tema="escuro"] .ra-resumo:hover{color:#15122A}
+html[data-tema="escuro"] .ra-chip{color:var(--no-tint)}
+html[data-tema="escuro"] .ra-resumo:hover{color:var(--no-tint)}
 
 /* ── botão flutuante Nova venda ── */
 .fab{position:fixed;right:24px;bottom:24px;z-index:70;display:inline-flex;align-items:center;gap:10px;height:52px;padding:0 20px;border:0;
