@@ -128,5 +128,28 @@ var TUT_CONTEUDO = {
       p: '<b>"Não consigo entrar."</b> Primeira vez: e-mail do cadastro + 0000. Depois: a senha que ele criou.<br><b>"Posso confirmar e corrigir depois?"</b> Não. Primeiro corrige, ele confere de novo, e só então confirma.',
       e: '<b>"Confirmei com erro."</b> Pelo site não muda mais: fale com a Administração.<br><b>"Perdi o prazo de segunda."</b> Ainda dá até terça, 22h. Depois, a agenda segue como está.' }
   ]
+  },
+
+  guias: {   /* GUIAS v1.0 (05/11/2026) */
+    titulo: 'Manual da tela Guias', secao: 'Faturamento', versao: 1, telas: ['saldo'], ondeAbre: 'a tela Guias',
+    resumo: 'Ver as guias que o sistema tem de cada paciente, quantas sessões restam e acusar guia que falta.',
+    passos: [
+    { vis: function(){ return TUT.icone('G'); }, t: 'Para que serve',
+      p: 'A tela <b>Guias</b> mostra as guias Unimed que o sistema tem de cada paciente e <b>quantas sessões restam</b> em cada uma.',
+      e: 'O número <b>Restam</b> é o mesmo que vai na mensagem de confirmação do WhatsApp. Pode passar esse número para o paciente.' },
+    { vis: function(){ return TUT.linha([['Nome', '3 letras', 'ou mais'], ['Carteirinha', 'com ou sem ponto', ''], ['Nº da guia', 'do SGU', '']]); },
+      t: 'Como procurar',
+      p: 'Digite o <b>nome</b> do paciente (3 letras ou mais), a <b>carteirinha</b> ou o <b>número da guia</b>. A busca começa sozinha.',
+      e: 'Na janela de cada consulta da <b>Agenda</b> aparece o mesmo resumo, no bloco <b>Guias deste paciente no sistema</b>.' },
+    { vis: function(){ return TUT.linha([['Autorizadas', 'pela Unimed', ''], ['No faturamento', 'já usadas', ''], ['Feitas, a lançar', 'este mês', ''], ['Restam', 'o que sobra', 'ok']]); },
+      t: 'O que cada número quer dizer',
+      p: '<b>Autorizadas:</b> o que a Unimed liberou. <b>No faturamento:</b> sessões que já usaram a guia. <b>Feitas, a lançar:</b> sessões deste mês que o paciente já fez e ainda vão usar a guia. <b>Restam:</b> o que sobra.',
+      e: '<b>Falta também conta</b> como sessão usada. Número em <b>laranja</b>: restam 2 ou menos, ou a guia vence em até 10 dias — hora de pedir a guia nova. Em <b>vermelho</b>: esgotada.' },
+    { vis: function(){ return TUT.linha([['Está no SGU', 'Não aparece', 'aqui', 'quente'], ['Acusar', 'número da guia', ''], ['Entrou', 'some sozinha', '', 'ok']]); },
+      t: 'Guia que não aparece',
+      p: 'A guia <b>existe no SGU</b> e não aparece aqui? Toque em <b>Acusar guia que falta</b> e digite o número dela.',
+      e: 'A acusação fica na lista <b>Guias acusadas</b> até a guia entrar no sistema; aí some sozinha e a consulta sai do vermelho. Se não entrar em 2 horas, a Administração é avisada.<br>' +
+         'Se o Cortex disser que a guia <b>já está no sistema</b> mas a carteirinha não está na ficha de ninguém, o problema é o cadastro: coloque a carteirinha na ficha do paciente no Feegow. Em até 15 minutos a guia aparece.' }
+  ]
   }
 };

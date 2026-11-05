@@ -1037,6 +1037,11 @@ function abrirPacAgenda(agid, ctx){
         n + (n === 1 ? " consulta futura" : " consultas futuras") + " na fila: no dia do corte, o paciente aparece na tela Corte."));
     }
     P.corpo.appendChild(cx);
+    if(window.SALDO){   /* GUIAS v1.0: as guias que o sistema tem deste paciente, quanto resta e "Acusar guia que falta" */
+      var gsBloco = novo("div", "sg-agenda"); gsBloco.hidden = true;
+      P.corpo.appendChild(gsBloco);
+      SALDO.blocoPaciente(gsBloco, l);
+    }
     if(m.acao) P.corpo.appendChild(novo("div", "pp-bloco", '<span class="pp-rot">O que fazer</span><span class="pp-txt">' + escapa(m.acao) + '</span>'));
     var cel = primeiroCelular(l.celulares_raw, l.telefones_raw);
     var fone = novo("div", "pp-fone");
