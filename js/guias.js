@@ -2226,7 +2226,7 @@ function salvarCorteNota(ref, campos, aoSalvar){
 /* ── ✂️ tela — design novo: a tesoura do dia ──
    Gravações: salvarCorteNota(ref, {tratamento:"excluido", indulto_ate:null}) → corte_notas.
    v3.7: "Aguardar 20h" grava pela função corte_aguardar (CORTE_v2_2_aguardar.sql): o banco carimba o prazo
-   e recusa a segunda espera para a mesma consulta sem guia. O "Segurar o corte" (indulto) saiu da tela;
+   e recusa a segunda espera no mesmo corte (CORTE v2.5: só renova depois de consulta coberta). O "Segurar o corte" (indulto) saiu da tela;
    indulto antigo ainda aparece até vencer. */
 var CORTE_TXT = {
   cortar_hoje:       { label:"Cortar hoje", grupo:"Cortar hoje, até as 21h", cor:"var(--vermelho)", ordem:0, sub:"A última consulta coberta já passou: corte até as 21h (sábado, 11h)",
@@ -2243,7 +2243,7 @@ var CORTE_TXT = {
   excluido_conferir: { label:"Excluída, conferindo", grupo:"Excluída, conferindo", cor:"var(--laranja)", ordem:4, sub:"Assinada: some quando o espelho confirmar (até 30 min)",
                        acao:"A exclusão foi assinada. A linha some sozinha quando o espelho do Feegow confirmar que os futuros saíram. Se em 30 minutos eles continuarem lá, volta como “Apagou incompleto” (assinar de novo não muda o prazo)." },
   em_espera:         { label:"Aguardando", grupo:"Aguardando", cor:"var(--cinza)", ordem:5, sub:"Guia a caminho: volta para a lista se não entrar no sistema",
-                       acao:"A recepção marcou que a guia está a caminho. Se ela não entrar no sistema até o fim do prazo, o paciente volta para a lista e aí é cortar: só se aguarda uma vez." },
+                       acao:"A recepção marcou que a guia está a caminho. Se ela não entrar no sistema até o fim do prazo, o paciente volta para a lista e aí é cortar: só se aguarda uma vez por corte." },
   aguardando:        { label:"Aguardando guia", grupo:"Aguardando guia", cor:"var(--cinza)", ordem:6, sub:"Guia solicitada: prazo máximo de 2 dias",
                        acao:"A guia foi solicitada e está segurando o corte por no máximo 2 dias. Venceu o prazo, corta." },
   indulto:           { label:"Indulto ativo", grupo:"Indulto ativo", cor:"var(--cinza)", ordem:7, sub:"Corte segurado por alguns dias, assinado",
@@ -2373,7 +2373,7 @@ function desenharCorte(){
     '<h2>A tesoura do dia</h2><p>Quem está aqui <b>perdeu a cobertura</b>: a última consulta coberta já passou. O corte é no <b>dia útil seguinte</b> a ela, até as <b>21h</b> (sábado, <b>11h</b>); passou desse dia, é cortar agora.</p>' +
     '<p>O caminho: abrir o <b>próximo</b> agendamento no Feegow e apagar <b>“este e os próximos”</b>, nunca os anteriores. Depois assinar aqui em <b>Excluí no Feegow</b>.</p>' +
     '<p class="cinza">A linha some sozinha quando o espelho confirmar. Aguardando guia = guia solicitada, prazo máximo de 2 dias; venceu, corta. Remarcou sem guia = o paciente já tinha sido cortado e a agenda foi marcada de novo sem a guia no sistema.' +
-    (hEsp() ? ' Guia a caminho? <b>Aguardar ' + hEsp() + 'h</b> tira o paciente da lista; se a guia não entrar no sistema nesse prazo, ele volta, e aí é cortar (uma vez só).' : '') + '</p>'));
+    (hEsp() ? ' Guia a caminho? <b>Aguardar ' + hEsp() + 'h</b> tira o paciente da lista; se a guia não entrar no sistema nesse prazo, ele volta, e aí é cortar (uma vez só por corte).' : '') + '</p>'));
   wrap.appendChild(lado);
   main.appendChild(wrap);
   ajustaAltura();
@@ -2417,7 +2417,7 @@ function abrirCorteItem(ref){
   function isoDia(a){ return a.getFullYear() + "-" + String(a.getMonth()+1).padStart(2,"0") + "-" + String(a.getDate()).padStart(2,"0"); }
   function erroEspera(err){
     var m = String((err && err.message) || "");
-    if(m.indexOf("CORTE_JA_ESPEROU") >= 0) return "Este paciente já aguardou por esta consulta sem guia: agora é cortar.";
+    if(m.indexOf("CORTE_JA_ESPEROU") >= 0) return "Este paciente já aguardou neste corte e a guia não entrou no sistema: agora é cortar.";
     if(m.indexOf("CORTE_SEM_ASSINATURA") >= 0) return "Entre com seu PIN primeiro: a espera é assinada.";
     if(m.indexOf("CORTE_MOTIVO_INVALIDO") >= 0) return "Escolha o motivo da espera.";
     return "Não consegui salvar. Recarregue a tela e tente de novo.";
@@ -2500,7 +2500,7 @@ function abrirCorteItem(ref){
         modo = "confirma"; aviso = null; pinta();
       }));
       ac.appendChild(lb);
-      /* v3.7: guia a caminho → Aguardar (uma vez só por consulta sem guia; sem o SQL v2.2 o botão não aparece) */
+      /* v3.7: guia a caminho → Aguardar (CORTE v2.5: uma vez por corte; sem o SQL v2.2 o botão não aparece) */
       if(hEsp() && !c.ja_esperou && (e === "cortar_hoje" || e === "cortar_agora" || e === "prazo_vencido" || e === "reagendou")){
         var re = novo("span", "pp-rot", "Guia a caminho?"); re.style.marginTop = "10px";
         ac.appendChild(re);
@@ -2540,7 +2540,7 @@ function abrirCorteItem(ref){
       });
       ac.appendChild(ops);
       ac.appendChild(novo("span", "pp-txt", "O paciente sai da lista por " + h + " horas. Se a guia não entrar no sistema até <b>" + escapa(fmtPrazo(volta)) +
-        "</b>, ele volta, e aí é cortar: só se aguarda uma vez."));
+        "</b>, ele volta, e aí é cortar: só se aguarda uma vez por corte."));
       if(c.primeiro_descoberto && c.primeiro_descoberto <= isoDia(volta))
         ac.appendChild(novo("span", "pp-txt", '<b style="color:var(--vermelho)">Atenção:</b> a próxima consulta sem guia é ' + escapa(fmtData(c.primeiro_descoberto).slice(0, 5)) +
           ', dentro desse prazo. Se a guia não entrar até lá, o paciente pode ser atendido sem guia.'));
