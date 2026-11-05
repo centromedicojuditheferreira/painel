@@ -238,7 +238,7 @@ function nav(s,sub){
   document.getElementById('s-'+s).classList.add('active');
   document.getElementById('tb-ttl').textContent=TTLS[s]||s;
   if(window.moldura)moldura.aoNavegar(s,sub);
-  const fn={guias:function(){GV.boot(sub);},dashboard:loadDashboard,estoque:function(){LJ.estoque();},balanco:loadBalanco,notinhas:function(){LJ.notinhas();},caixa:function(){LJ.caixa();},posicao:loadPosicao,profissionais:loadProfTable,historico:function(){LJ.historico();},cfg:loadCfg,financeiro:function(){if(window.FIN)FIN.abrir();},gaveta:function(){if(window.GAVETA)GAVETA.abrir();},tutoriais:function(){if(window.TUT)TUT.tela();},contas:function(){if(window.CONTAS)CONTAS.abrir();}};
+  const fn={guias:function(){GV.boot(sub);},dashboard:loadDashboard,estoque:function(){LJ.estoque();},balanco:loadBalanco,notinhas:function(){LJ.notinhas();},caixa:function(){LJ.caixa();},posicao:loadPosicao,profissionais:loadProfTable,historico:function(){LJ.historico();},cfg:loadCfg,financeiro:function(){if(window.FIN)FIN.abrir();},gaveta:function(){if(window.GAVETA)GAVETA.abrir();},tutoriais:function(){if(window.TUT)TUT.tela();}};
   if(fn[s])fn[s]();
 }
 

@@ -512,5 +512,13 @@ var CONTAS = (function () {
     resumo('12 meses: ' + brl(tot) + ' em saídas');
   }
 
+  /* a tela abre quando nav('contas') ativa a seção (sem mexer no mapa de telas do lojinha.js) */
+  var ativa = false, secao = document.getElementById('s-contas');
+  if (secao && window.MutationObserver) new MutationObserver(function () {
+    var on = secao.classList.contains('active');
+    if (on && !ativa) abrir();
+    ativa = on;
+  }).observe(secao, { attributes: true, attributeFilter: ['class'] });
+
   return { abrir: abrir, sair: sair };
 })();
