@@ -1,5 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════
    Financeiro da Administração (FIN v3.0): contas do mês, contas fixas, dívidas e projeção.
+   FIN v4.0: caixa mês a mês do dono (Unimed por estágio, repasse, conveniência, fixas, parcelas, cartão).
    Usa as peças do painel (lista, lado, painel, pop, seg); aqui só o que é desta tela.
    ═══════════════════════════════════════════════════════════════════ */
 .ct-raiz{display:flex;flex-direction:column;gap:14px}
@@ -131,6 +132,34 @@ html[data-tema="escuro"] .ct-raiz{--dv1:#3987e5;--dv2:#d95926;--dv3:#199e70;--dv
 .ct-marco .v{flex:none;display:flex;flex-direction:column;align-items:flex-end;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
 .ct-marco .v small{font-size:12px;font-weight:400;color:var(--cinza)}
 
+/* FIN v4.0 — Caixa mês a mês (só o dono) */
+.ct-pj-cx{max-height:none}
+.ct-pj-tab th[scope=row]{font-weight:500;color:var(--tinta);white-space:normal;min-width:160px;position:sticky;left:0;background:var(--branco);box-shadow:1px 0 0 var(--linha)}
+.ct-pj-tab tr.res th[scope=row],.ct-pj-tab tr.grupo th{background:var(--fundo)}
+.ct-pj-tab tr.grupo th{position:sticky;left:0;width:1px;white-space:nowrap}
+.ct-pj-uni .ct-tab td:first-child,.ct-pj-rep .ct-tab td:first-child,.ct-pj-rep .ct-tab th[scope=row]{position:sticky;left:0;background:var(--branco);box-shadow:1px 0 0 var(--linha)}
+.ct-pj-tab th[scope=row] small{display:block;font-size:11px;font-weight:400;color:var(--cinza)}
+.ct-pj-tab thead th.atual{color:var(--tint)}
+.ct-pj-tab thead th small{display:block;font-size:10px;font-weight:400;color:var(--cinza)}
+.ct-pj-tab tr.grupo th{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--cinza);background:var(--fundo);padding-top:12px}
+.ct-pj-tab tr.info td,.ct-pj-tab tr.info th{color:var(--cinza3)}
+.ct-pj-tab tr.tot td,.ct-pj-tab tr.tot th{font-weight:600;border-top:1px solid var(--cinza3)}
+.ct-pj-tab tr.res td,.ct-pj-tab tr.res th{font-weight:600;background:var(--fundo)}
+.ct-pj-tab td .ct-est{display:block;margin-top:2px}
+.ct-est{font-size:10px;font-weight:600;letter-spacing:.02em;color:var(--cinza)}
+.ct-est.definitiva{color:var(--verde)}
+.ct-est.enviada{color:var(--azul)}
+.ct-est.dia,.ct-est.estimado{color:var(--laranja)}
+.ct-selo{display:block;font-size:10px;font-weight:600;color:var(--cinza)}
+.ct-selo.lacrado,.ct-selo.fechado{color:var(--verde)}
+.ct-selo.dia{color:var(--laranja)}
+.ct-dv-kpis b.neg,.ct-pj-tab b.neg{color:var(--vermelho)}
+.ct-dv-kpis b.pos,.ct-pj-tab b.pos{color:var(--verde)}
+.ct-pj-uni .ct-tab td.on{font-weight:600;background:var(--preenche)}
+.ct-pj-uni .ct-tab tr.fora td{color:var(--cinza3)}
+.ct-pj-uni .ct-tab td small{display:block}
+.ct-pj-rep .ct-tab tr.tot td,.ct-pj-rep .ct-tab tr.tot th{border-top:1px solid var(--cinza3)}
+
 @media (max-width:560px){
   .ct-dupla{grid-template-columns:1fr}
   .ct-mes{min-width:0}
@@ -138,6 +167,7 @@ html[data-tema="escuro"] .ct-raiz{--dv1:#3987e5;--dv2:#d95926;--dv3:#199e70;--dv
   .linha.ct-l>.dir{order:3;flex:1 0 100%;max-width:none;flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:flex-start;gap:2px 10px;text-align:left}
   .linha.ct-l:has(>.h)>.dir{padding-left:56px}
   .ct-dv-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ct-pj-tab th[scope=row]{min-width:120px;font-size:13px}
   .ct-dv-kpis>div:nth-child(2n){border-right:0}
   .ct-dv-kpis>div:nth-child(-n+2){border-bottom:1px solid var(--linha)}
   .ct-dv-kpis b{font-size:16px}

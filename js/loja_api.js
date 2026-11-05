@@ -149,6 +149,8 @@ var LAPI = (function () {
         p_saldo_em: d.saldoEm || null, p_doc: d.doc || null, p_obs: d.obs || null, p_ativa: d.ativa !== false });
     },
     finProjecao: function (meses) { return comSessao('fin_projecao', { p_meses: meses || 12 }); },
+    /* FIN v4.0 (só o dono): caixa mês a mês — Unimed por estágio, repasse por profissional, conveniência, fixas, parcelas e cartão */
+    finProjecaoChefe: function () { return comSessao('fin_projecao_chefe'); },
     /* FIN v3.1 (só o dono): parcelas de cada dívida e do cartão mês a mês até a última; e o mês da última parcela de quem não tem o total */
     finDividasProjecao: function () { return comSessao('fin_dividas_projecao'); },
     finDividaFim: function (id, ultima) { return comSessao('fin_divida_fim', { p_id: id, p_ultima: ultima || null }); },
