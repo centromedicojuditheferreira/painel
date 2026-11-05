@@ -2,6 +2,7 @@
    FIN v3.0 — Financeiro da Administração (05/11/2026)
    Abas: Contas do mês e Contas fixas (Marinalva e dono); Dívidas e Projeção (só o dono).
    FIN v3.1: a Projeção abre com as parcelas de dívida mês a mês (colunas empilhadas, cartão incluso) até a última parcela.
+   FIN v3.2: "Como é pago" (alguém paga ou débito automático em qual banco), "Deixar nos bancos" no mês e lembretes no Telegram (servidor).
    Tudo pelas funções fin_* do Supabase, com a sessão do PIN. O servidor decide o que cada
    um recebe: no acesso da Marinalva as parcelas vêm sem "nº X de Y", sem saldo devedor e
    sem a observação do dono; as funções de dívidas e projeção recusam a sessão dela.
@@ -19,6 +20,10 @@ var CONTAS = (function () {
   var BASES = [['informado', 'Valor informado'], ['ultimo', 'Último valor pago'], ['media3', 'Média de 3 meses'], ['media6', 'Média de 6 meses']];
   var TIPOS = [['imposto_parcelado', 'Imposto parcelado'], ['emprestimo', 'Empréstimo'], ['financiamento', 'Financiamento'], ['outro', 'Outro']];
   var STATUS = { paga: ['Paga', 'ok'], vencida: ['Vencida', 'pend'], a_vencer: ['A vencer', 'espera'], no_cartao: ['No cartão', 'espera'], sem_data: ['Sem data', 'espera'] };
+  /* FIN v3.2: como é pago — vazio = alguém paga; senão, débito automático no banco (entra no lembrete "deixar saldo" do Telegram) */
+  var PAGA = [['', 'Alguém paga (boleto, Pix, guia)'], ['sicoob', 'Débito automático no Sicoob'], ['bb', 'Débito automático no Banco do Brasil'],
+              ['caixa', 'Débito automático na Caixa'], ['inter', 'Débito automático no Inter'], ['c6', 'Débito automático no C6']];
+  var BANCO = { sicoob: 'Sicoob', bb: 'BB', caixa: 'Caixa', inter: 'Inter', c6: 'C6' };
 
   /* ── utilidades ── */
   function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
@@ -193,6 +198,7 @@ var CONTAS = (function () {
     /* parcela de dívida: no acesso do dono, "parcela X de Y" no lugar da categoria (cabe no celular); no da Marinalva vem sem o número */
     var meta = (c.parcela && c.parcelas_total) ? ['parcela ' + c.parcela + ' de ' + c.parcelas_total] : [c.categoria_nome];
     if (c.status === 'paga' && c.pago_em) meta.push('paga em ' + ddmm(c.pago_em));
+    else if (c.debito_banco && c.status !== 'no_cartao') meta.push('débito ' + (BANCO[c.debito_banco] || c.debito_banco));
     if (c.obs_dono) meta.push('com observação sua');
     var v = c.status === 'paga' ? c.valor_pago : c.valor_previsto;
     var l = bt('linha ct-l' + (c.status === 'no_cartao' ? ' cartao' : ''), '', function () { popConta(c); });
@@ -223,6 +229,25 @@ var CONTAS = (function () {
     p.appendChild(el('div', 'lj-pad', '')).appendChild(k);
     if (contas && cartao) p.appendChild(el('p', 'ct-nota ct-pad', 'No cartão: ' + esc(brl(cartao)) + '. Já está dentro da fatura do cartão, por isso fica fora da conta acima.'));
     l.appendChild(p);
+    /* FIN v3.2: quanto deixar em cada banco para o débito automático do que ainda não tem baixa */
+    var bancos = {}, ordem = [];
+    (contas || []).forEach(function (c) {
+      if (!c.debito_banco || c.status === 'paga' || c.status === 'no_cartao') return;
+      var b = bancos[c.debito_banco];
+      if (!b) { b = bancos[c.debito_banco] = { v: 0, n: 0, d: null }; ordem.push(c.debito_banco); }
+      b.v += Number(c.valor_previsto || 0); b.n++;
+      if (c.vencimento && (!b.d || c.vencimento < b.d)) b.d = c.vencimento;
+    });
+    if (ordem.length) {
+      var bx = el('section', 'painel');
+      bx.appendChild(el('div', 'painel-cab', '<h2>Deixar nos bancos</h2><span>débito automático</span>'));
+      ordem.sort(function (a, b) { return String(bancos[a].d || '').localeCompare(String(bancos[b].d || '')); }).forEach(function (k) {
+        var b = bancos[k];
+        bx.appendChild(el('div', 'ct-prox ct-banco', '<span class="t">' + esc(BANCO[k] || k) + ' <small>' + esc(b.n + (b.n === 1 ? ' débito' : ' débitos') +
+          (b.d ? ', o primeiro em ' + ddmm(b.d) : '')) + '</small></span><span class="v">' + esc(brl(Math.round(b.v * 100) / 100)) + '</span>'));
+      });
+      l.appendChild(bx);
+    }
     var prox = (contas || []).filter(function (c) { return emAberto(c) && c.vencimento && c.vencimento >= hojeISO(); }).slice(0, 5);
     if (contas && st.comp === compAtual()) {
       var n = el('section', 'painel');
@@ -314,6 +339,7 @@ var CONTAS = (function () {
       if (c.obs_dono) meta.push('com observação sua');
       var tags = '';
       if (c.no_cartao) tags += '<span class="ct-st espera">No cartão</span>';
+      else if (c.debito_banco) tags += '<span class="ct-st espera">Débito ' + esc(BANCO[c.debito_banco] || c.debito_banco) + '</span>';
       if (!c.ativa) tags += '<span class="ct-st espera">Inativa</span>';
       var l = bt('linha ct-l' + (c.ativa ? '' : ' inativa'), '', function () { popFixa(c); });
       l.innerHTML = '<span class="h">' + esc(c.dia_vencimento ? String(c.dia_vencimento).padStart(2, '0') : '—') + '</span>' +
@@ -355,6 +381,7 @@ var CONTAS = (function () {
       campo('CNPJ ou CPF de quem recebe <small>(opcional)</small>', '<input type="text" class="fc" id="ct-f-doc" inputmode="numeric" maxlength="18" autocomplete="off" value="' + esc(c.recebedor_doc || '') + '">') +
       campo('Nome de quem recebe <small>(opcional)</small>', '<input type="text" class="fc" id="ct-f-rec" maxlength="120" autocomplete="off" value="' + esc(c.recebedor_nome || '') + '">') +
       '</div>' +
+      campo('Como é pago <small>(débito automático entra no aviso "deixar saldo" do Telegram)</small>', '<select class="fc" id="ct-f-paga">' + opcoes(PAGA, c.debito_banco || '') + '</select>') +
       campo('Observação <small>(a Marinalva e o dono veem)</small>', '<textarea class="fc ct-ta" id="ct-f-obs" maxlength="600" rows="2">' + esc(c.obs || '') + '</textarea>') +
       (ehDono() ? campo('Observação só sua', '<textarea class="fc ct-ta" id="ct-f-obsd" maxlength="600" rows="2">' + esc(c.obs_dono || '') + '</textarea>', 'ct-dono-campo') : '') +
       '<div class="ct-checks">' +
@@ -376,7 +403,7 @@ var CONTAS = (function () {
       if (isNaN(v)) return erro('Informe o valor como 1.250,00, ou deixe em branco.', q('ct-f-valor'));
       var doc = q('ct-f-doc').value.replace(/\D/g, '');
       if (doc && doc.length !== 11 && doc.length !== 14) return erro('CPF tem 11 números e CNPJ tem 14.', q('ct-f-doc'));
-      var cartao = q('ct-f-cartao').checked, obsD = ehDono() ? q('ct-f-obsd').value.trim() : null;
+      var cartao = q('ct-f-cartao').checked, obsD = ehDono() ? q('ct-f-obsd').value.trim() : null, paga = q('ct-f-paga').value;
       ocupado = true; ok.disabled = true; av.hidden = true;
       LAPI.finContaFixaSalvar({ id: c.id, nome: nome, categoria: q('ct-f-cat').value, dia: d, valor: v, base: q('ct-f-base').value,
         doc: doc, recebedor: q('ct-f-rec').value.trim(), obs: q('ct-f-obs').value.trim(), ativa: q('ct-f-ativa').checked })
@@ -384,6 +411,7 @@ var CONTAS = (function () {
           var muda = cartao !== !!c.no_cartao || (ehDono() && obsD !== (c.obs_dono || ''));
           return muda ? LAPI.finContaFixaMarcar(j.id, cartao, ehDono() ? obsD : null) : j;
         })
+        .then(function (j) { return paga !== (c.debito_banco || '') ? LAPI.finContaDebito('fixa', j.id, paga) : j; })
         .then(function () { P.fechar(); avisa(nova ? 'Conta criada.' : 'Conta salva.'); st.mes = null; carregarFixas(); },
           function (er) { ocupado = false; ok.disabled = false; erro(msgErro(er)); });
     }
@@ -412,6 +440,7 @@ var CONTAS = (function () {
       if (d.parcelas_restantes != null) meta.push(d.parcelas_restantes === 1 ? 'falta 1' : 'faltam ' + d.parcelas_restantes);
       if (d.termina_em) meta.push('até ' + mesCurto(d.termina_em));
       if (d.dia_vencimento) meta.push('dia ' + d.dia_vencimento);
+      if (d.debito_banco) meta.push('débito ' + (BANCO[d.debito_banco] || d.debito_banco));
       var dir = '<span class="ct-v">' + esc(brl(d.valor_parcela)) + '<small>/mês</small></span>' +
         '<span class="mt">' + esc(d.saldo_estimado != null ? 'falta ' + brl(d.saldo_estimado) : (d.saldo_devedor != null ? 'saldo ' + brl(d.saldo_devedor) : 'sem prazo')) + '</span>';
       var l = bt('linha ct-l' + (d.ativa ? '' : ' inativa'), '', function () { abrirDivida(d); });
@@ -453,7 +482,8 @@ var CONTAS = (function () {
       campo('Mês da 1ª parcela <small>(opcional)</small>', '<input type="month" class="fc" id="ct-d-prim" value="' + esc(d.primeira_competencia ? String(d.primeira_competencia).slice(0, 7) : '') + '">') +
       '</div><div class="ct-dupla">' +
       campo('Mês da última parcela <small>(só sem o total)</small>', '<input type="month" class="fc" id="ct-d-ult" value="' + esc(d.ultima_competencia ? String(d.ultima_competencia).slice(0, 7) : '') + '">') +
-      '<span></span></div><div class="ct-dupla">' +
+      campo('Como é pago', '<select class="fc" id="ct-d-paga">' + opcoes(PAGA, d.debito_banco || '') + '</select>') +
+      '</div><div class="ct-dupla">' +
       campo('Saldo devedor informado <small>(opcional)</small>', '<input type="text" class="fc" id="ct-d-saldo" inputmode="decimal" autocomplete="off" placeholder="0,00" value="' + esc(num2(d.saldo_devedor)) + '">') +
       campo('Saldo em', '<input type="date" class="fc" id="ct-d-saldoem" value="' + esc(d.saldo_em || '') + '">') +
       '</div><div class="ct-dupla">' +
@@ -485,11 +515,12 @@ var CONTAS = (function () {
       var doc = q('ct-d-doc').value.replace(/\D/g, '');
       if (doc && doc.length !== 11 && doc.length !== 14) return erro('CPF tem 11 números e CNPJ tem 14.', q('ct-d-doc'));
       ocupado = true; ok.disabled = true; av.hidden = true;
-      var ultNova = ult ? ult + '-01' : null, ultAntes = d.ultima_competencia ? String(d.ultima_competencia).slice(0, 10) : null;
+      var ultNova = ult ? ult + '-01' : null, ultAntes = d.ultima_competencia ? String(d.ultima_competencia).slice(0, 10) : null, paga = q('ct-d-paga').value;
       LAPI.finDividaSalvar({ id: d.id, credor: cred, tipo: q('ct-d-tipo').value, descricao: q('ct-d-desc').value.trim(), dia: dd, parcela: parc,
         base: q('ct-d-base').value, total: tot, primeira: prim ? prim + '-01' : null, saldo: saldo, saldoEm: q('ct-d-saldoem').value || null,
         doc: doc, obs: q('ct-d-obs').value.trim(), ativa: q('ct-d-ativa').checked })
         .then(function (j) { return ultNova !== ultAntes ? LAPI.finDividaFim(j.id, ultNova) : j; })
+        .then(function (j) { return paga !== (d.debito_banco || '') ? LAPI.finContaDebito('divida', j.id, paga) : j; })
         .then(function () { P.fechar(); avisa(nova ? 'Dívida criada.' : 'Dívida salva.'); st.mes = null; st.proj = null; st.dvp = null; carregarDividas(); },
           function (er) { ocupado = false; ok.disabled = false; erro(msgErro(er)); });
     }

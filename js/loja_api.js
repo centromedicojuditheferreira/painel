@@ -152,6 +152,8 @@ var LAPI = (function () {
     /* FIN v3.1 (só o dono): parcelas de cada dívida e do cartão mês a mês até a última; e o mês da última parcela de quem não tem o total */
     finDividasProjecao: function () { return comSessao('fin_dividas_projecao'); },
     finDividaFim: function (id, ultima) { return comSessao('fin_divida_fim', { p_id: id, p_ultima: ultima || null }); },
+    /* FIN v3.2: como a conta é paga — banco do débito automático ('sicoob', 'bb', 'caixa', 'inter', 'c6') ou null = alguém paga */
+    finContaDebito: function (tipo, id, banco) { return comSessao('fin_conta_debito', { p_tipo: tipo, p_id: id, p_banco: banco || null }); },
 
     /* migração do Firebase (com a senha de administração) */
     viradaImportar: function (senha, colecao, docs) { return chamar('loja_virada_importar', { p_senha: senha, p_colecao: colecao, p_docs: docs }); },

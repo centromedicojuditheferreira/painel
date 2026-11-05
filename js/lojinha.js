@@ -210,7 +210,8 @@ function entrarApp(){
   const pp=document.getElementById('sb-papel');if(pp)pp.textContent=CU.admin===true?'Administração':'Secretária';
   aplicarPermissoes();
   setDatas();updateDate();setInterval(updateDate,60000);loadCaches();loadCfg();
-  nav('guias');GV.startTimers();
+  const ir=new URLSearchParams(location.search).get('ir');if(ir)try{history.replaceState(null,'',location.pathname);}catch(e){}   /* FIN v3.2: ?ir=contas (botão do Telegram) abre direto o Financeiro */
+  nav(ir==='contas'&&isAdmin()?'contas':'guias');GV.startTimers();
   if(window.GAVETA)GAVETA.iniciar();
   if(window.TUT)TUT.aoEntrar();   /* TUT v1.0: Manual geral logo depois da entrada */
 }
