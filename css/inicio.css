@@ -65,6 +65,11 @@
   .in-calmo h2{font-size:44px}.in-nums{gap:22px}
 }
 
+/* ═══ tela Caixa: bloco do Cobrar (FIN v2.0) ═══ */
+.fcob-topo{margin-bottom:16px}
+.fcob-bloco .cat.fcob-ok{cursor:default}
+.fcob-bloco .cat.fcob-ok:hover{background:var(--branco)}
+
 /* ═══ porta dos avisos do navegador (ALERTA v2) ═══ */
 /* na entrada: painel dentro da caixa dos nomes (como a contagem da gaveta) */
 .lo-painel.av-porta{display:flex;flex-direction:column;gap:12px;padding:22px 22px 18px;background:rgba(255,255,255,.94);color:var(--lo-tinta,#2C2D6E);

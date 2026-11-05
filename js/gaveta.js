@@ -370,6 +370,7 @@ var GAVETA = (function () {
     var e = st.estado;
     var antes = r.querySelector('.lista-corpo'), rolou = antes ? antes.scrollTop : 0;
     r.innerHTML = '';
+    if (window.FCOB && FCOB.bloco) { var fb = el('div', 'fcob-topo'); fb.appendChild(FCOB.bloco()); r.appendChild(fb); }   /* FIN v2.0: Cobrar + lançados de hoje, no alto do Caixa */
     var wrap = el('div', 'duas-col');
     if (ehAdmin()) { wrap.appendChild(listaDono()); wrap.appendChild(ladoAdmin(e)); }
     else { wrap.appendChild(listaHoje(e)); wrap.appendChild(ladoSecretaria(e)); }
@@ -739,5 +740,6 @@ var GAVETA = (function () {
     var r = raiz(); if (r) r.innerHTML = '';
   }
 
-  return { naEntrada: naEntrada, iniciar: iniciar, abrir: abrir, atualizar: atualizar, sair: sair, soRegistrar: soReg, pendencias: pendencias };
+  return { naEntrada: naEntrada, iniciar: iniciar, abrir: abrir, atualizar: atualizar, sair: sair, soRegistrar: soReg, pendencias: pendencias,
+           redesenhar: function () { if (naTela()) desenhar(); } };
 })();

@@ -89,6 +89,8 @@ var INICIO = (function () {
   function pintaMenu(n) {
     var el = document.getElementById('gv-sbb');
     if (el) { el.hidden = !n; el.textContent = n || ''; }
+    var cx = document.getElementById('gv-b-caixa'), nc = (window.FCOB && FCOB.n) ? FCOB.n() : 0;   /* FIN v2.0: o Caixa conta os pacientes para cobrar */
+    if (cx) { cx.hidden = !nc; cx.textContent = nc || ''; }
   }
 
   /* ── desenho ── */
