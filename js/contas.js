@@ -1,6 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════════
    FIN v3.0 — Financeiro da Administração (05/11/2026)
    Abas: Contas do mês e Contas fixas (Marinalva e dono); Dívidas e Projeção (só o dono).
+   FIN v3.1: a Projeção abre com as parcelas de dívida mês a mês (colunas empilhadas, cartão incluso) até a última parcela.
    Tudo pelas funções fin_* do Supabase, com a sessão do PIN. O servidor decide o que cada
    um recebe: no acesso da Marinalva as parcelas vêm sem "nº X de Y", sem saldo devedor e
    sem a observação do dono; as funções de dívidas e projeção recusam a sessão dela.
@@ -11,7 +12,7 @@ var CONTAS = (function () {
 
   var TZ = 'America/Sao_Paulo';
   var st = { aba: 'mes', comp: null, filtro: 'aberto', mes: null, mesErro: '', fixas: null, fixasErro: '', cats: null,
-             dividas: null, divErro: '', proj: null, projErro: '', instalado: true, pedidoMes: 0 };
+             dividas: null, divErro: '', proj: null, projErro: '', dvp: null, dvpErro: '', dvSel: 0, instalado: true, pedidoMes: 0 };
 
   var MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
   var MES3 = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
@@ -81,7 +82,7 @@ var CONTAS = (function () {
   }
   function sair() {
     st = { aba: 'mes', comp: null, filtro: 'aberto', mes: null, mesErro: '', fixas: null, fixasErro: '', cats: null,
-           dividas: null, divErro: '', proj: null, projErro: '', instalado: true, pedidoMes: 0 };
+           dividas: null, divErro: '', proj: null, projErro: '', dvp: null, dvpErro: '', dvSel: 0, instalado: true, pedidoMes: 0 };
     var r = raiz(); if (r) r.innerHTML = '';
   }
   function carregarAba() {
@@ -119,6 +120,8 @@ var CONTAS = (function () {
     if (!ehDono() || !window.LAPI || !LAPI.token()) return;
     LAPI.finProjecao(12).then(function (p) { st.proj = p; st.projErro = ''; if (naTela()) desenhar(); },
       function (er) { st.projErro = msgErro(er); if (naTela()) desenhar(); });
+    LAPI.finDividasProjecao().then(function (p) { st.dvp = p; st.dvpErro = ''; if (naTela()) desenhar(); },
+      function (er) { st.dvpErro = msgErro(er); if (naTela()) desenhar(); });
   }
 
   /* ── tela ── */
@@ -407,6 +410,7 @@ var CONTAS = (function () {
       var meta = [rotulo(TIPOS, d.tipo)];
       if (d.parcela_atual && d.parcelas_total) meta.push('parcela ' + Math.min(d.parcela_atual, d.parcelas_total) + ' de ' + d.parcelas_total);
       if (d.parcelas_restantes != null) meta.push(d.parcelas_restantes === 1 ? 'falta 1' : 'faltam ' + d.parcelas_restantes);
+      if (d.termina_em) meta.push('até ' + mesCurto(d.termina_em));
       if (d.dia_vencimento) meta.push('dia ' + d.dia_vencimento);
       var dir = '<span class="ct-v">' + esc(brl(d.valor_parcela)) + '<small>/mês</small></span>' +
         '<span class="mt">' + esc(d.saldo_estimado != null ? 'falta ' + brl(d.saldo_estimado) : (d.saldo_devedor != null ? 'saldo ' + brl(d.saldo_devedor) : 'sem prazo')) + '</span>';
@@ -448,6 +452,8 @@ var CONTAS = (function () {
       campo('Total de parcelas <small>(opcional)</small>', '<input type="text" class="fc" id="ct-d-tot" inputmode="numeric" maxlength="3" autocomplete="off" value="' + esc(d.parcelas_total || '') + '">') +
       campo('Mês da 1ª parcela <small>(opcional)</small>', '<input type="month" class="fc" id="ct-d-prim" value="' + esc(d.primeira_competencia ? String(d.primeira_competencia).slice(0, 7) : '') + '">') +
       '</div><div class="ct-dupla">' +
+      campo('Mês da última parcela <small>(só sem o total)</small>', '<input type="month" class="fc" id="ct-d-ult" value="' + esc(d.ultima_competencia ? String(d.ultima_competencia).slice(0, 7) : '') + '">') +
+      '<span></span></div><div class="ct-dupla">' +
       campo('Saldo devedor informado <small>(opcional)</small>', '<input type="text" class="fc" id="ct-d-saldo" inputmode="decimal" autocomplete="off" placeholder="0,00" value="' + esc(num2(d.saldo_devedor)) + '">') +
       campo('Saldo em', '<input type="date" class="fc" id="ct-d-saldoem" value="' + esc(d.saldo_em || '') + '">') +
       '</div><div class="ct-dupla">' +
@@ -472,19 +478,232 @@ var CONTAS = (function () {
       if (isNaN(tot)) return erro('Total de parcelas: só números, ou deixe em branco.', q('ct-d-tot'));
       if (isNaN(saldo)) return erro('Informe o saldo como 75.543,58, ou deixe em branco.', q('ct-d-saldo'));
       if (prim && !/^\d{4}-\d{2}$/.test(prim)) return erro('Mês da 1ª parcela inválido.', q('ct-d-prim'));
+      var ult = q('ct-d-ult').value;
+      if (ult && !/^\d{4}-\d{2}$/.test(ult)) return erro('Mês da última parcela inválido.', q('ct-d-ult'));
+      if (ult && tot) return erro('Com o total de parcelas, a última parcela sai sozinha. Deixe só um dos dois.', q('ct-d-ult'));
+      if (ult && prim && ult < prim) return erro('A última parcela não pode vir antes da primeira.', q('ct-d-ult'));
       var doc = q('ct-d-doc').value.replace(/\D/g, '');
       if (doc && doc.length !== 11 && doc.length !== 14) return erro('CPF tem 11 números e CNPJ tem 14.', q('ct-d-doc'));
       ocupado = true; ok.disabled = true; av.hidden = true;
+      var ultNova = ult ? ult + '-01' : null, ultAntes = d.ultima_competencia ? String(d.ultima_competencia).slice(0, 10) : null;
       LAPI.finDividaSalvar({ id: d.id, credor: cred, tipo: q('ct-d-tipo').value, descricao: q('ct-d-desc').value.trim(), dia: dd, parcela: parc,
         base: q('ct-d-base').value, total: tot, primeira: prim ? prim + '-01' : null, saldo: saldo, saldoEm: q('ct-d-saldoem').value || null,
         doc: doc, obs: q('ct-d-obs').value.trim(), ativa: q('ct-d-ativa').checked })
-        .then(function () { P.fechar(); avisa(nova ? 'Dívida criada.' : 'Dívida salva.'); st.mes = null; st.proj = null; carregarDividas(); },
+        .then(function (j) { return ultNova !== ultAntes ? LAPI.finDividaFim(j.id, ultNova) : j; })
+        .then(function () { P.fechar(); avisa(nova ? 'Dívida criada.' : 'Dívida salva.'); st.mes = null; st.proj = null; st.dvp = null; carregarDividas(); },
           function (er) { ocupado = false; ok.disabled = false; erro(msgErro(er)); });
     }
   }
 
   /* ═══ Projeção (só o dono) ═══ */
+
+  /* ── FIN v3.1: parcelas de dívida mês a mês, em colunas empilhadas, até a última parcela ──
+     Grupos em ordem fixa (de baixo para cima) e cor fixa por grupo: a cor segue a dívida, não a posição.
+     Cores: paleta categórica validada para daltonismo nos dois temas (css/contas.css, --dv1 a --dv6). */
+  var GRUPOS = [
+    { k: 'impostos', nome: 'Impostos parcelados', c: 1 },
+    { k: 'bb', nome: 'Banco do Brasil', c: 2 },
+    { k: 'sicoob', nome: 'Sicoob', c: 3 },
+    { k: 'caixa', nome: 'Caixa', c: 4 },
+    { k: 'cartao', nome: 'Cartão (parcelas)', c: 5 },
+    { k: 'outras', nome: 'Outras', c: 6 }
+  ];
+  function semAcento(s) { return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim(); }
+  function grupoDe(d) {
+    if (d.tipo === 'imposto_parcelado') return 'impostos';
+    var c = semAcento(d.credor);
+    if (c === 'bb' || c.indexOf('banco do brasil') === 0) return 'bb';
+    if (c.indexOf('sicoob') === 0) return 'sicoob';
+    if (c.indexOf('caixa') === 0) return 'caixa';
+    return 'outras';
+  }
+  function centavos(v) { return Math.round(Number(v || 0) * 100) / 100; }
+  function ultimoComValor(v) { for (var i = v.length - 1; i >= 0; i--) if (Number(v[i]) > 0) return i; return -1; }
+  function montarDv(j) {
+    var meses = j.meses || [], n = meses.length, por = {}, itens = [], tot = [];
+    GRUPOS.forEach(function (g) { por[g.k] = []; for (var i = 0; i < n; i++) por[g.k].push(0); });
+    function soma(g, v) { for (var i = 0; i < n; i++) por[g][i] += Number(v[i] || 0); }
+    (j.dividas || []).forEach(function (d) {
+      var g = grupoDe(d), v = d.valores || [];
+      soma(g, v);
+      itens.push({ nome: d.credor + (d.descricao ? ' · ' + d.descricao : ''), g: g, fim: ultimoComValor(v), semPrazo: !!d.sem_prazo, v: v });
+    });
+    if (j.cartao && j.cartao.valores) {
+      soma('cartao', j.cartao.valores);
+      var fc = ultimoComValor(j.cartao.valores);
+      if (fc >= 0) itens.push({ nome: 'Cartão Sicoob · parcelas já compradas', g: 'cartao', fim: fc, semPrazo: false, v: j.cartao.valores });
+    }
+    for (var i = 0; i < n; i++) {
+      var t = 0;
+      GRUPOS.forEach(function (g) { por[g.k][i] = centavos(por[g.k][i]); t += por[g.k][i]; });
+      tot.push(centavos(t));
+    }
+    return { meses: meses, n: n, por: por, tot: tot, itens: itens, cartao: j.cartao || null,
+             grupos: GRUPOS.filter(function (g) { return por[g.k].some(function (v) { return v > 0; }); }),
+             ultimo: ultimoComValor(tot) };
+  }
+  function passoEixo(max) {
+    var ps = [500, 1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000, 100000];
+    for (var i = 0; i < ps.length; i++) if (max / ps[i] <= 5) return ps[i];
+    return ps[ps.length - 1];
+  }
+  function rotEixo(v) { return v === 0 ? '0' : v >= 1000 ? (v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' mil' : String(v); }
+  function pct(a, b) { return b ? Math.round((a - b) / b * 100) : 0; }
+
+  function telaDv() {
+    var sec = el('section', 'lista ct-dv'); sec.setAttribute('aria-label', 'Parcelas de dívida mês a mês');
+    var j = st.dvp, M = j && !st.dvpErro ? montarDv(j) : null;
+    sec.appendChild(el('div', 'painel-cab', '<h2>Parcelas de dívida, mês a mês</h2>' +
+      (M && M.n ? '<span>' + esc(mesCurto(M.meses[0]) + ' a ' + mesCurto(M.meses[Math.max(0, M.ultimo)])) + '</span>' : '')));
+    if (st.dvpErro) { sec.appendChild(el('div', 'lista-vazio erro', esc(st.dvpErro))); return { sec: sec }; }
+    if (!M) { sec.appendChild(el('div', 'lista-vazio', 'Carregando…')); return { sec: sec }; }
+    if (!M.n || M.ultimo < 0) { sec.appendChild(el('div', 'lista-vazio', 'Nenhuma parcela de dívida pela frente.')); return { sec: sec }; }
+    if (st.dvSel >= M.n) st.dvSel = 0;
+
+    /* quatro números: este mês, daqui a 1 e 2 anos, e quando acaba */
+    var k = el('div', 'ct-dv-kpis'), h = '';
+    [[0, 'Neste mês'], [12, ''], [24, '']].forEach(function (x) {
+      if (x[0] >= M.n) return;
+      var i = x[0], v = M.tot[i], d = pct(v, M.tot[0]);
+      h += '<div><span>' + esc(x[1] || 'Em ' + mesCurto(M.meses[i])) + '</span><b>' + esc(brl(v)) + '</b>' +
+        (i ? '<small>' + esc(d === 0 ? 'igual a hoje' : (d < 0 ? d + '%' : '+' + d + '%') + ' em relação a hoje') + '</small>' : '<small>de parcelas</small>') + '</div>';
+    });
+    h += '<div><span>Última parcela</span><b>' + esc(mesCurto(M.meses[M.ultimo])) + '</b><small>' +
+      esc(M.itens.some(function (it) { return it.semPrazo; }) ? 'fora as dívidas sem prazo' : 'depois disso, zero') + '</small></div>';
+    k.innerHTML = h;
+    sec.appendChild(k);
+
+    var leit = el('div', 'ct-dv-leit'), graf = el('div', 'ct-dv-graf');
+    sec.appendChild(leit); sec.appendChild(graf);
+
+    /* a mesma coisa em tabela (leitor de tela, e para conferir número por número) */
+    var det = el('details', 'ct-dv-det');
+    var th = '<tr><th>Mês</th>' + M.grupos.map(function (g) { return '<th class="n">' + esc(g.nome) + '</th>'; }).join('') + '<th class="n">Total</th></tr>';
+    var tb = '';
+    for (var i = 0; i <= M.ultimo; i++) {
+      tb += '<tr><td>' + esc(mesCurto(M.meses[i])) + '</td>' + M.grupos.map(function (g) {
+        var v = M.por[g.k][i]; return '<td class="n">' + (v ? esc(brl(v)) : '<small>—</small>') + '</td>';
+      }).join('') + '<td class="n"><b>' + esc(brl(M.tot[i])) + '</b></td></tr>';
+    }
+    det.innerHTML = '<summary>Ver mês a mês em tabela</summary><div class="ct-tab-cx"><table class="ct-tab"><thead>' + th + '</thead><tbody>' + tb + '</tbody></table></div>';
+    sec.appendChild(det);
+    return { sec: sec, M: M, desenha: function () { desenharGraf(graf, leit, M); } };
+  }
+
+  /* leitura do mês escolhido: total e o valor de cada grupo (a legenda é a própria leitura) */
+  function leituraDv(leit, M, i) {
+    leit.innerHTML = '<div class="ct-dv-mes"><span>' + esc(nomeMes(M.meses[i])) + '</span><b>' + esc(brl(M.tot[i])) + '</b>' +
+      (i ? '<small>' + esc(M.tot[i] === M.tot[0] ? 'igual a hoje' : (M.tot[i] < M.tot[0] ? brl(M.tot[0] - M.tot[i]) + ' a menos que hoje' : brl(M.tot[i] - M.tot[0]) + ' a mais que hoje')) + '</small>' : '') +
+      '</div><ul class="ct-dv-leg">' + M.grupos.map(function (g) {
+        var v = M.por[g.k][i];
+        return '<li' + (v ? '' : ' class="zero"') + '><i class="dvs' + g.c + '"></i><span>' + esc(g.nome) + '</span><b>' + esc(v ? brl(v) : '—') + '</b></li>';
+      }).join('') + '</ul>';
+  }
+
+  function desenharGraf(box, leit, M) {
+    var W = Math.max(280, Math.round(box.clientWidth - 32) || 600), H = W < 480 ? 220 : 240;
+    var esq = 44, dir = 4, topo = 8, base = 22, pw = W - esq - dir, ph = H - topo - base;
+    var n = M.ultimo + 1, max = 0, i;
+    for (i = 0; i < n; i++) max = Math.max(max, M.tot[i]);
+    var passo = passoEixo(max), teto = Math.max(passo, Math.ceil(max / passo) * passo), k = ph / teto;
+    var banda = pw / n, bw = Math.max(2, Math.min(24, banda * 0.72)), y0 = topo + ph;
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '" role="img" tabindex="0" aria-label="' +
+      esc('Parcelas de dívida por mês, de ' + mesCurto(M.meses[0]) + ' a ' + mesCurto(M.meses[M.ultimo]) + ': ' + brl(M.tot[0]) + ' neste mês. Use as setas para andar pelos meses.') + '">';
+    for (var y = 0; y <= teto; y += passo) {
+      var py = Math.round(y0 - y * k) + 0.5;
+      s += '<line class="g' + (y === 0 ? ' b' : '') + '" x1="' + esq + '" x2="' + (W - dir) + '" y1="' + py + '" y2="' + py + '"/>' +
+        '<text class="ax" x="' + (esq - 6) + '" y="' + (py + 4) + '" text-anchor="end">' + rotEixo(y) + '</text>';
+    }
+    s += '<rect class="sel" x="' + esq + '" y="' + topo + '" width="' + banda.toFixed(2) + '" height="' + ph + '"/>';
+    for (i = 0; i < n; i++) {
+      var x = esq + i * banda + (banda - bw) / 2, yc = y0, prim = true;
+      M.grupos.forEach(function (g) {
+        var v = M.por[g.k][i]; if (v <= 0) return;
+        var hp = v * k, alt = prim ? hp : Math.max(0.6, hp - 2);   /* 2 px de fundo entre um bloco e outro */
+        s += '<rect class="dvs' + g.c + '" x="' + x.toFixed(2) + '" y="' + (yc - hp).toFixed(2) + '" width="' + bw.toFixed(2) + '" height="' + alt.toFixed(2) + '"/>';
+        yc -= hp; prim = false;
+      });
+    }
+    /* eixo dos meses: um risquinho em cada janeiro e o ano no meio dos meses dele (ano curto demais fica sem rótulo) */
+    var ini = 0;
+    for (i = 1; i <= n; i++) {
+      if (i < n && M.meses[i].slice(5, 7) !== '01') continue;
+      var lx = esq + i * banda, ano = M.meses[ini].slice(0, 4), larg = (i - ini) * banda;
+      if (i < n) s += '<line class="g b" x1="' + lx.toFixed(1) + '" x2="' + lx.toFixed(1) + '" y1="' + y0 + '" y2="' + (y0 + 5) + '"/>';
+      if (larg >= ano.length * 6.4 + 6)
+        s += '<text class="ax" x="' + (esq + (ini + i) / 2 * banda).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle">' + ano + '</text>';
+      ini = i;
+    }
+    s += '<rect class="hit" x="' + esq + '" y="0" width="' + pw + '" height="' + H + '"/></svg>';
+    box.innerHTML = s;
+
+    var sv = box.querySelector('svg'), sel = sv.querySelector('.sel');
+    function idx(ev) {
+      var r = sv.getBoundingClientRect(), px = (ev.clientX - r.left) * (W / (r.width || W)) - esq;
+      return Math.max(0, Math.min(n - 1, Math.floor(px / banda)));
+    }
+    function mostra(m) { sel.setAttribute('x', (esq + m * banda).toFixed(2)); leituraDv(leit, M, m); }
+    sv.addEventListener('pointermove', function (ev) {
+      if (ev.pointerType === 'mouse') mostra(idx(ev));        /* mouse: passa por cima e lê */
+      else { st.dvSel = idx(ev); mostra(st.dvSel); }          /* dedo: arrasta de lado e lê */
+    });
+    sv.addEventListener('pointerleave', function (ev) { if (ev.pointerType === 'mouse') mostra(st.dvSel); });
+    sv.addEventListener('click', function (ev) { st.dvSel = idx(ev); mostra(st.dvSel); });
+    sv.addEventListener('keydown', function (ev) {
+      var m = st.dvSel;
+      if (ev.key === 'ArrowRight') m++; else if (ev.key === 'ArrowLeft') m--;
+      else if (ev.key === 'Home') m = 0; else if (ev.key === 'End') m = n - 1; else return;
+      ev.preventDefault(); st.dvSel = Math.max(0, Math.min(n - 1, m)); mostra(st.dvSel);
+    });
+    mostra(Math.min(st.dvSel, n - 1));
+  }
+
+  /* quando cada uma termina e quanto alivia por mês */
+  function telaMarcos(M) {
+    var wrap = el('div', 'duas-col');
+    var sec = el('section', 'lista ct-lista'); sec.setAttribute('aria-label', 'Quando cada dívida termina');
+    sec.appendChild(el('div', 'painel-cab', '<h2>Quando cada uma termina</h2>'));
+    var corpo = el('div', 'lista-corpo'), porFim = {}, semPrazo = [];
+    M.itens.forEach(function (it) {
+      if (it.semPrazo) { semPrazo.push(it); return; }
+      if (it.fim < 0) return;
+      (porFim[it.fim] = porFim[it.fim] || []).push(it);
+    });
+    Object.keys(porFim).map(Number).sort(function (a, b) { return a - b; }).forEach(function (i) {
+      var its = porFim[i], alivio = 0;
+      its.forEach(function (it) { alivio += Number(it.v[i] || 0); });
+      var depois = i + 1 < M.n ? M.tot[i + 1] : 0;
+      var mt = 'última parcela · ' + (i + 1 < M.n && depois > 0 ? 'de ' + mesCurto(M.meses[i + 1]) + ' em diante: ' + brl(depois) + ' por mês' : 'depois disso, nenhuma parcela de dívida');
+      var l = el('div', 'ct-marco');
+      l.innerHTML = '<span class="m">' + esc(mesCurto(M.meses[i])) + '</span><span class="q">' +
+        its.map(function (it) { return '<span class="nm"><i class="dvs' + (GRUPOS.filter(function (g) { return g.k === it.g; })[0] || GRUPOS[5]).c + '"></i>' + esc(it.nome) + '</span>'; }).join('') +
+        '<span class="mt">' + esc(mt) + '</span></span><span class="v">−' + esc(brl(centavos(alivio))) + '<small>por mês</small></span>';
+      corpo.appendChild(l);
+    });
+    semPrazo.forEach(function (it) {
+      var l = el('div', 'ct-marco');
+      l.innerHTML = '<span class="m">—</span><span class="q"><span class="nm">' + esc(it.nome) + '</span><span class="mt">sem prazo cadastrado: fica no gráfico até ' +
+        esc(mesCurto(M.meses[M.n - 1])) + '. Informe o total de parcelas ou o mês da última na aba Dívidas.</span></span><span class="v"></span>';
+      corpo.appendChild(l);
+    });
+    sec.appendChild(corpo);
+    wrap.appendChild(sec);
+    var lado = el('div', 'lado');
+    var fat = M.cartao && M.cartao.fatura ? mesCurto(M.cartao.fatura) : null;
+    lado.appendChild(el('section', 'painel nota-lado', '<h2>Como ler</h2><ul class="ct-ul">' +
+      '<li>Cada coluna é o quanto sai em parcelas de dívida naquele mês. Toque numa coluna (ou passe o mouse) para ver o mês.</li>' +
+      '<li>Neste mês, o que já foi pago entra pelo valor pago. Daqui para frente, cada dívida usa a base dela: valor informado, último pago ou média.</li>' +
+      '<li>Parcela que muda todo mês (Selic, IPCA) fica no valor da base; o número real pode variar um pouco.</li>' +
+      '<li>Cartão: só as parcelas já compradas' + (fat ? ', tiradas da fatura de ' + esc(fat) : '') + '. Compra nova e assinatura ficam nas contas fixas.</li>' +
+      '<li>Só você vê esta tela.</li></ul>'));
+    wrap.appendChild(lado);
+    return wrap;
+  }
+
   function telaProj(r) {
+    var dv = telaDv();
+    r.appendChild(dv.sec);
+    if (dv.desenha) { dv.desenha(); r.appendChild(telaMarcos(dv.M)); }
     var p = st.proj, meses = (p && p.meses) || [];
     var sec = el('section', 'lista ct-proj'); sec.setAttribute('aria-label', 'Projeção de 12 meses');
     sec.appendChild(el('div', 'painel-cab', '<h2>Saídas dos próximos 12 meses</h2><span>' +
@@ -511,6 +730,17 @@ var CONTAS = (function () {
     var tot = meses.reduce(function (s, m) { return s + Number(m.saidas || 0); }, 0);
     resumo('12 meses: ' + brl(tot) + ' em saídas');
   }
+
+  /* gráfico das dívidas acompanha a largura da tela (girar o celular, abrir o menu) */
+  var tLarg = null;
+  window.addEventListener('resize', function () {
+    clearTimeout(tLarg);
+    tLarg = setTimeout(function () {
+      if (!naTela() || st.aba !== 'projecao' || !st.dvp) return;
+      var g = document.querySelector('#s-contas .ct-dv-graf'), l = document.querySelector('#s-contas .ct-dv-leit');
+      if (g && l) desenharGraf(g, l, montarDv(st.dvp));
+    }, 150);
+  });
 
   /* a tela abre quando nav('contas') ativa a seção (sem mexer no mapa de telas do lojinha.js) */
   var ativa = false, secao = document.getElementById('s-contas');
