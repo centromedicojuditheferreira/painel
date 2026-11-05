@@ -1,14 +1,15 @@
 #s-guias{
-  --tinta:#1D1D1F; --tinta-2:#636366; --papel:#F5F5F7; --cartao:#FFFFFF;
-  --linha:#E5E5EA; --ok:#248A3D; --ok-fundo:rgba(36,138,61,.12); --alerta:#C93400;
-  --alerta-fundo:rgba(201,52,0,.10); --critico:#D70015; --critico-fundo:rgba(215,0,21,.08);
-  --info:#2C2D6E; --info-fundo:rgba(44,45,110,.10); --neutro:#636366;
+  /* TEMA v4: os nomes locais apontam para a paleta do painel.css (e seguem o tema escuro); --tinta e --linha são os globais */
+  --tinta-2:var(--cinza); --papel:var(--fundo); --cartao:var(--branco);
+  --ok:var(--verde); --ok-fundo:var(--verde-suave); --alerta:var(--laranja);
+  --alerta-fundo:var(--laranja-suave); --critico:var(--vermelho); --critico-fundo:var(--vermelho-suave);
+  --info:var(--tint); --info-fundo:var(--tint-suave); --neutro:var(--cinza);
   --sombra:none;
   font-family:var(--fn);
   color:var(--tinta); font-size:15px; line-height:1.4;
 }
 #s-guias .mono{font-family:var(--fn);font-variant-numeric:tabular-nums}
-.gv-sbb{margin-left:auto;min-width:19px;height:19px;border-radius:10px;background:#dc2626;color:#fff;
+.gv-sbb{margin-left:auto;min-width:19px;height:19px;border-radius:10px;background:var(--vermelho);color:#fff;
   font:700 11px/19px var(--fn);padding:0 5px;text-align:center}
 
 /* ── barra de abas interna ── */
@@ -102,7 +103,7 @@
   background:var(--papel);border:1px solid var(--linha);border-radius:7px;padding:5px 9px;color:var(--tinta-2);text-decoration:none;cursor:pointer}
 #s-guias .fone:hover{border-color:var(--ok);color:var(--ok)}
 #s-guias .acoes select{font:600 12.5px var(--fn);padding:6px 8px;border:1.5px solid var(--linha);
-  border-radius:7px;background:#fff;color:var(--tinta);cursor:pointer}
+  border-radius:7px;background:var(--branco);color:var(--tinta);cursor:pointer}
 #s-guias .acoes select.trat-guia_solicitada,#s-guias .acoes select.trat-restaurei{border-color:var(--alerta);background:var(--alerta-fundo)}
 #s-guias .acoes select.trat-resolvido,#s-guias .acoes select.trat-desmarcado,#s-guias .acoes select.trat-corrigido{border-color:var(--ok);background:var(--ok-fundo)}
 #s-guias .acoes input.nota{flex:1;min-width:160px;font:500 12.5px var(--fn);padding:6px 9px;border:1.5px solid var(--linha);border-radius:7px}
@@ -126,7 +127,7 @@
 #s-guias .oc-topo.edu{border-left:5px solid var(--info)}
 #s-guias .fila-form{display:flex;gap:8px;flex-wrap:wrap}
 #s-guias .fila-form input{flex:1;min-width:190px;font:600 15px var(--fn);padding:10px 12px;
-  border:1.5px solid var(--linha);border-radius:8px;background:#fff;color:var(--tinta)}
+  border:1.5px solid var(--linha);border-radius:8px;background:var(--branco);color:var(--tinta)}
 #s-guias .fila-form .gv-btn{background:var(--ok);border-color:var(--ok);color:#fff;padding:10px 16px}
 #s-guias .fila-form .gv-btn:hover{background:#08624a}
 #s-guias .fila-aviso{display:none;margin-top:10px;font:600 12.5px var(--fn);border-radius:8px;padding:8px 11px}
@@ -189,7 +190,7 @@
 #s-guias .fx4-tit{font:700 13.5px var(--fn);margin-bottom:4px}
 #s-guias .fx4-meta{font-size:12.5px;color:var(--tinta-2);margin-bottom:6px;line-height:1.5}
 #s-guias .fx4-nums{width:100%;box-sizing:border-box;font:600 12.5px var(--fn);
-  background:var(--fundo, #fafafa);border:1px dashed var(--linha);border-radius:8px;
+  background:var(--fundo);border:1px dashed var(--linha);border-radius:8px;
   padding:8px;resize:vertical;min-height:96px}
 #s-guias .fx4-acoes{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 #s-guias .fx4-prob{font-size:12.5px;line-height:1.55;background:rgba(200,40,40,.06);
@@ -213,15 +214,15 @@
 #s-guias input,#s-guias select,#s-guias textarea{font-family:var(--fn)}
 #s-guias .acoes select,#s-guias .acoes input.nota,#s-guias .fila-form input,#s-guias .pf-form input,#s-guias .pf-adm-busca,
 #s-guias .pf-adm-card input[type=text],#s-guias .pf-adm-card input[type=password],#s-guias .pf-adm-card input[type=time],#s-guias .pf-adm-card input[type=number]{
-  border:1px solid var(--linha2);background:#fff;color:var(--tinta);font:400 15px var(--fn);height:36px;padding:0 10px}
+  border:1px solid var(--linha2);background:var(--branco);color:var(--tinta);font:400 15px var(--fn);height:36px;padding:0 10px}
 #s-guias .fila-form input{height:40px;font-size:17px;font-variant-numeric:tabular-nums}
 #s-guias .acoes select.trat-guia_solicitada,#s-guias .acoes select.trat-restaurei{border-color:var(--alerta);background:var(--alerta-fundo)}
 #s-guias .acoes select.trat-resolvido,#s-guias .acoes select.trat-desmarcado,#s-guias .acoes select.trat-corrigido{border-color:var(--ok);background:var(--ok-fundo)}
-#s-guias .vazio,#s-guias .erro,#s-guias .carregando{background:#fff;border:0;box-shadow:inset 0 0 0 1px var(--linha);padding:28px 16px;font-size:15px;color:var(--tinta-2)}
+#s-guias .vazio,#s-guias .erro,#s-guias .carregando{background:var(--branco);border:0;box-shadow:inset 0 0 0 1px var(--linha);padding:28px 16px;font-size:15px;color:var(--tinta-2)}
 #s-guias .erro{box-shadow:inset 0 0 0 1px var(--critico);color:var(--critico)}
 #s-guias .vazio b{font:600 17px var(--fn);color:var(--tinta)}
 #s-guias .fila-topo,#s-guias .oc-topo,#s-guias .adm-card,#s-guias .pf-adm-card,#s-guias .gv-explica,#s-guias .adm-pre,#s-guias .fx4-card{
-  background:#fff;border:0;box-shadow:inset 0 0 0 1px var(--linha)}
+  background:var(--branco);border:0;box-shadow:inset 0 0 0 1px var(--linha)}
 #s-guias .fila-topo h2,#s-guias .oc-topo h2{font:600 17px var(--fn);letter-spacing:0}
 #s-guias .fila-topo p,#s-guias .oc-topo p{font-size:15px;color:var(--tinta-2)}
 #s-guias .card,#s-guias .fcard{border:0;border-left:3px solid var(--neutro);box-shadow:inset 0 0 0 1px var(--linha);margin-bottom:8px}
@@ -236,17 +237,17 @@
 #s-guias .sit .rotulo::before{content:"";width:8px;height:8px;background:currentColor;flex:none}
 #s-guias .fone{background:var(--preenche);border:0;color:var(--tint);font:500 13px var(--fn);font-variant-numeric:tabular-nums;height:30px;padding:0 10px}
 #s-guias .fone:hover{border:0;color:var(--tint);background:var(--preenche2)}
-#s-guias .fx{border:1px solid var(--linha2);background:#fff;font:600 14px var(--fn)}
+#s-guias .fx{border:1px solid var(--linha2);background:var(--branco);font:600 14px var(--fn)}
 #s-guias .grupo h2{font:600 15px var(--fn);color:var(--tinta);letter-spacing:0}
 #s-guias .grupo h2 .cont{font:400 13px var(--fn);color:var(--tinta-2)}
 #s-guias .chip{border:0;background:transparent;font:400 13px var(--fn);color:var(--tinta);height:30px;padding:0 11px;gap:6px}
 #s-guias .chip:hover{border:0;background:rgba(255,255,255,.6)}
-#s-guias .chip.on{background:#fff;color:var(--tinta);box-shadow:0 1px 3px rgba(0,0,0,.12);font-weight:600}
+#s-guias .chip.on{background:var(--branco);color:var(--tinta);box-shadow:0 1px 3px rgba(0,0,0,.12);font-weight:600}
 #s-guias .chip b{font:500 13px var(--fn);color:var(--tinta-2)}
 #s-guias .chip .ponto{width:8px;height:8px}
 #s-guias .filtros{display:inline-flex;gap:2px;padding:3px;background:var(--preenche);margin-bottom:14px}
-#s-guias .gv-regua{gap:0;padding:0;margin-bottom:14px;background:#fff;box-shadow:inset 0 0 0 1px var(--linha);scrollbar-width:none}
-#s-guias .dia{border:0;border-right:1px solid var(--linha);background:#fff;min-width:96px;padding:8px 10px 7px;color:var(--tinta)}
+#s-guias .gv-regua{gap:0;padding:0;margin-bottom:14px;background:var(--branco);box-shadow:inset 0 0 0 1px var(--linha);scrollbar-width:none}
+#s-guias .dia{border:0;border-right:1px solid var(--linha);background:var(--branco);min-width:96px;padding:8px 10px 7px;color:var(--tinta)}
 #s-guias .dia:hover{border-color:var(--linha);background:var(--sobre)}
 #s-guias .dia.ativo{background:var(--tint);color:#fff;border-color:var(--tint)}
 #s-guias .dia .dsem{font:400 12px var(--fn);opacity:1;color:inherit}
@@ -256,7 +257,7 @@
 #s-guias .dia.ativo .badge,#s-guias .dia.ativo .badge.zero{color:#fff}
 #s-guias .tagx,#s-guias .tag-sit,#s-guias .fx4-badge{font:600 11px var(--fn);letter-spacing:0}
 #s-guias table.adm{border:0;box-shadow:inset 0 0 0 1px var(--linha);font-size:15px}
-#s-guias table.adm th{font:600 13px var(--fn);letter-spacing:0;background:#fff;color:var(--tinta-2);padding:10px 12px}
+#s-guias table.adm th{font:600 13px var(--fn);letter-spacing:0;background:var(--branco);color:var(--tinta-2);padding:10px 12px}
 #s-guias table.adm td{padding:10px 12px}
 #s-guias .adm-titulo h2{font:700 22px var(--fn);letter-spacing:-.01em}
 #s-guias .adm-card .num{font:600 28px var(--fn);font-variant-numeric:tabular-nums}

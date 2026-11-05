@@ -12,12 +12,22 @@
 var TUT_CONTEUDO = {
 
   geral: {
-    titulo: 'Manual geral da recepção', secao: 'Comece por aqui', versao: 2, telas: [],
+    titulo: 'Manual geral da recepção', secao: 'Comece por aqui', versao: 3, telas: [],
     resumo: 'Todas as obrigações da recepção no Cortex, na ordem do dia: chegar, atender, cobrar, fechar.',
     passos: [
       { vis: function(){ return TUT.icone('C'); }, t: 'O Cortex em um minuto',
-        p: 'O Cortex mostra <b>tudo o que a recepção precisa resolver</b>: guias, cadastros, cortes, mensagens que não saíram, a conferência dos profissionais e a conveniência.',
-        e: '<b>Quadrado vermelho = obrigação.</b> Os quadrados no alto da tela (Resolver agora) e os números vermelhos no menu são coisas que vocês precisam resolver.<br>Em cada tela, o botão <b>?</b> no canto de cima abre o tutorial daquela tela. Todos ficam também no menu, em <b>Ajuda → Tutoriais</b>.' },
+        p: 'O Cortex mostra <b>tudo o que a recepção precisa resolver</b>: guias, cadastros, cortes, mensagens que não saíram, a conferência dos profissionais, o caixa e a conveniência.',
+        e: '<b>Vermelho = obrigação.</b> A tela <b>Início</b> lista tudo o que há para resolver; os números vermelhos no menu dizem quanto falta em cada tela.<br>Em cada tela, o botão <b>?</b> no canto de cima abre o tutorial daquela tela. Todos ficam também no menu, em <b>Ajuda → Tutoriais</b>.' },
+
+      { vis: function(){ return TUT.linha([['Entrou', 'Avisos', 'ligar, uma vez'], ['Pendência', 'Aviso', 'no canto da tela', 'quente'], ['De 20 em 20 min', 'Lembrete', 'até resolver']]); },
+        t: 'Os avisos do navegador são obrigatórios',
+        p: 'Na primeira entrada, o Cortex pede para <b>ligar os avisos</b> do navegador e manda um aviso de teste. Sem os avisos ligados, a recepção não entra.',
+        e: 'Com pendência aberta, o aviso aparece no canto da tela e repete <b>de 20 em 20 minutos</b> até resolver; pendência nova avisa na hora.<br>O Cortex precisa estar <b>aberto em alguma aba</b> (pode ficar minimizado). Se o sininho vermelho aparecer no alto da tela, os avisos caíram: clique nele.' },
+
+      { vis: function(){ return TUT.linha([['Agora', 'Cartões', 'o que é de hoje', 'quente'], ['Para resolver', 'Lista', 'em grupos, por prioridade'], ['Tudo em dia', 'Calmo', 'nada pendente', 'ok']]); },
+        t: 'Início: tudo numa tela só',
+        p: 'A tela <b>Início</b> é a primeira. Em cima, <b>Agora</b>: o que é de hoje, na hora (consulta de hoje sem guia, paciente para cobrar, gaveta, profissionais). Embaixo, <b>Para resolver</b>: uma lista só, em grupos.',
+        e: '<b>Cada linha abre e resolve ali mesmo</b>, sem trocar de tela. O nome do grupo leva à tela inteira.<br>Quando não há nada, aparece <b>Tudo em dia</b>.' },
 
       { vis: function(){ return TUT.linha([['Chegou', 'Gaveta', 'conte o dinheiro'], ['Saiu por último', 'Gaveta', 'conte de novo', 'quente']]); },
         t: 'Ao chegar: contar a gaveta',
@@ -31,7 +41,7 @@ var TUT_CONTEUDO = {
 
       { vis: function(){ return '<div class="gd-faq"><b style="color:var(--vermelho)">!</b></div>'; },
         t: 'Agenda: consulta sem guia',
-        p: 'A tela inicial é a <b>Agenda</b>. Ela lista as consultas com problema de guia.<br><b>Hoje sem guia</b> vem sempre primeiro: <b>não atender</b> sem a guia. Avise o paciente agora. Se a guia não entrar antes do horário, desmarque no Feegow.',
+        p: 'A <b>Agenda</b> lista, dia a dia, as consultas com problema de guia (as mesmas do Início, com as datas para folhear).<br><b>Hoje sem guia</b> vem sempre primeiro: <b>não atender</b> sem a guia. Avise o paciente agora. Se a guia não entrar antes do horário, desmarque no Feegow.',
         e: '<b>Sem guia</b> ou <b>Saldo esgotado</b>: solicitar a guia (ou a renovação) ou desmarcar.<br><b>Sem carteirinha</b>, <b>Procedimento errado</b>, <b>Guia de outra terapia</b>: corrigir no Feegow.<br><b>Renovação de validade Unimed</b> (botão no alto da Agenda): só para guia que teve a <b>data renovada</b>. Guia nova não entra ali: o sistema traz sozinho.' },
 
       { vis: function(){ return TUT.icone('F'); }, t: 'Cadastros',

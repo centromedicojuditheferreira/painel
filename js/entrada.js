@@ -11,7 +11,7 @@ var ENTRADA = (function () {
 
   var PADRAO = 'administrador';                   /* conta que já vem marcada */
   var SAUDA = { administrador: 'Marinalva' };     /* conta → nome dito na saudação; as demais usam o próprio nome */
-  var COR_LOGIN = '#D47AB2', COR_APP = '#F5F5F7'; /* cor da barra do navegador no celular */
+  var COR = { claro: { login: '#D47AB2', app: '#F4F1F7' }, escuro: { login: '#5A1F55', app: '#15122A' } };   /* cor da barra do navegador no celular, por tema (TEMA v4) */
 
   var lo = document.getElementById('lo'), sel = document.getElementById('lo-usr'), ops = document.getElementById('lo-ops'),
       senha = document.getElementById('lo-senha'), pin = document.getElementById('lo-pin'), err = document.getElementById('lo-err'),
@@ -29,7 +29,10 @@ var ENTRADA = (function () {
 
   /* ── cor da barra do navegador (celular): rosa no login, clara no sistema ── */
   var meta = document.querySelector('meta[name="theme-color"]');
-  function corBarra() { if (meta) meta.setAttribute('content', visivel() ? COR_LOGIN : COR_APP); }
+  function corBarra() {
+    var t = document.documentElement.getAttribute('data-tema') === 'escuro' ? 'escuro' : 'claro';
+    if (meta) meta.setAttribute('content', visivel() ? COR[t].login : COR[t].app);
+  }
 
   /* ── os nomes, desenhados a partir do <select> ── */
   function render() {
@@ -139,5 +142,5 @@ var ENTRADA = (function () {
   new MutationObserver(corBarra).observe(lo, { attributes: true, attributeFilter: ['style'] });
   render(); corBarra();
 
-  return { boasVindas: boasVindas };
+  return { boasVindas: boasVindas, corBarra: corBarra };
 })();

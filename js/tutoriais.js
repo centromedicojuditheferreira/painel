@@ -155,7 +155,8 @@ var TUT = (function () {
   }
   function aoTrocarTela(destino) {
     var b = document.getElementById('pg-ajuda'), id = daTela(destino);
-    if (b) { b.hidden = !id; b.setAttribute('data-tut', id || ''); }
+    var mostra = id || (destino === 'inicio' ? 'geral' : null);   /* v4: no Início o "?" abre o Manual geral (que já abre sozinho na entrada) */
+    if (b) { b.hidden = !mostra; b.setAttribute('data-tut', mostra || ''); }
     if (id) enfileirar(id);
   }
   function aoSair() { estado = {}; carregado = false; fila = []; vistosNaSessao = {}; aberto = null; clearTimeout(espera); }

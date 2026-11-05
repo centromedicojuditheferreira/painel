@@ -201,7 +201,7 @@ function pintaItem(P, vista){
   var cx;
   if(mandar){
     cx = novo("div", "pp-caixa",
-      '<span class="pp-tag" style="color:#D70015">Mandar agora</span>' +
+      '<span class="pp-tag" style="color:var(--vermelho)">Mandar agora</span>' +
       '<span class="pp-txt">Abra o WhatsApp com a mensagem pronta, envie e toque em <b>Enviei</b>.</span>');
     var depois = x.tipo === "fechamento_mes"
       ? "Fim do mês: ele continua na lista até confirmar." + (x.proximo ? " Próxima cobrança: " + quandoTxt(x.proximo) + "." : "")
@@ -210,7 +210,7 @@ function pintaItem(P, vista){
     cx.appendChild(novo("span", "pp-l2", esc(depois)));
   } else {
     cx = novo("div", "pp-caixa",
-      '<span class="pp-tag" style="color:#248A3D">Mensagem enviada</span>' +
+      '<span class="pp-tag" style="color:var(--verde)">Mensagem enviada</span>' +
       '<span class="pp-txt">' + esc("Enviada " + quandoTxt(x.enviada_em) + (x.enviada_por ? " por " + x.enviada_por : "") + ". Agora é esperar ele confirmar.") + '</span>' +
       (x.proximo ? '<span class="pp-l2">' + esc("Próxima cobrança: " + quandoTxt(x.proximo) + ".") + '</span>' : ""));
   }
@@ -288,7 +288,7 @@ function pintaCad(P, vista){
     var txt = "Olá, " + primeiroNome(ok.nome).charAt(0) + primeiroNome(ok.nome).slice(1).toLowerCase() + "! Seu acesso ao site dos profissionais da clínica está pronto: " +
               "profissionais.levsoul.com.br\nEntre com o e-mail " + ok.email + " e a senha " + ok.senha + ". No primeiro acesso você cria a sua própria senha.";
     P.corpo.appendChild(novo("div", "pp-cab", '<span class="pp-quando">Cadastro do profissional</span><h2>' + esc(ok.nome) + '</h2>'));
-    P.corpo.appendChild(novo("div", "pp-caixa", '<span class="pp-tag" style="color:#248A3D">Acesso criado</span>' +
+    P.corpo.appendChild(novo("div", "pp-caixa", '<span class="pp-tag" style="color:var(--verde)">Acesso criado</span>' +
       '<span class="pp-txt">Mande a mensagem abaixo para o profissional pelo WhatsApp.</span>'));
     var bm = novo("div", "pp-bloco"), cab = novo("div", "pp-msg-cab", '<span class="pp-rot">Mensagem pronta</span>'), ac = novo("span", "falha-acoes");
     var bcp = botao("btn btn-s btn-sm", "Copiar", function(){ copia(txt, bcp, "Copiada", "Copiar"); });
@@ -315,7 +315,7 @@ function pintaCad(P, vista){
   if(!x.tem_acesso || x.falta_email) campo("email", "E-mail", "email", "nome@exemplo.com");
   if(x.tem_acesso && !x.falta_telefone && x.telefone) form.appendChild(novo("span", "pp-l2", "Celular: " + esc(foneBonito(normTel(x.telefone) || x.telefone))));
   if(x.tem_acesso && !x.falta_email && x.email) form.appendChild(novo("span", "pp-l2", "E-mail: " + esc(x.email)));
-  if(vista.cadErro) form.appendChild(novo("p", "pp-l2", '<b style="color:#D70015">' + esc(vista.cadErro) + '</b>'));
+  if(vista.cadErro) form.appendChild(novo("p", "pp-l2", '<b style="color:var(--vermelho)">' + esc(vista.cadErro) + '</b>'));
   P.corpo.appendChild(form);
   var bs = botao("btn btn-p", x.tem_acesso ? "Salvar" : "Criar o acesso", function(){
     var tel = campos.tel ? campos.tel.value.trim() : null, em = campos.email ? campos.email.value.trim() : null;
@@ -391,9 +391,24 @@ function enviei(x, btn, depois){
 setInterval(function(){ carregar(false); }, 15 * 1000);
 document.addEventListener("visibilitychange", function(){ if(!document.hidden) carregar(true); });
 
+/* v4 (Início/ALERTA): as pendências deste módulo com chave estável, título, texto e abrir() */
+function pendencias(){
+  var L = aEnviar().map(function(x){
+    var k = chaveDe(x);
+    return { chave: "env:" + k, nome: x.nome, titulo: "Nova pendência · Cobrar profissional", corpo: (x.nome || "—") + " · " + perTxt(x) + " · cobrança das " + horaTxt(x.momento),
+             l2: perTxt(x) + " sem confirmar · mandar pelo WhatsApp", abrir: function(){ abrir(k); } };
+  });
+  st.cad.forEach(function(c){
+    L.push({ chave: "cad:" + c.profissional_id, nome: c.nome, titulo: "Nova pendência · Cadastro de profissional", corpo: (c.nome || "—") + " · completar celular ou e-mail",
+             l2: "completar celular ou e-mail", abrir: function(){ abrir(); } });
+  });
+  return L;
+}
+
 return {
   n: function(){ return st.itens.length + st.cad.length; },
   nCad: function(){ return st.cad.length; },
+  pendencias: pendencias,
   sub: sub,
   nEnviar: function(){ return aEnviar().length; },
   abrir: abrir,
