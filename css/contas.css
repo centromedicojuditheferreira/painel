@@ -77,10 +77,67 @@
 .ct-barra-th,.ct-barra-td{width:22%;min-width:90px}
 .ct-barra{display:block;height:10px;background:var(--tint);opacity:.75}
 
+/* FIN v3.1 — parcelas de dívida mês a mês (só o dono)
+   Cores das séries: paleta categórica validada (daltonismo e contraste) sobre #FFFFFF no claro e #271624 no escuro.
+   Três cores do claro ficam abaixo de 3:1 no fundo branco: por isso a legenda mostra o valor e existe a tabela. */
+.ct-raiz{--dv1:#2a78d6;--dv2:#eb6834;--dv3:#1baf7a;--dv4:#eda100;--dv5:#e87ba4;--dv6:#008300}
+html[data-tema="escuro"] .ct-raiz{--dv1:#3987e5;--dv2:#d95926;--dv3:#199e70;--dv4:#c98500;--dv5:#d55181;--dv6:#008300}
+.ct-raiz .dvs1{fill:var(--dv1);background:var(--dv1)}
+.ct-raiz .dvs2{fill:var(--dv2);background:var(--dv2)}
+.ct-raiz .dvs3{fill:var(--dv3);background:var(--dv3)}
+.ct-raiz .dvs4{fill:var(--dv4);background:var(--dv4)}
+.ct-raiz .dvs5{fill:var(--dv5);background:var(--dv5)}
+.ct-raiz .dvs6{fill:var(--dv6);background:var(--dv6)}
+.ct-dv-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-bottom:1px solid var(--linha)}
+.ct-dv-kpis>div{display:flex;flex-direction:column;gap:2px;min-width:0;padding:12px 16px;border-right:1px solid var(--linha)}
+.ct-dv-kpis>div:last-child{border-right:0}
+.ct-dv-kpis span{font-size:12px;font-weight:600;color:var(--cinza)}
+.ct-dv-kpis b{font-size:18px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ct-dv-kpis small{font-size:12px;color:var(--cinza)}
+.ct-dv-leit{display:flex;flex-direction:column;gap:8px;padding:14px 16px 6px;min-height:76px}
+.ct-dv-mes{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px}
+.ct-dv-mes span{font-size:14px;color:var(--cinza)}
+.ct-dv-mes b{font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
+.ct-dv-mes small{font-size:13px;color:var(--cinza)}
+.ct-dv-leg{list-style:none;display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px}
+.ct-dv-leg li{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.ct-dv-leg i{flex:none;width:10px;height:10px}
+.ct-dv-leg b{font-weight:600;font-variant-numeric:tabular-nums}
+.ct-dv-leg li.zero{color:var(--cinza3)}
+.ct-dv-leg li.zero i{opacity:.35}
+.ct-dv-graf{padding:4px 16px 10px;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.ct-dv-graf svg{display:block;max-width:100%;height:auto;cursor:crosshair}
+.ct-dv-graf svg:focus{outline:none}
+.ct-dv-graf svg:focus-visible{outline:2px solid var(--tint);outline-offset:2px}
+.ct-dv-graf .g{stroke:var(--linha);stroke-width:1}
+.ct-dv-graf .g.b{stroke:var(--cinza3)}
+.ct-dv-graf .ax{fill:var(--cinza);font-size:11px;font-family:var(--fn);font-variant-numeric:tabular-nums}
+.ct-dv-graf .sel{fill:var(--preenche2)}
+.ct-dv-graf .hit{fill:transparent}
+.ct-dv-det{border-top:1px solid var(--linha)}
+.ct-dv-det summary{padding:12px 16px;font-size:14px;font-weight:600;color:var(--tint);cursor:pointer}
+.ct-dv-det .ct-tab-cx{max-height:440px;overflow:auto;border-top:1px solid var(--linha)}
+.ct-dv-det .ct-tab th{position:sticky;top:0}
+.ct-marco{display:flex;align-items:baseline;gap:12px;padding:11px 16px;border-bottom:1px solid var(--linha)}
+.ct-marco:last-child{border-bottom:0}
+.ct-marco .m{flex:none;width:52px;font-size:13px;font-weight:600;color:var(--cinza);font-variant-numeric:tabular-nums}
+.ct-marco .q{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.ct-marco .nm{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
+.ct-marco .nm i{flex:none;width:8px;height:8px}
+.ct-marco .mt{font-size:13px;line-height:1.4;color:var(--cinza)}
+.ct-marco .v{flex:none;display:flex;flex-direction:column;align-items:flex-end;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ct-marco .v small{font-size:12px;font-weight:400;color:var(--cinza)}
+
 @media (max-width:560px){
   .ct-dupla{grid-template-columns:1fr}
   .ct-mes{min-width:0}
   .linha.ct-l{flex-wrap:wrap;row-gap:4px}
   .linha.ct-l>.dir{order:3;flex:1 0 100%;max-width:none;flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:flex-start;gap:2px 10px;text-align:left}
   .linha.ct-l:has(>.h)>.dir{padding-left:56px}
+  .ct-dv-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ct-dv-kpis>div:nth-child(2n){border-right:0}
+  .ct-dv-kpis>div:nth-child(-n+2){border-bottom:1px solid var(--linha)}
+  .ct-dv-kpis b{font-size:16px}
+  .ct-marco{flex-wrap:wrap;row-gap:4px}
+  .ct-marco .v{order:3;flex:1 0 100%;flex-direction:row;align-items:baseline;gap:6px;padding-left:64px}
 }

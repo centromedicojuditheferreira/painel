@@ -149,6 +149,9 @@ var LAPI = (function () {
         p_saldo_em: d.saldoEm || null, p_doc: d.doc || null, p_obs: d.obs || null, p_ativa: d.ativa !== false });
     },
     finProjecao: function (meses) { return comSessao('fin_projecao', { p_meses: meses || 12 }); },
+    /* FIN v3.1 (só o dono): parcelas de cada dívida e do cartão mês a mês até a última; e o mês da última parcela de quem não tem o total */
+    finDividasProjecao: function () { return comSessao('fin_dividas_projecao'); },
+    finDividaFim: function (id, ultima) { return comSessao('fin_divida_fim', { p_id: id, p_ultima: ultima || null }); },
 
     /* migração do Firebase (com a senha de administração) */
     viradaImportar: function (senha, colecao, docs) { return chamar('loja_virada_importar', { p_senha: senha, p_colecao: colecao, p_docs: docs }); },
