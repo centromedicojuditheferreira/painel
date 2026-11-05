@@ -12,7 +12,7 @@
 var TUT_CONTEUDO = {
 
   geral: {
-    titulo: 'Manual geral da recepção', secao: 'Comece por aqui', versao: 3, telas: [],
+    titulo: 'Manual geral da recepção', secao: 'Comece por aqui', versao: 4, telas: [],
     resumo: 'Todas as obrigações da recepção no Cortex, na ordem do dia: chegar, atender, cobrar, fechar.',
     passos: [
       { vis: function(){ return TUT.icone('C'); }, t: 'O Cortex em um minuto',
@@ -67,6 +67,11 @@ var TUT_CONTEUDO = {
         t: 'Conferência dos profissionais',
         p: 'Toda semana os profissionais conferem a própria agenda no site deles. O papel de vocês: <b>tirar dúvidas, corrigir no Feegow o que eles pedirem e cobrar quem atrasar</b>.',
         e: 'Na hora de cobrar, aparece o quadrado vermelho <b>Profissionais</b>. Abra, mande a <b>mensagem pronta</b> pelo WhatsApp e toque em <b>Enviei</b>. Sem o Enviei em <b>40 minutos</b>, a Administração é avisada.<br>Todo <b>dia 1º</b> abrem os últimos dias do mês anterior: é o que gera o recibo do repasse. Quem não confirmar continua no quadrado e é cobrado <b>todo dia às 9h</b>, até confirmar.<br>A tela <b>Conferência</b> tem o manual completo.' },
+
+      { vis: function(){ return TUT.linha([['Chegou', 'Cobrar', 'aparece no Início', 'quente'], ['Lance', 'Feegow', 'conta + pagamento'], ['Lançou', 'Some', 'em poucos minutos', 'ok']]); },
+        t: 'Cobrar o paciente',
+        p: 'Paciente <b>Particular ou Lev Soul</b> que chegou (Aguardando, Em atendimento, Atendido) aparece no cartão <b>Cobrar</b> do Início e na tela <b>Caixa</b> até o Feegow ter a <b>conta com o pagamento</b> e o valor certo.',
+        e: '<b>Lev Soul: R$ 60 por sessão. Particular: o valor da agenda.</b> Lance no Feegow com a forma certa (dinheiro, Pix, débito ou crédito); o Cortex confere sozinho em poucos minutos.<br>Conta sem o pagamento, ou valor diferente, continua como pendência. Enquanto estiver lá, a Administração é avisada no Telegram.' },
 
       { vis: function(){ return TUT.icone('R$'); }, t: 'Conveniência',
         p: 'Toda venda passa pelo botão <b>Nova venda</b>, no canto de baixo da tela. Profissional pode pagar na hora ou <b>lançar na notinha</b>.<br>Mercadoria que chegou: registre em <b>Estoque → Nova entrada</b>.',
