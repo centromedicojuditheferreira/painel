@@ -146,6 +146,49 @@ html[data-tema="escuro"] .lo-senha input:focus{background:#17132A;box-shadow:0 0
 html[data-tema="escuro"] #lo .lerr{background:#2A1A2E;color:#FF8A94}
 html[data-tema="escuro"] .lo-logo{opacity:.5}
 
+/* ── frase do dia (FRASES v1.0, 06/11/2026): só no acesso da sócia ──
+   Depois do "Bem-vinda, Marinalva!", a saudação sobe e some, a orquídea desabrocha no meio,
+   a frase entra palavra a palavra e o botão "Vamos ao Início" sobe por último. Comportamento em js/entrada.js. */
+.lo-fr{position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;padding:24px;
+  visibility:hidden;pointer-events:none;opacity:0;transform:translateY(22px);transition:opacity .55s ease .25s,transform .8s cubic-bezier(.2,.8,.2,1) .25s}
+#lo.fr .lo-fr{visibility:visible;pointer-events:auto;opacity:1;transform:none}
+#lo.fr .lo-bv{opacity:0;transform:translateY(-34px) scale(.96);pointer-events:none;transition:opacity .4s ease,transform .6s cubic-bezier(.4,0,.2,1)}
+#lo.fr .lo-fundo{transform:scale(1.26) rotate(-7deg)}
+.lo-fr-in{display:flex;flex-direction:column;align-items:center;gap:clamp(12px,2.4vh,22px);width:100%;max-width:min(94vw,980px);text-align:center}
+.lo-fr .orq{width:clamp(140px,23vmin,230px);height:auto;overflow:visible;filter:drop-shadow(0 22px 34px rgba(74,20,66,.38))}
+.lo-fr .orq .orq-g1{stop-color:#FFF1F9}.lo-fr .orq .orq-g2{stop-color:#FFFFFF}.lo-fr .orq .orq-g3{stop-color:#F6CFE6}
+.lo-fr .orq .orq-l1{stop-color:#F4A3D1}.lo-fr .orq .orq-l2{stop-color:#8E2E79}
+.lo-fr .orq .orq-veia{stroke:rgba(182,86,156,.42);stroke-width:1.1}
+.lo-fr .orq .orq-lobo{fill:#C9478F;opacity:.9}.lo-fr .orq .orq-centro{fill:#F7D684}
+.lo-fr .orq .orq-p{transform-box:view-box;transform-origin:100px 100px;opacity:0}
+#lo.fr .lo-fr .orq .orq-p{animation:lo-petala 1.15s cubic-bezier(.2,.9,.3,1.08) calc(.28s + var(--i) * .11s) both}
+#lo.fr .lo-fr .orq{animation:lo-orq-respira 6s ease-in-out 2s infinite}
+.lo-fr-dia{margin:0;font:600 12.5px var(--fn);letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.78);opacity:0}
+#lo.fr .lo-fr-dia{animation:lo-palavra .7s cubic-bezier(.2,.8,.2,1) .75s both}
+.lo-fr-txt{margin:0;max-width:30ch;font:500 clamp(24px,3.1vw,40px)/1.22 var(--fn);color:#fff;text-wrap:balance;text-shadow:0 2px 18px rgba(74,20,66,.25)}
+.lo-fr-txt span{display:inline-block;opacity:0}
+#lo.fr .lo-fr-txt span{animation:lo-palavra .8s cubic-bezier(.2,.8,.2,1) both}   /* atraso de cada palavra vem do js */
+#lo .lo-fr-bt{display:inline-flex;align-items:center;gap:10px;height:60px;margin-top:clamp(6px,1.6vh,14px);padding:0 30px;border:0;background:#fff;color:var(--lo-tinta);
+  font:600 18px var(--fn);cursor:pointer;opacity:0;box-shadow:0 1px 2px rgba(var(--lo-sombra),.1),0 22px 44px -14px rgba(var(--lo-sombra),.55);
+  transition:transform .2s ease,box-shadow .2s ease,background .2s ease}
+#lo.fr .lo-fr-bt{animation:lo-sobe .7s cubic-bezier(.2,.8,.2,1) both}   /* atraso vem do js: depois da última palavra */
+#lo .lo-fr-bt svg{transition:transform .2s ease}
+@media (hover:hover){#lo .lo-fr-bt:hover{transform:translateY(-2px);box-shadow:0 1px 2px rgba(var(--lo-sombra),.1),0 28px 50px -14px rgba(var(--lo-sombra),.6)}#lo .lo-fr-bt:hover svg{transform:translateX(3px)}}
+#lo .lo-fr-bt:active{transform:translateY(0) scale(.98)}
+#lo .lo-fr-bt:focus-visible{outline:2px solid #fff;outline-offset:3px}
+@keyframes lo-petala{from{opacity:0;transform:scale(.06) rotate(-32deg)}55%{opacity:1}to{opacity:1;transform:none}}
+@keyframes lo-orq-respira{50%{transform:scale(1.035) rotate(1.2deg)}}
+@keyframes lo-sobe{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+#lo.saindo .lo-fr{opacity:0;transform:translateY(-14px);transition:opacity .32s ease,transform .5s cubic-bezier(.4,0,.2,1)}
+@media (max-width:760px){.lo-fr-txt{font-size:clamp(21px,5.6vw,28px)}.lo-fr .orq{width:clamp(104px,26vw,140px)}#lo .lo-fr-bt{height:56px;font-size:17px;padding:0 24px}}
+@media (prefers-reduced-motion:reduce){
+  .lo-fr,#lo.fr .lo-bv,#lo.saindo .lo-fr{transition:none}
+  #lo.fr .lo-fr .orq .orq-p,#lo.fr .lo-fr-dia,#lo.fr .lo-fr-txt span,#lo.fr .lo-fr-bt{animation:none;opacity:1}
+  #lo.fr .lo-fr .orq{animation:none}
+}
+html[data-tema="escuro"] .lo-fr .orq .orq-g3{stop-color:#E9B9D8}
+html[data-tema="escuro"] #lo .lo-fr-bt{background:#F6EAF2}
+
 /* ── botão claro/escuro na entrada (v4.1) ── */
 .lo-tema{position:absolute;top:16px;right:16px;z-index:3;width:40px;height:40px;border:0;background:rgba(255,255,255,.18);color:#fff;cursor:pointer;
   display:flex;align-items:center;justify-content:center;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}

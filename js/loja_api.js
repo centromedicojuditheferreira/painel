@@ -124,6 +124,9 @@ var LAPI = (function () {
     gavetaMovErro: function (id, motivo) { return comSessao('fin_gaveta_mov_erro', { p_id: id, p_motivo: motivo }); },
     gavetaMovs: function (dias) { return comSessao('fin_gaveta_movs', { p_dias: dias || 31 }).then(function (j) { return j.movimentos; }); },
 
+    /* ADM v1.0 — os números do Início da Marinalva (psicologia do mês, conveniência 7 dias, contas do mês); só a Administração */
+    admResumo: function () { return comSessao('cortex_adm_resumo'); },
+
     /* FIN v3.0 — Financeiro da Administração (contas do mês, contas fixas; dívidas e projeção só no acesso do dono).
        O servidor decide o que cada um vê: a Marinalva recebe as parcelas sem "nº X de Y" e sem a observação do dono. */
     finCategorias: function () { return comSessao('fin_categorias').then(function (j) { return j.categorias; }); },

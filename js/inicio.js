@@ -154,6 +154,7 @@ var INICIO = (function () {
     var R = st.cache = ler();
     pintaMenu(R.total);
     resumoTopo(R);
+    if (window.INICIO_ADM && INICIO_ADM.ativo()) { INICIO_ADM.desenhar(main, R); relogio(); return; }   /* ADM v1.0: a Administração que não é o dono (Marinalva) tem o Início dela (js/inicio_adm.js) */
     var rolou = window.scrollY;
     main.innerHTML = '';
     var raiz = novo('div', 'in-raiz');

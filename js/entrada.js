@@ -112,7 +112,22 @@ var ENTRADA = (function () {
     senha.classList.remove(e.animationName === 'lo-treme' ? 'treme' : 'surge');
   });
 
-  /* ── saudação depois do PIN (chamada por entrarApp) ── */
+  /* ── saudação depois do PIN (chamada por entrarApp) ──
+     FRASES v1.0 (06/11/2026): no acesso da sócia (Administração sem ser o dono), a saudação de sempre
+     ("Bem-vinda, Marinalva!") continua igual e, em vez de sumir sozinha, dá lugar à frase do dia:
+     a orquídea desabrocha, a frase aparece palavra a palavra e um botão leva ao Início — a tela só sai
+     quando ela clica (ou Enter/Esc). Secretárias e o dono seguem como antes: a saudação some sozinha. ── */
+  var cena = null;   /* a cena da frase, montada uma vez só */
+  function cenaFrase() {
+    if (cena) return cena;
+    cena = document.createElement('div'); cena.className = 'lo-fr'; cena.setAttribute('aria-live', 'polite');
+    cena.innerHTML = '<div class="lo-fr-in">' + (window.ORQUIDEA ? ORQUIDEA.svg({ classe: 'lo-fr-orq' }) : '') +
+      '<p class="lo-fr-dia" id="lo-fr-dia"></p><p class="lo-fr-txt" id="lo-fr-txt"></p>' +
+      '<button type="button" class="lo-fr-bt" id="lo-fr-bt">Vamos ao Início' +
+      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button></div>';
+    lo.appendChild(cena);
+    return cena;
+  }
   function boasVindas(cu) {
     parar();
     var nome = String((cu && cu.nome) || '').trim();
@@ -123,19 +138,46 @@ var ENTRADA = (function () {
       return '<span style="animation-delay:' + (0.64 + i * 0.13).toFixed(2) + 's">' + esc(p) + '</span>';
     }).join(' ');
     if (document.activeElement && lo.contains(document.activeElement)) document.activeElement.blur();
-    lo.classList.remove('saindo'); lo.classList.add('bv');
-    var calma = calmo.matches, foi = false, t = setTimeout(sair, calma ? 1600 : 2700);
+    lo.classList.remove('saindo', 'fr'); lo.classList.add('bv');
+    var comFrase = !!(cu && cu.admin === true && !cu.dono && window.FRASES);   /* só a sócia */
+    var calma = calmo.matches, foi = false, fase = 'bv';
+    var t = setTimeout(comFrase ? fraseDoDia : sair, calma ? 1600 : 2700);
     function sair() {
       if (foi) return; foi = true;
-      clearTimeout(t); lo.removeEventListener('click', sair); document.removeEventListener('keydown', tecla, true);
+      clearTimeout(t); lo.removeEventListener('click', clique); document.removeEventListener('keydown', tecla, true);
       lo.classList.add('saindo');
       setTimeout(function () {
-        lo.style.display = 'none'; lo.classList.remove('bv', 'saindo');
+        lo.style.display = 'none'; lo.classList.remove('bv', 'fr', 'saindo');
         if (txt) txt.textContent = '';
+        if (cena) { var ft = cena.querySelector('#lo-fr-txt'); if (ft) ft.textContent = ''; }
       }, calma ? 150 : 700);
     }
-    function tecla(e) { if (e.key === 'Enter' || e.key === 'Escape' || e.key === ' ') { e.preventDefault(); sair(); } }
-    lo.addEventListener('click', sair);                 /* um clique pula a saudação */
+    function fraseDoDia() {
+      if (foi || fase === 'fr') return;
+      fase = 'fr'; clearTimeout(t);
+      var c = cenaFrase(), hoje = new Date();
+      var dia = hoje.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+      c.querySelector('#lo-fr-dia').textContent = dia;
+      var palavras = String(FRASES.doDia(hoje)).split(' ');
+      var ini = calma ? 0 : 0.95, passo = calma ? 0 : 0.11;   /* as palavras começam quando a orquídea já abriu */
+      c.querySelector('#lo-fr-txt').innerHTML = palavras.map(function (p, i) {
+        return '<span style="animation-delay:' + (ini + i * passo).toFixed(2) + 's">' + esc(p) + '</span>';
+      }).join(' ');
+      var bt = c.querySelector('#lo-fr-bt');
+      bt.style.animationDelay = (calma ? 0 : ini + palavras.length * passo + 0.35).toFixed(2) + 's';
+      bt.onclick = function (e) { e.stopPropagation(); sair(); };
+      lo.classList.add('fr');
+      setTimeout(function () { if (!foi) try { bt.focus({ preventScroll: true }); } catch (e) {} }, calma ? 50 : (ini + palavras.length * passo + 0.6) * 1000);
+    }
+    function clique(e) {   /* na saudação: pula para a frase (ela) ou sai (os demais); na frase, só o botão sai */
+      if (fase === 'bv') { if (comFrase) fraseDoDia(); else sair(); }
+    }
+    function tecla(e) {
+      if (e.key !== 'Enter' && e.key !== 'Escape' && e.key !== ' ') return;
+      e.preventDefault();
+      if (fase === 'bv' && comFrase) fraseDoDia(); else sair();
+    }
+    lo.addEventListener('click', clique);
     document.addEventListener('keydown', tecla, true);
   }
 
