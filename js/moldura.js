@@ -54,7 +54,8 @@ var moldura = (function () {
     corte:         { s: 'guias', t: 'corte',   secao: 'Faturamento', titulo: 'Corte' },
     falhas:        { s: 'guias', t: 'falhas',  secao: 'Faturamento', titulo: 'Falhas' },
     malotes:       { s: 'guias', t: 'malotes', secao: 'Faturamento', titulo: 'Malotes', adm: true },   /* adm: só a Administração (24/10/26) */
-    conferencia:   { s: 'guias', t: 'prof',    secao: 'Profissionais', titulo: 'Conferência' },
+    conferencia:   { s: 'guias', t: 'prof',    secao: 'Profissionais', titulo: 'Conferência',
+                     socia: { secao: 'Pagar', titulo: 'Recibos dos profissionais' } },   /* ADM v1.2: o cabeçalho que a sócia vê (secretárias e dono seguem com "Conferência") */
     dono:          { s: 'guias', t: 'dono',    secao: 'Administração', titulo: 'Dono' },
     notinhas:      { s: 'notinhas',  secao: 'Conveniência', titulo: 'Notinhas',
                      acoes: [['Profissionais', function () { irPara('profissionais'); }], ['Relatório', function () { if (window.LJ) LJ.relatorio(); else abrirRel(); }],
@@ -102,11 +103,11 @@ var moldura = (function () {
      nada novo é liberado nem escondido. Montado de novo na entrada (aoEntrar), quando se sabe quem entrou. */
   var MENU_SOCIA = [
     ['', [['inicio', 'Início', 'gv-sbb', true]]],
-    ['Pagar', [['contas', 'Financeiro']]],
+    ['Pagar', [['contas', 'Financeiro'], ['conferencia', 'Recibos', 'gv-b-prof', true]]],   /* ADM v1.2: a Conferência vira "Recibos" e mora no Pagar (para ela, a tela abre nos Pagamentos do repasse) */
     ['Conveniência', [['estoque', 'Entrada de estoque'], ['posicao', 'Estoque atual'], ['notinhas', 'Notinhas'], ['historico', 'Histórico'], ['extrato', 'Extrato']]],
     ['Acompanhar', [['agenda', 'Agenda'], ['saldo', 'Guias'], ['corte', 'Corte', 'gv-b-corte', true], ['falhas', 'Falhas', 'gv-b-falhas', true],
       ['cadastros', 'Cadastros', 'gv-b-cad', true], ['exclusoes', 'Exclusões', 'gv-b-excl', true], ['caixa', 'Caixa', 'gv-b-caixa', true],
-      ['conferencia', 'Conferência', 'gv-b-prof', true], ['levsoul', 'Lev Soul', 'ls-b-pend', true], ['malotes', 'Malotes', 'gv-b-malotes']]],
+      ['levsoul', 'Lev Soul', 'ls-b-pend', true], ['malotes', 'Malotes', 'gv-b-malotes']]],
     ['Ajuda', [['tutoriais', 'Tutoriais']]],
     ['Administração', [['visao', 'Visão geral'], ['exportar', 'Exportar'], ['cfg', 'Configurações'], ['dono', 'Dono', null, false, 'gv-aba-dono']], true]
   ];
@@ -212,9 +213,10 @@ var moldura = (function () {
     var mudou = d !== atual;
     if (mudou) fecharPops();                      /* trocou de tela: as janelas abertas eram da tela anterior */
     atual = d;
-    document.getElementById('pg-secao').textContent = x.secao;
-    document.getElementById('pg-titulo').textContent = x.titulo;
-    document.title = x.titulo + ' · Cortex';
+    var nm = (x.socia && ehSocia()) ? x.socia : x;   /* ADM v1.2: nome da tela no acesso da sócia */
+    document.getElementById('pg-secao').textContent = nm.secao;
+    document.getElementById('pg-titulo').textContent = nm.titulo;
+    document.title = nm.titulo + ' · Cortex';
     if (window.ALERTA) ALERTA.titulo(document.title);   /* ALERTA v1.0: a aba pisca por cima deste título */
     document.getElementById('pg-resumo').textContent = resumos[d] || '';
     var ehGV = x.s === 'guias';
