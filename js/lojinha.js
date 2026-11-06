@@ -222,7 +222,7 @@ function aplicarPermissoes(){
   ['cx-detalhes-fis','cx-detalhes-ban'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display=admin?'':'none';});
   const cxa=document.getElementById('cx-acoes');if(cxa)cxa.style.display=admin?'flex':'none';
 }
-function doLogout(){try{GV.stopTimers();}catch(e){}try{LJ.sair();}catch(e){}try{FIN.sair();}catch(e){}try{GAVETA.sair();}catch(e){}try{FCOB.sair();}catch(e){}try{TUT.aoSair();}catch(e){}try{CONTAS.sair();}catch(e){}LAPI.sair();CU=null;PC=[];PRC=[];document.getElementById('app').style.display='none';document.getElementById('lo').style.display='flex';document.getElementById('lo-pin').value='';return loadLoginUsers();}
+function doLogout(){try{GV.stopTimers();}catch(e){}try{LJ.sair();}catch(e){}try{FIN.sair();}catch(e){}try{GAVETA.sair();}catch(e){}try{FCOB.sair();}catch(e){}try{TUT.aoSair();}catch(e){}try{CONTAS.sair();}catch(e){}try{LEVSOUL.sair();}catch(e){}LAPI.sair();CU=null;PC=[];PRC=[];document.getElementById('app').style.display='none';document.getElementById('lo').style.display='flex';document.getElementById('lo-pin').value='';return loadLoginUsers();}
 LAPI.aoCair(function(codigo,msg){   /* sessão caiu no meio do uso: volta para a entrada e diz por quê (depois que a lista de nomes recarrega) */
   if(!CU)return;
   const txt=codigo==='TROCAR_PIN'?'O administrador definiu um PIN novo para você. Entre com ele.':(msg||'Sua sessão terminou. Entre de novo.');

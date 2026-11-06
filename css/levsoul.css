@@ -1,0 +1,128 @@
+/* ═══════════════════════════════════════════════════════════════════
+   LEV SOUL v1.0 — aba Lev Soul do Cortex (js/levsoul.js).
+   Usa as peças do painel (lista, lado, painel, pop, seg, linha); aqui só o que é desta tela.
+   ═══════════════════════════════════════════════════════════════════ */
+.ls-raiz{display:flex;flex-direction:column;gap:14px}
+.ls-abas{align-self:flex-start}
+.ls-urg{color:var(--vermelho)!important;font-weight:600!important}
+.ls-lista .lista-corpo{max-height:none}
+
+/* situação: quadradinho + texto (igual ao Financeiro) */
+.ls-st{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;white-space:nowrap}
+.ls-st::before{content:"";flex:none;width:7px;height:7px;background:currentColor}
+.ls-st small{font-weight:500;color:var(--cinza)}
+.ls-st.ok{color:var(--verde)}
+.ls-st.pend{color:var(--vermelho)}
+.ls-st.atencao{color:var(--laranja)}
+.ls-st.espera{color:var(--cinza)}
+.ls-c-ok{color:var(--verde)}
+.ls-c-at{color:var(--laranja)}
+.ls-c-pe{color:var(--vermelho)}
+
+/* linhas */
+.ls-l .dir{gap:3px}
+.ls-h2{display:flex;flex-direction:column;gap:1px;font-size:14px}
+.ls-h2 small{font-size:12px;font-weight:500;color:var(--cinza)}
+.ls-farol{display:flex;flex-direction:column;align-items:flex-start;gap:4px;font-size:12px;font-weight:600;color:var(--cinza);white-space:nowrap}
+.ls-farol i{display:block;width:12px;height:12px;background:var(--cinza3)}
+.ls-farol.ok i{background:var(--verde)}
+.ls-farol.atencao i{background:var(--laranja)}
+.ls-farol.pend i{background:var(--vermelho)}
+.ls-farol.pend{color:var(--vermelho)}
+.ls-v{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ls-busca{flex:1 1 200px;max-width:280px;height:34px}
+.ls-modo{font-size:12px;font-weight:600;color:var(--laranja);background:var(--laranja-suave);padding:5px 9px;white-space:nowrap}
+.ls-modo.completo{color:var(--verde);background:var(--verde-suave)}
+
+/* lado */
+.ls-pad{padding:0 16px 16px}
+.ls-pad-t{padding-top:12px}
+.ls-col{display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding-top:12px}
+.ls-kpis b{font-size:18px}
+.ls-kpis4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.ls-nota{font-size:13px;line-height:1.5;color:var(--cinza)}
+.ls-nota p+p{margin-top:8px}
+.ls-nota b{color:var(--tinta);font-weight:600}
+.ls-nota b.ls-c-ok{color:var(--verde)}.ls-nota b.ls-c-at{color:var(--laranja)}.ls-nota b.ls-c-pe{color:var(--vermelho)}
+.ls-item{width:100%;display:flex;align-items:baseline;gap:10px;padding:10px 16px;border:0;border-bottom:1px solid var(--linha);background:var(--branco);text-align:left;cursor:pointer;color:var(--tinta);font:inherit}
+.ls-item:last-child{border-bottom:0}
+.ls-item:hover{background:var(--sobre)}
+.ls-item-f{cursor:default}
+.ls-item-f:hover{background:var(--branco)}
+.ls-item .d{flex:none;width:44px;font-size:13px;font-weight:600;color:var(--cinza);font-variant-numeric:tabular-nums}
+.ls-item .t{flex:1;min-width:0;font-size:14px;line-height:1.35;overflow-wrap:anywhere}
+.ls-item .t small{display:block;font-size:12px;color:var(--cinza)}
+.ls-item .v{flex:none;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
+
+/* pendências e visão do dono: blocos lado a lado */
+.ls-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;align-items:start}
+.painel-cab .ls-badge,.ls-badge{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;margin-left:6px;background:var(--vermelho);color:#fff;font-size:12px;font-weight:700;vertical-align:2px;font-variant-numeric:tabular-nums}
+.lista-vazio.ls-ok{color:var(--verde)}
+.ls-dono{display:flex;flex-direction:column;gap:16px}
+.ls-kpi-grade{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.ls-kpi{display:flex;flex-direction:column;gap:4px;padding:16px;border-right:1px solid var(--linha)}
+.ls-kpi:last-child{border-right:0}
+.ls-kpi span{font-size:13px;font-weight:600;color:var(--cinza)}
+.ls-kpi b{font-size:26px;line-height:1.15;font-weight:600;font-variant-numeric:tabular-nums}
+.ls-kpi small{font-size:12px;color:var(--cinza)}
+
+/* comissões: troca de mês */
+.ls-mesnav{display:flex;align-items:center;gap:4px}
+.ls-mes{min-width:150px;text-align:center;font-size:15px;font-weight:600}
+.ls-seta{width:34px;height:34px;border:0;background:var(--preenche);color:var(--tint);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.ls-seta:hover{background:var(--preenche2)}
+
+/* janelas */
+.ls-info{display:flex;flex-direction:column;box-shadow:inset 0 0 0 1px var(--linha)}
+.ls-info>div{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:9px 14px;border-bottom:1px solid var(--linha);font-size:14px}
+.ls-info>div:last-child{border-bottom:0}
+.ls-info span{flex:none;color:var(--cinza)}
+.ls-info b{font-weight:600;text-align:right;min-width:0;overflow-wrap:anywhere}
+.ls-link{padding:10px 14px;background:var(--fundo);font:600 14px var(--fn);color:var(--tint);overflow-wrap:anywhere;user-select:all}
+.ls-msg{padding:14px 16px;background:var(--tint-suave);font-size:15px;line-height:1.5;overflow-wrap:anywhere}
+.ls-orienta{padding:12px 14px;background:var(--laranja-suave);color:var(--tinta);font-size:14px;line-height:1.5}
+.ls-alerta{padding:10px 14px;background:var(--vermelho-suave);font-size:13px;line-height:1.5;color:var(--tinta)}
+.ls-alerta b{color:var(--vermelho)}
+.ls-bloco{display:flex;flex-direction:column;gap:8px}
+.ls-sub{font-size:15px;font-weight:600}
+.ls-mini{display:flex;flex-direction:column;box-shadow:inset 0 0 0 1px var(--linha)}
+.ls-mini-l{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--linha);font-size:14px}
+.ls-mini-l:last-child{border-bottom:0}
+.ls-mini-l .t{flex:1;min-width:0;overflow-wrap:anywhere}
+.ls-mini-l .t small{font-size:12px;color:var(--cinza)}
+.ls-mini-l .v{flex:none;display:inline-flex;align-items:center;gap:10px;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
+.ls-mini-b{width:100%;border:0;border-bottom:1px solid var(--linha);background:transparent;text-align:left;cursor:pointer;color:var(--tinta);font:inherit}
+.ls-mini-b:hover{background:var(--sobre)}
+
+/* formulários */
+.ls-form{display:flex;flex-direction:column;gap:14px}
+.ls-dupla{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.ls-tripla{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.ls-campo{display:flex;flex-direction:column;gap:6px;min-width:0}
+.ls-campo[hidden]{display:none}
+.ls-campo>span{font-size:13px;font-weight:600;color:var(--cinza)}
+.ls-campo>span small{font-weight:400}
+.ls-campo select.fc{padding-right:8px}
+.ls-ta{height:auto;min-height:64px;padding:8px 12px;line-height:1.4;resize:vertical}
+.ls-fam{display:flex;flex-direction:column;gap:8px}
+.ls-fam:empty{display:none}
+.ls-fam-l{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr) 36px;gap:8px;align-items:center}
+.ls-sn{align-self:flex-start}
+.ls-sn>button{min-width:64px;justify-content:center}
+.ls-inclui{padding-top:4px;border-top:1px solid var(--linha)}
+.ls-inclui>.btn{align-self:flex-start}
+.ls-erro{font-size:14px;font-weight:600;color:var(--vermelho)}
+.ls-erro[hidden]{display:none}
+.ls-pop .pop-rodape{flex-wrap:wrap}
+
+@media (max-width:640px){
+  .ls-dupla,.ls-tripla{grid-template-columns:1fr}
+  .ls-kpis4{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ls-busca{max-width:none}
+  .ls-grade{grid-template-columns:1fr}
+  .ls-kpi{border-right:0;border-bottom:1px solid var(--linha)}
+  .pop-rodape{flex-wrap:wrap}
+  .linha.ls-l{flex-wrap:wrap;row-gap:4px}   /* celular: a situação desce para baixo do nome, para o nome caber inteiro */
+  .linha.ls-l>.dir{order:3;flex:1 0 100%;max-width:none;flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:flex-start;gap:2px 10px;text-align:left}
+  .linha.ls-l:has(>.h)>.dir{padding-left:56px}
+}
