@@ -111,19 +111,19 @@ begin
   with psi as (
     select id from public.especialidades where nome ilike 'psicologia%'
   ), ag as (
-    select a.data, a.status_id, a.convenio_id,
-           exists (select 1 from public.feriados f where f.data = a.data) as feriado,
-           case when a.convenio_id = any(v_unimed) then
-                  (select case when a.convenio_id = v_unimed[1] then cp.valor_local else cp.valor_intercambio end
+    select sm.data, sm.status_id, sm.convenio_id,
+           exists (select 1 from public.feriados f where f.data = sm.data) as feriado,
+           case when sm.convenio_id = any(v_unimed) then
+                  (select case when sm.convenio_id = v_unimed[1] then cp.valor_local else cp.valor_intercambio end
                      from public.procedimentos p join public.codigos_procedimento cp on cp.codigo = p.codigo and cp.ativo
-                    where p.id = a.procedimento_id limit 1)
-                when a.convenio_id = any(v_conv_ls) then v_levsoul
-                when a.convenio_id is null then coalesce(a.valor, 0)
+                    where p.id = sm.procedimento_id limit 1)
+                when sm.convenio_id = any(v_conv_ls) then v_levsoul
+                when sm.convenio_id is null then coalesce(sm.valor, 0)
                 else null end as v
-      from public.agendamentos a
-     where a.especialidade_id in (select id from psi)
-       and ((a.data >= v_seg and a.data <= v_sab) or (a.data >= v_ref_seg and a.data <= v_ref_seg + 5))
-       and a.status_id = any(v_st_fat)
+      from public.agendamentos sm   -- apelido 'sm': 'a' é a variável da sessão dentro da função
+     where sm.especialidade_id in (select id from psi)
+       and ((sm.data >= v_seg and sm.data <= v_sab) or (sm.data >= v_ref_seg and sm.data <= v_ref_seg + 5))
+       and sm.status_id = any(v_st_fat)
   ), vale as (   -- o que conta dinheiro: Unimed = tudo faturável (feriado fora); os outros = atendido, ou marcado se ainda vai acontecer
     select * from ag
      where not feriado
