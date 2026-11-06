@@ -1,10 +1,19 @@
 /* ═══════════════════════════════════════════════════════════════════
-   FRASES v1.0 (06/11/2026) — a frase do dia da Marinalva e a orquídea
+   FRASES v1.1 (06/11/2026) — a frase do dia da Marinalva e a orquídea
    Lista aprovada pelo dono em 05/11/2026 (originais, sem versículo copiado — alusão, não citação).
    · FRASES.doDia(data)  → a frase de hoje: muda todo dia, na ordem da lista, e repete só depois de
      passar por todas; segunda, sexta e sábado têm frases próprias, que entram numa semana sim e duas não,
      para não cansar. A mesma frase vale na entrada e no Início do dia.
    · FRASES.emDia(data)  → a frase de quando não há pendência nenhuma (só no Início).
+   FRASES v1.1 (06/11/2026) — estreia, a pedido do dono:
+   · FRASES.daEntrada(data) → a frase da tela de entrada; chamada UMA vez por acesso (depois do PIN).
+     Nos 5 primeiros acessos de cada aparelho, uma frase diferente por acesso, na ordem escolhida pelo
+     dono (nº 8, 15, 22, 20 e 5 da lista). Depois do 5º, essa última fica até a meia-noite e, do dia
+     seguinte em diante, volta a ser uma por dia (FRASES.doDia). A contagem fica no navegador
+     (localStorage 'cortex_frase_estreia'): cada aparelho conta os seus 5.
+   · FRASES.deHoje(data)  → a frase que vale hoje neste aparelho (a do Início acompanha a da entrada).
+   · A fila de uma por dia passou a começar em 07/11/2026 pelas 19 que não entraram na estreia, e as 5 da
+     estreia vêm por último — assim nenhuma delas repete logo em seguida. Segunda, sexta e sábado seguem iguais.
    · ORQUIDEA.svg(opcoes) → a orquídea desenhada em SVG (entrada animada e marca d'água do Início dela).
    Não guarda nada nem fala com banco nenhum.
    ═══════════════════════════════════════════════════════════════════ */
@@ -52,16 +61,49 @@ var FRASES = (function () {
   function diaN(d) { return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 864e5); }
   function data(d) { return d instanceof Date ? d : new Date(); }
 
-  /* a frase de hoje: na ordem da lista, uma por dia; a do dia da semana entra numa semana sim e duas não */
+  /* v1.1: a estreia (números da lista acima, contando a partir de 1) e a fila de uma por dia */
+  var ESTREIA = [8, 15, 22, 20, 5].map(function (k) { return DIA[k - 1]; });
+  var ORDEM = DIA.filter(function (f) { return ESTREIA.indexOf(f) < 0; }).concat(ESTREIA);
+  var INICIO = diaN(new Date(2026, 10, 6));   /* 07/11/2026 é o primeiro dia da fila nova */
+  var CHAVE = 'cortex_frase_estreia';         /* { c: acessos contados, i: frase da estreia mostrada, dia: diaN do acesso } */
+
+  /* a frase de hoje: uma por dia, na ORDEM (sem repetir antes de passar por todas);
+     a do dia da semana entra numa semana sim e duas não */
   function doDia(d) {
     d = data(d);
     var n = diaN(d), semana = Math.floor(n / 7), esp = SEMANA[d.getDay()];
     if (esp && esp.length && semana % 3 === 0) return esp[Math.floor(semana / 3) % esp.length];
-    return DIA[((n % DIA.length) + DIA.length) % DIA.length];
+    var k = n - INICIO - 1;
+    return ORDEM[((k % ORDEM.length) + ORDEM.length) % ORDEM.length];
   }
   function emDia(d) { var n = diaN(data(d)); return EM_DIA[((n % EM_DIA.length) + EM_DIA.length) % EM_DIA.length]; }
 
-  return { doDia: doDia, emDia: emDia, todas: function () { return { dia: DIA.slice(), emDia: EM_DIA.slice(), semana: SEMANA }; } };
+  function ler() {
+    try { var v = JSON.parse(localStorage.getItem(CHAVE) || 'null'); return v && typeof v.c === 'number' ? v : null; }
+    catch (e) { return null; }
+  }
+  function grava(v) { try { localStorage.setItem(CHAVE, JSON.stringify(v)); return true; } catch (e) { return false; } }
+
+  /* a frase que vale hoje neste aparelho: a da estreia, se o acesso de estreia foi hoje; senão, a do dia */
+  function deHoje(d) {
+    d = data(d);
+    var st = ler();
+    if (st && st.dia === diaN(d) && ESTREIA[st.i]) return ESTREIA[st.i];
+    return doDia(d);
+  }
+  /* a frase da entrada: conta o acesso enquanto durar a estreia (uma chamada por acesso) */
+  function daEntrada(d) {
+    d = data(d);
+    var st = ler() || { c: 0 };
+    if (st.c < ESTREIA.length) {
+      var novo = { c: st.c + 1, i: st.c, dia: diaN(d) };
+      return grava(novo) ? ESTREIA[novo.i] : doDia(d);   /* navegador sem armazenamento: fica na frase do dia */
+    }
+    return deHoje(d);
+  }
+
+  return { doDia: doDia, emDia: emDia, deHoje: deHoje, daEntrada: daEntrada,
+    todas: function () { return { dia: DIA.slice(), emDia: EM_DIA.slice(), semana: SEMANA, estreia: ESTREIA.slice(), ordem: ORDEM.slice() }; } };
 })();
 
 /* ── a orquídea (desenho original, em SVG): cinco pétalas em volta do centro e o labelo embaixo.

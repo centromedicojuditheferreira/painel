@@ -143,6 +143,9 @@ var ENTRADA = (function () {
     if (document.activeElement && lo.contains(document.activeElement)) document.activeElement.blur();
     lo.classList.remove('saindo', 'fr'); lo.classList.add('bv');
     var comFrase = !!(cu && cu.admin === true && !cu.dono && window.FRASES);   /* só a sócia */
+    /* FRASES v1.1: a frase é escolhida já aqui (conta o acesso da estreia) — antes de o Início dela montar,
+       para o Início mostrar a mesma frase da entrada */
+    var fraseHoje = comFrase ? (FRASES.daEntrada ? FRASES.daEntrada(new Date()) : FRASES.doDia(new Date())) : '';
     var calma = calmo.matches, foi = false, fase = 'bv';
     var t = setTimeout(comFrase ? fraseDoDia : sair, calma ? 1600 : 2700);
     function sair() {
@@ -161,7 +164,7 @@ var ENTRADA = (function () {
       var c = cenaFrase(), hoje = new Date();
       var dia = hoje.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
       c.querySelector('#lo-fr-dia').textContent = dia;
-      var palavras = String(FRASES.doDia(hoje)).split(' ');
+      var palavras = String(fraseHoje).split(' ');
       var ini = calma ? 0 : 0.95, passo = calma ? 0 : 0.11;   /* as palavras começam quando a orquídea já abriu */
       c.querySelector('#lo-fr-txt').innerHTML = palavras.map(function (p, i) {
         return '<span style="animation-delay:' + (ini + i * passo).toFixed(2) + 's">' + esc(p) + '</span>';
