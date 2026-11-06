@@ -131,9 +131,10 @@ var LAPI = (function () {
        O servidor decide o que cada um vê: a Marinalva recebe as parcelas sem "nº X de Y" e sem a observação do dono. */
     finCategorias: function () { return comSessao('fin_categorias').then(function (j) { return j.categorias; }); },
     finContasMes: function (competencia) { return comSessao('fin_contas_mes', { p_competencia: competencia || null }); },
-    finBaixa: function (id, valor, data, obs, desfazer) {
-      return comSessao('fin_baixa', { p_id: id, p_valor: valor == null ? null : valor, p_data: data || null, p_obs: obs || null, p_desfazer: !!desfazer });
+    finBaixa: function (id, valor, data, obs, desfazer, via) {   /* FIN v3.3: via = 'cartao' quando ela declara que pagou com o cartão */
+      return comSessao('fin_baixa', { p_id: id, p_valor: valor == null ? null : valor, p_data: data || null, p_obs: obs || null, p_desfazer: !!desfazer, p_via: via || null });
     },
+    finContaFixaCartaoSocia: function (id, sim) { return comSessao('fin_conta_fixa_cartao_socia', { p_id: id, p_sim: !!sim }); },   /* FIN v3.3: só o dono */
     finContasFixas: function () { return comSessao('fin_contas_fixas').then(function (j) { return j.contas; }); },
     finContaFixaSalvar: function (c) {
       return comSessao('fin_conta_fixa_salvar', { p_id: c.id || null, p_nome: c.nome, p_categoria: c.categoria, p_dia: c.dia == null ? null : c.dia,

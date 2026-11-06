@@ -121,7 +121,10 @@ var ENTRADA = (function () {
   function cenaFrase() {
     if (cena) return cena;
     cena = document.createElement('div'); cena.className = 'lo-fr'; cena.setAttribute('aria-live', 'polite');
-    cena.innerHTML = '<div class="lo-fr-in">' + (window.ORQUIDEA ? ORQUIDEA.svg({ classe: 'lo-fr-orq' }) : '') +
+    /* v1.1: a orquídea grande de um lado, a logo Lev Soul no centro, a frase na fonte da saudação */
+    cena.innerHTML = '<div class="lo-fr-fundo" aria-hidden="true">' + (window.ORQUIDEA ? ORQUIDEA.svg({ classe: 'lo-fr-orq' }) : '') + '</div>' +
+      '<div class="lo-fr-in">' +
+      '<img class="lo-fr-logo" src="img/levsoul-logo-branco.svg" alt="Lev Soul" width="1466" height="215" draggable="false">' +
       '<p class="lo-fr-dia" id="lo-fr-dia"></p><p class="lo-fr-txt" id="lo-fr-txt"></p>' +
       '<button type="button" class="lo-fr-bt" id="lo-fr-bt">Vamos ao Início' +
       '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button></div>';

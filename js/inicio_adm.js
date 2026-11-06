@@ -1,5 +1,8 @@
 /* ═══════════════════════════════════════════════════════════════════
-   INÍCIO DA ADMINISTRAÇÃO · ADM v1.0 (06/11/2026) — a primeira tela da Marinalva
+   INÍCIO DA ADMINISTRAÇÃO · ADM v1.1 (06/11/2026) — a primeira tela da Marinalva
+   v1.1: quadro "Esta semana" (agendamentos de psicologia por dia × a mesma semana do mês anterior, com o
+   valor que entrou / previsto), visual mais limpo (pedido do dono: "poluído, mas mantém as informações"),
+   fichas vermelhas da Recepção pulsando de leve, barra do topo e linha da data escondidas nesta tela.
    Pedido do dono (05/11/2026): a sócia acompanha as pendências das secretárias só pelo número (sem lista,
    sem nome de paciente), vê o que entra na conveniência nos últimos 7 dias, as contas que ela paga e o
    número que ela mais acompanha — os atendimentos dos psicólogos — com os meses anteriores ao lado,
@@ -39,6 +42,8 @@ var INICIO_ADM = (function () {
   function hojeISO() { return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); }
   function plural(n, um, varios) { return n0(n) + ' ' + (n === 1 ? um : varios); }
   function pct(a, b) { return b ? Math.round((a - b) / b * 100) : null; }
+  function ordinal(n) { return n + 'ª'; }
+  function chips(lista, fmt) { return lista.map(function (x) { return '<span class="ia-chip">' + fmt(x) + '</span>'; }).join(''); }
   function ir(d) { if (window.irPara) irPara(d); }
 
   /* ── pendências das secretárias: só a contagem, a partir do que o Início já lê ── */
@@ -104,17 +109,17 @@ var INICIO_ADM = (function () {
     return novo('p', 'ia-frase' + (emDia ? ' em-dia' : ''), '<i>' + svg(IC.aspas, 18, 1.6) + '</i><span>' + esc(f) + '</span>');
   }
 
-  /* Recepção: as fichas com o número */
+  /* Recepção: as fichas com o número (pílulas; as vermelhas pulsam de leve) */
   function recepcao(P) {
     var sec = novo('section', 'ia-card ia-recep'); sec.setAttribute('aria-label', 'Recepção');
     var emDia = P.pronto && P.total === 0;
-    sec.appendChild(cabecalho('Recepção', emDia ? 'nenhuma pendência das secretárias' : 'pendências das secretárias · só o número; clique para abrir a tela', ['Agenda', function () { ir('agenda'); }]));
+    sec.appendChild(cabecalho('Recepção', emDia ? 'nenhuma pendência das secretárias' : 'pendências das secretárias · clique para abrir a tela', ['Agenda', function () { ir('agenda'); }]));
     var linha = novo('div', 'ia-fichas');
     FICHAS.forEach(function (f) {
       var n = P.c[f.k] || 0, zero = n === 0;
       var b = botao('ia-ficha ' + (zero ? 'ok' : 'tem'),
         '<span class="r">' + esc(f.rot) + '</span>' +
-        '<span class="n">' + (P.pronto || n ? (zero ? svg(IC.ok, 22, 2.4) : n0(n)) : '…') + '</span>',
+        '<span class="n">' + (P.pronto || n ? (zero ? svg(IC.ok, 16, 2.6) : n0(n)) : '…') + '</span>',
         function () { if (f.k === 'prof' && P.abrirProf) P.abrirProf(); else if (f.tela) ir(f.tela); });
       b.title = zero ? f.rot + ': em dia' : f.rot + ': ' + plural(n, 'pendência', 'pendências') + ' — abrir a tela';
       linha.appendChild(b);
@@ -125,14 +130,63 @@ var INICIO_ADM = (function () {
       linha.appendChild(b);
     });
     sec.appendChild(linha);
-    var rod = novo('div', 'ia-rodape');
-    if (emDia) rod.innerHTML = '<span class="ok">' + svg(IC.ok, 14, 2.6) + ' Recepção em dia</span>';
+    if (emDia) sec.appendChild(novo('div', 'ia-rodape', '<span class="ok">' + svg(IC.ok, 14, 2.6) + ' Recepção em dia</span>'));
     else if (P.antiga) {
       var a = P.antiga, aHoje = a.toLocaleDateString('en-CA') === new Date().toLocaleDateString('en-CA');
-      rod.innerHTML = '<span>a pendência mais antiga espera desde ' + (aHoje ? 'hoje às ' : String(a.getDate()).padStart(2, '0') + '/' + String(a.getMonth() + 1).padStart(2, '0') + ' ') + hhmm(a.getTime()) + '</span>';
+      sec.appendChild(novo('div', 'ia-rodape', '<span>a pendência mais antiga espera desde ' + (aHoje ? 'hoje às ' : String(a.getDate()).padStart(2, '0') + '/' + String(a.getMonth() + 1).padStart(2, '0') + ' ') + hhmm(a.getTime()) + '</span>'));
     }
-    if (P.lidoEm) rod.appendChild(novo('span', 'mudo', 'lido às ' + hhmm(P.lidoEm) + ' · o Cortex relê de 10 em 10 min'));
-    sec.appendChild(rod);
+    return sec;
+  }
+
+  /* Esta semana: agendamentos de psicologia por dia × a mesma semana do mês anterior; embaixo, o valor */
+  function semana(D) {
+    var sec = novo('section', 'ia-card ia-semcard'); sec.setAttribute('aria-label', 'Esta semana');
+    var S = D && D.semana;
+    if (!S) { sec.appendChild(cabecalho('Esta semana', 'agendamentos de psicologia por dia')); sec.appendChild(semDados()); return sec; }
+    var dias = S.dias || [], hj = hojeISO();
+    var mesRef = MES_LONGO[dataLocal(S.ref_mes).getMonth()], mesSeg = MES_LONGO[dataLocal(S.seg).getMonth()];
+    var tot = S.total || 0, ref = S.ref_total || 0;
+    var totC = 0, refC = 0, feriados = [];   /* a comparação ignora os dias que foram feriado numa das duas semanas */
+    dias.forEach(function (d) {
+      if (d.feriado || d.ref_feriado) { feriados.push(DIA_SEM[d.dow % 7]); return; }
+      totC += d.agendados || 0; refC += d.ref_agendados || 0;
+    });
+    var dif = pct(totC, refC);
+    sec.appendChild(cabecalho('Esta semana', 'agendamentos de psicologia por dia · ' + ordinal(S.n) + ' semana de ' + mesSeg + ' × ' + ordinal(S.n) + ' de ' + mesRef + ' (' + ddmm(S.ref_seg) + ' a ' + ddmm(S.ref_sab) + ')'));
+    var topo = novo('div', 'ia-sem-topo');
+    topo.appendChild(novo('div', 'ia-sem-tot', '<b>' + n0(tot) + '</b><small>de ' + ddmm(S.seg) + ' a ' + ddmm(S.sab) + '</small>'));
+    topo.appendChild(novo('div', 'ia-sem-tot ref', '<b>' + n0(ref) + '</b><small>' + ordinal(S.n) + ' semana de ' + esc(mesRef) + '</small>'));
+    if (dif != null) topo.appendChild(novo('div', 'ia-sem-dif ' + (dif >= 3 ? 'sobe' : dif <= -3 ? 'desce' : 'igual'),
+      (dif >= 3 ? svg(IC.sobe, 15, 2.4) + ' ' + dif + '% a mais' : dif <= -3 ? svg(IC.igual, 15, 2.4) + ' ' + Math.abs(dif) + '% a menos' : svg(IC.igual, 15, 2.4) + ' no mesmo ritmo') + ' que ' + esc(mesRef) +
+      (feriados.length ? '<small>sem contar ' + esc(feriados.join(', ')) + ' (feriado)</small>' : '')));
+    sec.appendChild(topo);
+    var max = 1;
+    dias.forEach(function (d) { max = Math.max(max, d.agendados || 0, d.ref_agendados || 0); });
+    var grade = novo('div', 'ia-semana'); grade.setAttribute('role', 'img');
+    grade.setAttribute('aria-label', 'Agendamentos por dia: ' + dias.map(function (d) { return DIA_SEM[d.dow % 7] + ' ' + d.agendados + ' (mês anterior ' + d.ref_agendados + ')'; }).join(', '));
+    dias.forEach(function (d) {
+      var dt = dataLocal(d.dia), passado = d.dia < hj, hoje = d.dia === hj;
+      var col = novo('div', 'ia-dia' + (hoje ? ' hoje' : passado ? ' passado' : ' futuro') + (d.feriado ? ' feriado' : ''));
+      col.title = DIA_SEM[dt.getDay()] + ' ' + ddmm(d.dia) + ': ' + plural(d.agendados || 0, 'agendamento', 'agendamentos') + (passado || hoje ? ' · ' + n0(d.atendidos || 0) + ' atendidos' : '') + ' · mês anterior: ' + n0(d.ref_agendados || 0);
+      col.innerHTML = '<span class="n">' + (d.feriado ? '—' : n0(d.agendados || 0)) + '</span>' +
+        '<span class="pilha"><span class="b" style="height:' + Math.max(2, Math.round((d.agendados || 0) / max * 100)) + '%"></span>' +
+        '<span class="b ref" style="height:' + Math.max(2, Math.round((d.ref_agendados || 0) / max * 100)) + '%"></span></span>' +
+        '<span class="m">' + DIA_SEM[dt.getDay()] + '<small>' + (d.feriado ? 'feriado' : dt.getDate()) + '</small></span>' +
+        '<span class="r">' + (d.ref_feriado ? 'feriado' : n0(d.ref_agendados || 0)) + '</span>';
+      grade.appendChild(col);
+    });
+    sec.appendChild(grade);
+    sec.appendChild(novo('p', 'ia-legenda', '<i class="a"></i> esta semana <i class="b"></i> ' + ordinal(S.n) + ' semana de ' + esc(mesRef) + ' · dias que já passaram contam o que aconteceu; os que faltam, o que está marcado'));
+    var V = S.valor;
+    if (V) {
+      var nums = novo('div', 'ia-nums tres ia-sem-valor');
+      nums.appendChild(numero(rs0(V.entrou), 'entrou até hoje', 'verde'));
+      nums.appendChild(numero(rs0(V.previsto), 'previsto até sábado' + (V.comparecimento ? ' · ' + Math.round(V.comparecimento * 100) + '% de comparecimento' : '')));
+      nums.appendChild(numero(rs0(V.ref_total), ordinal(S.n) + ' semana de ' + mesRef));
+      sec.appendChild(nums);
+      sec.appendChild(novo('p', 'ia-nota mini', 'Unimed pela tabela de códigos, Lev Soul R$ 60 por sessão, particular pelo valor marcado' +
+        (V.sem_valor_n ? ' · ' + plural(V.sem_valor_n, 'agendamento de outro convênio sem valor cadastrado', 'agendamentos de outros convênios sem valor cadastrado') : '') + '.'));
+    }
     return sec;
   }
 
@@ -148,7 +202,7 @@ var INICIO_ADM = (function () {
 
     var topo = novo('div', 'ia-psi-topo');
     topo.appendChild(novo('div', 'ia-grande', '<b>' + n0(at) + '</b><small>atendimentos em ' + esc(mesNome) + ', até hoje</small>'));
-    var cmp = novo('div', 'ia-cmp');
+    var cmp = novo('p', 'ia-cmp');
     if (ant && dif != null && dif >= 3) cmp.innerHTML = '<i class="sobe">' + svg(IC.sobe, 16, 2.4) + '</i><span><b>' + dif + '% acima</b> de ' + esc(mesAnt) + ' no mesmo ponto do mês (' + n0(ant) + ')</span>';
     else if (ant && dif != null && dif <= -3) cmp.innerHTML = '<i class="igual">' + svg(IC.igual, 16, 2.4) + '</i><span>' + esc(mesAnt) + ' tinha ' + n0(ant) + ' no mesmo ponto — e ' + esc(mesNome) + ' ainda tem <b>' + n0(rest) + ' marcadas</b> pela frente</span>';
     else if (ant) cmp.innerHTML = '<i class="igual">' + svg(IC.igual, 16, 2.4) + '</i><span><b>no mesmo ritmo</b> de ' + esc(mesAnt) + ' (' + n0(ant) + ' no mesmo ponto)</span>';
@@ -221,16 +275,16 @@ var INICIO_ADM = (function () {
 
     var lin = novo('div', 'ia-linhas');
     var mv = c.mais_vendidos || [];
-    if (mv.length) lin.appendChild(novo('p', '', '<b>Mais vendidos:</b> ' + mv.map(function (x) { return esc(x.nome) + ' <span class="q">' + n0(x.qtd) + '</span>'; }).join(' · ')));
+    if (mv.length) lin.appendChild(novo('p', '', '<b>Mais vendidos</b>' + chips(mv, function (x) { return esc(x.nome) + ' <i>' + n0(x.qtd) + '</i>'; })));
     var ac = c.acabando || [];
     if (c.acabando_n) {
-      var pa = novo('p', 'aviso', '<b>Acabando</b> (' + plural(c.acabando_n, 'produto que vendeu', 'produtos que venderam') + ' nos últimos 30 dias e ' + (c.acabando_n === 1 ? 'está' : 'estão') + ' com 0 a 2 no estoque): ' +
-        ac.map(function (x) { return esc(x.nome) + ' <span class="q">' + n0(x.estoque) + '</span>'; }).join(' · ') + (c.acabando_n > ac.length ? ' …' : ''));
-      var b = botao('ia-link', 'Entrada de estoque ›', function () { ir('estoque'); }); pa.appendChild(b);
+      var pa = novo('p', 'aviso', '<b>Acabando</b> <span class="q">' + n0(c.acabando_n) + '</span>' + chips(ac, function (x) { return esc(x.nome) + ' <i>' + n0(x.estoque) + '</i>'; }) + (c.acabando_n > ac.length ? '<span class="ia-chip mudo">…</span>' : ''));
+      pa.appendChild(botao('ia-link', 'Entrada de estoque ›', function () { ir('estoque'); }));
+      pa.title = 'Produtos ativos com 0 a 2 no estoque que venderam nos últimos 30 dias';
       lin.appendChild(pa);
     }
     if (c.negativos_n) {
-      var pn = novo('p', 'mudo', plural(c.negativos_n, 'produto com estoque negativo', 'produtos com estoque negativo') + ' (venda registrada sem entrada) ');
+      var pn = novo('p', 'mudo', '<b>' + n0(c.negativos_n) + '</b> com estoque negativo (venda sem entrada) ');
       pn.appendChild(botao('ia-link', 'Estoque atual ›', function () { ir('posicao'); }));
       lin.appendChild(pn);
     }
@@ -292,12 +346,16 @@ var INICIO_ADM = (function () {
       if (R && R.erros && R.erros[k]) cont.appendChild(novo('div', 'in-erro', 'Não consegui ler ' + ({ agenda: 'a agenda', corte: 'o corte', falhas: 'as falhas', cad: 'os cadastros', excl: 'as exclusões' })[k] + ': ' + esc(R.erros[k])));
     });
     cont.appendChild(recepcao(P));
+    cont.appendChild(semana(D));
     var grade = novo('div', 'ia-grade');
     grade.appendChild(psicologos(D));
     grade.appendChild(conveniencia(D));
     cont.appendChild(grade);
     cont.appendChild(contas(D));
-    if (D && st.lidoEm) cont.appendChild(novo('p', 'ia-lido', 'números lidos às ' + hhmm(st.lidoEm) + ' · releitura de 5 em 5 minutos'));
+    var rod = [];
+    if (P.lidoEm) rod.push('pendências lidas às ' + hhmm(P.lidoEm));
+    if (D && st.lidoEm) rod.push('números das ' + hhmm(st.lidoEm));
+    if (rod.length) cont.appendChild(novo('p', 'ia-lido', rod.join(' · ')));
     raiz.appendChild(cont);
     main.appendChild(raiz);
     window.scrollTo(0, rolou);

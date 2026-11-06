@@ -176,7 +176,8 @@ var CONTAS = (function () {
       cont.tudo++; if (emAberto(c)) cont.aberto++; if (c.status === 'paga') cont.pagas++; if (c.status === 'no_cartao') cont.cartao++;
     });
     var seg = el('div', 'seg');
-    [['aberto', 'Em aberto'], ['pagas', 'Pagas'], ['cartao', 'No cartão'], ['tudo', 'Tudo']].forEach(function (f) {
+    (ehDono() ? [['aberto', 'Em aberto'], ['pagas', 'Pagas'], ['cartao', 'No cartão'], ['tudo', 'Tudo']]
+             : [['aberto', 'Em aberto'], ['pagas', 'Pagas'], ['tudo', 'Tudo']]).forEach(function (f) {   /* FIN v3.3: a aba "No cartão" é só do dono */
       seg.appendChild(bt(st.filtro === f[0] ? 'on' : '', esc(f[1]) + (contas ? ' <span class="n">' + cont[f[0]] + '</span>' : ''),
         function () { st.filtro = f[0]; desenhar(); }));
     });
@@ -199,7 +200,8 @@ var CONTAS = (function () {
     var s = STATUS[c.status] || [c.status, 'espera'];
     /* parcela de dívida: no acesso do dono, "parcela X de Y" no lugar da categoria (cabe no celular); no da Marinalva vem sem o número */
     var meta = (c.parcela && c.parcelas_total) ? ['parcela ' + c.parcela + ' de ' + c.parcelas_total] : [c.categoria_nome];
-    if (c.status === 'paga' && c.pago_em) meta.push('paga em ' + ddmm(c.pago_em));
+    if (c.status === 'paga' && c.pago_em) meta.push('paga em ' + ddmm(c.pago_em) + (c.baixa_via === 'cartao' ? ' no cartão' : ''));
+    else if (c.no_cartao && c.status !== 'no_cartao') meta.push('no cartão da clínica');   /* FIN v3.3: Feegow/SM Click no acesso da sócia */
     else if (c.debito_banco && c.status !== 'no_cartao') meta.push('débito ' + (BANCO[c.debito_banco] || c.debito_banco));
     if (c.obs_dono) meta.push('com observação sua');
     var v = c.status === 'paga' ? c.valor_pago : c.valor_previsto;
@@ -214,7 +216,7 @@ var CONTAS = (function () {
     var p = el('section', 'painel');
     var falta = 0, pago = 0, previsto = 0, venc = 0, semValor = 0, cartao = 0;
     (contas || []).forEach(function (c) {
-      if (c.status === 'no_cartao') { cartao += Number(c.valor_previsto || 0); return; }
+      if (c.status === 'no_cartao' || (c.no_cartao && c.status !== 'paga')) { cartao += Number(c.valor_previsto || 0); return; }   /* FIN v3.3: no cartão, mesmo com status normal (sócia) */
       if (c.status === 'paga') { pago += Number(c.valor_pago || 0); previsto += Number(c.valor_previsto || c.valor_pago || 0); return; }
       previsto += Number(c.valor_previsto || 0);
       falta += Number(c.valor_previsto || 0);
@@ -229,7 +231,7 @@ var CONTAS = (function () {
       '<div><span>Pago</span><b>' + esc(contas ? brl(pago) : '—') + '</b></div>' +
       '<div><span>Vencidas</span><b class="' + (venc ? 'ct-vermelho' : '') + '">' + (contas ? venc : '—') + '</b></div>';
     p.appendChild(el('div', 'lj-pad', '')).appendChild(k);
-    if (contas && cartao) p.appendChild(el('p', 'ct-nota ct-pad', 'No cartão: ' + esc(brl(cartao)) + '. Já está dentro da fatura do cartão, por isso fica fora da conta acima.'));
+    if (contas && cartao) p.appendChild(el('p', 'ct-nota ct-pad', (ehDono() ? 'No cartão: ' : 'No cartão da clínica: ') + esc(brl(cartao)) + '. Já está dentro da fatura do cartão, por isso fica fora da conta acima.'));
     l.appendChild(p);
     /* FIN v3.2: quanto deixar em cada banco para o débito automático do que ainda não tem baixa */
     var bancos = {}, ordem = [];
@@ -304,7 +306,8 @@ var CONTAS = (function () {
     f.innerHTML = '<h3 class="ct-sub">Marcar como paga</h3>' +
       '<div class="ct-dupla">' + campo('Valor pago', '<input type="text" class="fc" id="ct-b-valor" inputmode="decimal" autocomplete="off" placeholder="0,00" value="' + esc(num2(c.valor_previsto)) + '">') +
       campo('Data do pagamento', '<input type="date" class="fc" id="ct-b-data" value="' + esc(hojeISO()) + '">') + '</div>' +
-      campo('Observação (opcional)', '<input type="text" class="fc" id="ct-b-obs" maxlength="300" autocomplete="off">');
+      campo('Observação (opcional)', '<input type="text" class="fc" id="ct-b-obs" maxlength="300" autocomplete="off">') +
+      '<div class="ct-checks"><label class="ct-check"><input type="checkbox" id="ct-b-via"' + (c.no_cartao ? ' checked' : '') + '><span>Paguei com o cartão da clínica</span></label></div>';   /* FIN v3.3 */
     P.corpo.appendChild(f);
     av = aviso(P);
     var ok = bt('btn btn-p', 'Marcar como paga', enviar), ocupado = false;
@@ -317,8 +320,9 @@ var CONTAS = (function () {
       if (v == null || isNaN(v) || v <= 0) { av.textContent = 'Informe o valor pago, como 1.250,00.'; av.hidden = false; iv.focus(); return; }
       if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { av.textContent = 'Informe a data do pagamento.'; av.hidden = false; return; }
       ocupado = true; ok.disabled = true; av.hidden = true;
-      LAPI.finBaixa(c.id, v, d, f.querySelector('#ct-b-obs').value.trim(), false).then(function () {
-        P.fechar(); avisa(c.nome + ': paga, ' + brl(v) + '.'); carregarMes();
+      var via = f.querySelector('#ct-b-via').checked ? 'cartao' : null;
+      LAPI.finBaixa(c.id, v, d, f.querySelector('#ct-b-obs').value.trim(), false, via).then(function () {
+        P.fechar(); avisa(c.nome + ': paga, ' + brl(v) + (via ? ' no cartão' : '') + '.'); carregarMes();
       }, function (er) { ocupado = false; ok.disabled = false; av.textContent = msgErro(er); av.hidden = false; });
     }
   }
@@ -340,7 +344,7 @@ var CONTAS = (function () {
       var meta = [c.categoria_nome, rotulo(BASES, c.base_projecao).toLowerCase()];
       if (c.obs_dono) meta.push('com observação sua');
       var tags = '';
-      if (c.no_cartao) tags += '<span class="ct-st espera">No cartão</span>';
+      if (c.no_cartao) tags += '<span class="ct-st espera">' + (c.cartao_socia ? (ehDono() ? 'No cartão · a Marinalva paga' : 'No cartão da clínica') : 'No cartão') + '</span>';
       else if (c.debito_banco) tags += '<span class="ct-st espera">Débito ' + esc(BANCO[c.debito_banco] || c.debito_banco) + '</span>';
       if (!c.ativa) tags += '<span class="ct-st espera">Inativa</span>';
       var l = bt('linha ct-l' + (c.ativa ? '' : ' inativa'), '', function () { popFixa(c); });
@@ -388,6 +392,7 @@ var CONTAS = (function () {
       (ehDono() ? campo('Observação só sua', '<textarea class="fc ct-ta" id="ct-f-obsd" maxlength="600" rows="2">' + esc(c.obs_dono || '') + '</textarea>', 'ct-dono-campo') : '') +
       '<div class="ct-checks">' +
       '<label class="ct-check"><input type="checkbox" id="ct-f-cartao"' + (c.no_cartao ? ' checked' : '') + '><span>Paga no cartão <small>(fica fora dos totais: já está na fatura)</small></span></label>' +
+      (ehDono() ? '<label class="ct-check"><input type="checkbox" id="ct-f-socia"' + (c.cartao_socia ? ' checked' : '') + '><span>A Marinalva paga esta no cartão <small>(ela vê a conta e dá baixa; as outras do cartão ela não vê)</small></span></label>' : '') +   /* FIN v3.3 */
       '<label class="ct-check"><input type="checkbox" id="ct-f-ativa"' + (c.ativa !== false ? ' checked' : '') + '><span>Ativa <small>(desmarque quando a conta acabar)</small></span></label>' +
       '</div>';
     P.corpo.appendChild(f);
@@ -412,6 +417,10 @@ var CONTAS = (function () {
         .then(function (j) {
           var muda = cartao !== !!c.no_cartao || (ehDono() && obsD !== (c.obs_dono || ''));
           return muda ? LAPI.finContaFixaMarcar(j.id, cartao, ehDono() ? obsD : null) : j;
+        })
+        .then(function (j) {   /* FIN v3.3: só o dono marca a conta do cartão que a sócia paga */
+          var socia = ehDono() && q('ct-f-socia') ? q('ct-f-socia').checked : null;
+          return socia != null && socia !== !!c.cartao_socia ? LAPI.finContaFixaCartaoSocia(j.id, socia) : j;
         })
         .then(function (j) { return paga !== (c.debito_banco || '') ? LAPI.finContaDebito('fixa', j.id, paga) : j; })
         .then(function () { P.fechar(); avisa(nova ? 'Conta criada.' : 'Conta salva.'); st.mes = null; carregarFixas(); },

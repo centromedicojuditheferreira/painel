@@ -238,6 +238,7 @@ var moldura = (function () {
     document.getElementById('fab').hidden = !!x.semFab;
     var ola = d === 'inicio';                     /* v4: no Início, "Bom dia, <nome>" no lugar do título (v3.3 fazia isso na Agenda) */
     document.querySelector('.pg-tit').classList.toggle('ola', ola);
+    app.classList.toggle('ia-limpo', ola && ehSocia());   /* ADM v1.1: no Início da sócia, sem a barra do topo (Renovação, lupa, tema, ?, recarregar) nem a linha da data */
     if (ola) document.getElementById('pg-titulo').innerHTML = saudacao();
     desenharAlertas();
     if (mudou && window.TUT) TUT.aoTrocarTela(d);   /* TUT v1.0: botão "?" e abertura automática do tutorial da tela */
