@@ -97,6 +97,19 @@ var moldura = (function () {
     ['Administração', [['contas', 'Financeiro'], ['extrato', 'Extrato'], ['visao', 'Visão geral'], ['posicao', 'Estoque atual'], ['exportar', 'Exportar'], ['cfg', 'Configurações'],
       ['dono', 'Dono', null, false, 'gv-aba-dono']], true]
   ];
+  /* ADM v1.0 (06/11/2026): o menu da sócia (Administração que não é o dono), agrupado pelo que ela faz —
+     pagar, repor a conveniência, acompanhar as secretárias. Os mesmos destinos de sempre, em outra ordem;
+     nada novo é liberado nem escondido. Montado de novo na entrada (aoEntrar), quando se sabe quem entrou. */
+  var MENU_SOCIA = [
+    ['', [['inicio', 'Início', 'gv-sbb', true]]],
+    ['Pagar', [['contas', 'Financeiro']]],
+    ['Conveniência', [['estoque', 'Entrada de estoque'], ['posicao', 'Estoque atual'], ['notinhas', 'Notinhas'], ['historico', 'Histórico'], ['extrato', 'Extrato']]],
+    ['Acompanhar', [['agenda', 'Agenda'], ['saldo', 'Guias'], ['corte', 'Corte', 'gv-b-corte', true], ['falhas', 'Falhas', 'gv-b-falhas', true],
+      ['cadastros', 'Cadastros', 'gv-b-cad', true], ['exclusoes', 'Exclusões', 'gv-b-excl', true], ['caixa', 'Caixa', 'gv-b-caixa', true],
+      ['conferencia', 'Conferência', 'gv-b-prof', true], ['levsoul', 'Lev Soul', 'ls-b-pend', true], ['malotes', 'Malotes', 'gv-b-malotes']]],
+    ['Ajuda', [['tutoriais', 'Tutoriais']]],
+    ['Administração', [['visao', 'Visão geral'], ['exportar', 'Exportar'], ['cfg', 'Configurações'], ['dono', 'Dono', null, false, 'gv-aba-dono']], true]
+  ];
 
   var app = document.getElementById('app');
   var menu = document.getElementById('menu');
@@ -105,17 +118,20 @@ var moldura = (function () {
   var chipsExtra = [];   /* FIN v1.5: quadrados da gaveta (contar de novo, diferença, fechar), antes dos do GV */
   var resumos = {};
   var fixo = false;
+  var menuLigado = false, obsMenu = null;
   try { fixo = localStorage.getItem('painel.menuFixo') === '1'; } catch (e) {}
 
   /* ── menu ── */
+  function ehSocia() { return typeof CU !== 'undefined' && !!CU && CU.admin === true && !CU.dono; }   /* ADM v1.0 */
   function montarMenu() {
+    var LISTA = ehSocia() ? MENU_SOCIA : MENU;
     var h = '<div class="menu-in">' +
       '<div class="menu-marca"><span class="menu-logo">' +
       '<span class="menu-o" aria-hidden="true">C</span>' +
       '<span class="menu-nome"><b>Cortex</b><img class="lg-claro" src="img/levsoul-logo.png" alt="Lev Soul" width="72" height="11">' +
       '<img class="lg-escuro" src="img/levsoul-logo-branco.svg" alt="" aria-hidden="true" width="72" height="11"></span>' +
       '</span><button type="button" class="menu-fixar" id="menu-fixar">' + svg(I.fixar) + '</button></div>';
-    MENU.forEach(function (g) {
+    LISTA.forEach(function (g) {
       var adm = g[2] ? ' menu-admin' : '';
       if (g[0]) h += '<div class="menu-grupo' + adm + '"><span>' + g[0] + '</span><i aria-hidden="true"></i></div>';
       g[1].forEach(function (it) {
@@ -134,19 +150,32 @@ var moldura = (function () {
     menu.innerHTML = h;
     document.getElementById('menu-tema').addEventListener('click', trocaTema);
     pintaTema();
-    menu.addEventListener('click', function (ev) {
-      var b = ev.target.closest('[data-ir]');
-      if (b) { irPara(b.getAttribute('data-ir')); if (!fixo) abrir(false); }
-    });
+    if (!menuLigado) {   /* os ouvintes do <nav> ficam uma vez só; o conteúdo pode ser montado de novo na entrada (ADM v1.0) */
+      menuLigado = true;
+      menu.addEventListener('click', function (ev) {
+        var b = ev.target.closest('[data-ir]');
+        if (b) { irPara(b.getAttribute('data-ir')); if (!fixo) abrir(false); }
+      });
+      menu.addEventListener('mouseenter', function () { if (!fixo) abrir(true); });
+      menu.addEventListener('mouseleave', function () { if (!fixo) abrir(false); });
+      menu.addEventListener('focusin', function () { if (!fixo) abrir(true); });
+      menu.addEventListener('focusout', function (ev) { if (!fixo && !menu.contains(ev.relatedTarget)) abrir(false); });
+    }
     document.getElementById('menu-fixar').addEventListener('click', function () { fixar(!fixo); });
-    menu.addEventListener('mouseenter', function () { if (!fixo) abrir(true); });
-    menu.addEventListener('mouseleave', function () { if (!fixo) abrir(false); });
-    menu.addEventListener('focusin', function () { if (!fixo) abrir(true); });
-    menu.addEventListener('focusout', function (ev) { if (!fixo && !menu.contains(ev.relatedTarget)) abrir(false); });
     /* o ponto vermelho do menu recolhido segue os contadores que o GV atualiza */
-    var obs = new MutationObserver(marcarContadores);
-    menu.querySelectorAll('.menu-n[id]').forEach(function (n) { obs.observe(n, { attributes: true, childList: true, characterData: true, subtree: true }); });
+    if (obsMenu) obsMenu.disconnect();
+    obsMenu = new MutationObserver(marcarContadores);
+    menu.querySelectorAll('.menu-n[id]').forEach(function (n) { obsMenu.observe(n, { attributes: true, childList: true, characterData: true, subtree: true }); });
     fixar(fixo, true);
+    if (atual) definir(atual);   /* remontou com uma tela já escolhida: realça o item certo */
+  }
+  /* ADM v1.0: chamado por entrarApp (js/lojinha.js) logo depois do PIN — a sócia tem o menu dela */
+  function aoEntrar() {
+    var nm = document.getElementById('sb-nm') ? document.getElementById('sb-nm').textContent : '', av = document.getElementById('sb-av') ? document.getElementById('sb-av').textContent : '',
+        pp = document.getElementById('sb-papel') ? document.getElementById('sb-papel').textContent : '';
+    montarMenu();
+    var e1 = document.getElementById('sb-nm'), e2 = document.getElementById('sb-av'), e3 = document.getElementById('sb-papel');
+    if (e1) e1.textContent = nm; if (e2) e2.textContent = av; if (e3) e3.textContent = ehSocia() ? 'Sócia · Administração' : pp;
   }
   function marcarContadores() {
     menu.querySelectorAll('.menu-item').forEach(function (it) {
@@ -346,7 +375,7 @@ var moldura = (function () {
     rec.classList.add('girando'); setTimeout(function () { rec.classList.remove('girando'); }, 1200);
   });
   window.irPara = irPara;
-  return { aoNavegar: aoNavegar, aoTrocarTela: aoTrocarTela, alertas: alertas, alertasExtra: alertasExtra, resumo: resumo,
+  return { aoNavegar: aoNavegar, aoTrocarTela: aoTrocarTela, alertas: alertas, alertasExtra: alertasExtra, resumo: resumo, aoEntrar: aoEntrar, ehSocia: ehSocia,
            irTelaGuias: irTelaGuias, atual: function () { return atual; }, pop: pop, svg: svg, I: I, acoesDe: acoesDe,
            tema: tema, temaAtual: temaAtual, chipsExtra: function () { return chipsExtra.slice(); }, redesenharAlertas: desenharAlertas };
 })();
