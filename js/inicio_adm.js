@@ -105,7 +105,7 @@ var INICIO_ADM = (function () {
   }
   function fraseTopo(P) {
     var emDia = P.pronto && P.total === 0;
-    var f = emDia ? FRASES.emDia() : FRASES.doDia();
+    var f = emDia ? FRASES.emDia() : (FRASES.deHoje ? FRASES.deHoje() : FRASES.doDia());   /* FRASES v1.1: a mesma da entrada */
     return novo('p', 'ia-frase' + (emDia ? ' em-dia' : ''), '<i>' + svg(IC.aspas, 18, 1.6) + '</i><span>' + esc(f) + '</span>');
   }
 
