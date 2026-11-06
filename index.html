@@ -25,6 +25,7 @@ if(/[?&](conferir|convite)=/.test(location.search))location.replace('https://pro
 <link rel="stylesheet" href="css/guias_saldo.css?v=1">
 <link rel="stylesheet" href="css/tutoriais.css?v=1">
 <link rel="stylesheet" href="css/contas.css?v=4">
+<link rel="stylesheet" href="css/levsoul.css?v=1">
 </head>
 <body>
 <div class="toast" id="toast"></div>
@@ -263,6 +264,7 @@ if(/[?&](conferir|convite)=/.test(location.search))location.replace('https://pro
 <div class="sec" id="s-contas"></div>   <!-- FIN v3.0: Financeiro da Administração (js/contas.js) -->
 <div class="sec" id="s-gaveta"></div>
 <div class="sec" id="s-saldo"></div>   <!-- GUIAS v1.0: guias do paciente e quanto resta (js/guias_saldo.js) -->
+<div class="sec" id="s-levsoul"></div>   <!-- LEV SOUL v1.0: a aba Lev Soul (js/levsoul.js) -->
 <div class="sec" id="s-tutoriais"></div>
 
 <!-- CONFIG -->
@@ -349,7 +351,7 @@ if(/[?&](conferir|convite)=/.test(location.search))location.replace('https://pro
 <!-- conveniência e login: Supabase pelas funções loja_* (LOJA v1.0); o Firebase saiu -->
 <script src="js/loja_api.js?v=7"></script>
 <script src="js/porteiro.js?v=1"></script>   <!-- SEGURANÇA Fase 2: todo pedido leva o login do Cortex -->
-<script src="js/lojinha.js?v=20"></script>
+<script src="js/lojinha.js?v=21"></script>
 <script src="js/guias.js?v=21"></script>
 <script src="js/profissional.js?v=17"></script>
 <script src="js/cobranca.js?v=3"></script>
@@ -359,9 +361,10 @@ if(/[?&](conferir|convite)=/.test(location.search))location.replace('https://pro
 <script src="js/financeiro.js?v=6"></script>
 <script src="js/gaveta.js?v=4"></script>
 <script src="js/guias_saldo.js?v=1"></script>   <!-- GUIAS v1.0: tela Guias + bloco na janela da Agenda -->
+<script src="js/levsoul.js?v=1"></script>   <!-- LEV SOUL v1.0: aba Lev Soul (funil, assinantes, agenda, pendências, empresas, comissões) -->
 <script src="js/inicio.js?v=2"></script>   <!-- v4: a tela Início (Agora + Para resolver + Tudo em dia) -->
 <script src="js/tutoriais_conteudo.js?v=7"></script>
-<script src="js/moldura.js?v=17"></script>
+<script src="js/moldura.js?v=18"></script>
 <script src="js/alerta.js?v=2"></script>   <!-- ALERTA v2: avisos obrigatórios para a recepção, de 20 em 20 min -->
 <script src="js/tutoriais.js?v=2"></script>
 <script src="js/entrada.js?v=4"></script>

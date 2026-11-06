@@ -36,6 +36,7 @@ var moldura = (function () {
     lua: 'M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z', sol: 'M12 7.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 1 0 0-9M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4',
     inicio: 'M4 11.5 12 5l8 6.5V20H4zM10 20v-6h4v6',
     saldo: 'M4 6h16v12H4zM4 10h16M7.5 14.5h4.5M15.5 14.5h1',   /* GUIAS v1.0: as guias de cada paciente e quanto resta */
+    levsoul: 'M12 19.5s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 6.8a4.2 4.2 0 0 1 7.5 2.5c0 5.6-7.5 10.2-7.5 10.2z',   /* LEV SOUL v1.0 (js/levsoul.js) */
     esq: 'M14.5 6l-6 6 6 6', dir: 'M9.5 6l6 6-6 6'
   };
   function svg(d, tam, traco) {
@@ -72,7 +73,9 @@ var moldura = (function () {
     posicao:       { s: 'posicao',   secao: 'Administração', titulo: 'Estoque atual' },
     exportar:      { s: 'exportar',  secao: 'Administração', titulo: 'Exportar' },
     cfg:           { s: 'cfg',       secao: 'Administração', titulo: 'Configurações' },
-    tutoriais:     { s: 'tutoriais', secao: 'Ajuda', titulo: 'Tutoriais' }   /* TUT v1.0: todos os manuais */
+    tutoriais:     { s: 'tutoriais', secao: 'Ajuda', titulo: 'Tutoriais' },   /* TUT v1.0: todos os manuais */
+    levsoul:       { s: 'levsoul',   secao: 'Assinaturas', titulo: 'Lev Soul',   /* LEV SOUL v1.0 (js/levsoul.js): funil, assinantes, agenda, pendências, empresas, comissões */
+                     acoes: [['Meu link', function () { if (window.LEVSOUL) LEVSOUL.meuLink(); }], ['Nova contratação', function () { if (window.LEVSOUL) LEVSOUL.contratar(); }]] }
   };
   var TELA_GV = {}, SEC_LOJA = {};
   Object.keys(DEST).forEach(function (k) {
@@ -86,6 +89,7 @@ var moldura = (function () {
   var MENU = [
     ['', [['inicio', 'Início', 'gv-sbb', true], ['agenda', 'Agenda'], ['saldo', 'Guias'], ['corte', 'Corte', 'gv-b-corte', true], ['falhas', 'Falhas', 'gv-b-falhas', true],
       ['cadastros', 'Cadastros', 'gv-b-cad', true], ['exclusoes', 'Exclusões', 'gv-b-excl', true], ['caixa', 'Caixa', 'gv-b-caixa', true],
+      ['levsoul', 'Lev Soul', 'ls-b-pend', true],   /* LEV SOUL v1.0: o número é o total de pendências (ls_cx_resumo) */
       ['malotes', 'Malotes', 'gv-b-malotes']]],
     ['Profissionais', [['conferencia', 'Conferência', 'gv-b-prof', true]]],
     ['Conveniência', [['notinhas', 'Notinhas'], ['estoque', 'Estoque'], ['historico', 'Histórico']]],
