@@ -9,6 +9,8 @@ var GCFG = {
 /* assinatura vem do login único da conveniência (PIN) */
 function autora(){ return (typeof CU!=="undefined" && CU && CU.nome) ? CU.nome : ""; }
 function ehDono(){ return (typeof CU!=="undefined" && CU && CU.admin===true); }
+/* EXCL v2.1: aprovar/negar exclusão é só do Gabriel (loja_usuarios.dono) — o banco confere de novo */
+function ehGabriel(){ return (typeof CU!=="undefined" && CU && CU.dono===true); }
 
 /* ── dicionário das situações (voz da recepção) · v2.0 ── */
 var SIT = {
@@ -316,24 +318,40 @@ function dispensarExclusao(l, btn){
     if(btn){ btn.disabled = false; btn.textContent = "✕"; }
   });
 }
-function aprovarExclusao(l, btn){
-  if(!ehDono()) return;
-  if(btn){ btn.disabled = true; btn.textContent = "liberando…"; }
-  fetch(GCFG.url + "/rest/v1/rpc/oc_liberar_protecao", {
+/* EXCL v2.1 (09/11/2026): o antigo oc_liberar_protecao foi desligado no EXCL v2 (dava HTTP 400).
+   Agora o Cortex chama cortex_excl_decidir: o banco confere a sessão (só o dono passa) e roda
+   as MESMAS funções do botão do Telegram (oc_aprovar_exclusao / oc_negar_exclusao). */
+function decidirExclusao(l, decisao, btn){
+  if(!ehGabriel()) return;
+  if(decisao === "negar" && !confirm("Negar a exclusão de " + (l.paciente || "—") + "?\n\n" +
+       "Volta para a recepção como “Sem resposta”: elas têm que corrigir no Feegow.")) return;
+  var rotulo = btn ? btn.textContent : "";
+  if(btn){ btn.disabled = true; btn.textContent = decisao === "aprovar" ? "aprovando…" : "negando…"; }
+  var token = (typeof LAPI !== "undefined" && LAPI.token) ? LAPI.token() : null;
+  fetch(GCFG.url + "/rest/v1/rpc/cortex_excl_decidir", {
     method: "POST",
     headers: cab({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ p_ids: l.agendamento_ids, p_quem: autora() || null })
+    body: JSON.stringify({ p_token: token, p_ref: l.oc_ref, p_decisao: decisao })
   }).then(function(r){
-    if(!r.ok) throw new Error("HTTP " + r.status);
-    return fetch(GCFG.url + "/rest/v1/oc_notas?tipo=eq.exclusao&referencia=eq." + encodeURIComponent(l.oc_ref), {
-      method: "PATCH",
-      headers: cab({ "Content-Type": "application/json", "Prefer": "return=minimal" }),
-      body: JSON.stringify({ aprovada_em: new Date().toISOString(), aprovada_por: autora() || null })
+    return r.text().then(function(t){
+      var j = null; try { j = JSON.parse(t); } catch(e){}
+      if(!r.ok) throw new Error((j && (j.message || j.hint)) || ("HTTP " + r.status));
+      if(!j || j.ok !== true) throw new Error((j && j.msg) || "Não deu certo.");
+      return j;
     });
-  }).then(function(){ return loadExcl(); })
-    .then(function(){ if(estado.tela==="dono") desenharAdmin(); })
-    .catch(function(e){ alert("Não consegui aprovar: " + e.message); if(btn){ btn.disabled=false; btn.textContent="👑 Aprovar e liberar"; } });
+  }).then(function(j){
+    if(typeof toast === "function") toast(j.msg, "ok"); else alert(j.msg);
+    return loadExcl();
+  }).then(function(){
+      if(estado._exclPinta) estado._exclPinta();   /* janela aberta pelo Início: aprovada fecha, negada volta a "Sem resposta" */
+      if(estado.tela==="dono") desenharAdmin();
+    })
+    .catch(function(e){
+      alert("Não consegui " + (decisao === "aprovar" ? "aprovar" : "negar") + ": " + e.message);
+      if(btn){ btn.disabled = false; btn.textContent = rotulo; }
+    });
 }
+function aprovarExclusao(l, btn){ decidirExclusao(l, "aprovar", btn); }
 
 /* ═══ utilidades ═══ */
 /* ═══ 🧩 regras de ABA ═══
@@ -459,7 +477,7 @@ function exclAberta(x){ return (!x.tratamento || x.tratamento === "pendente") ||
    Nada anterior ao marco aparece (limpeza do legado, decisão do dono em 17/08).
    Do marco em diante a família FICA na tela até ser resolvida:
      · restaurada no Feegow  → a conferência da madrugada vê e a linha sai sozinha
-     · aprovada pelo dono    → oc_liberar_protecao solta a proteção e a linha sai
+     · aprovada pelo dono    → cortex_excl_decidir / Telegram (oc_aprovar_exclusao) enterra as sessões e a linha sai
      · dispensada pelo dono  → o ✕ some com o card sem soltar a proteção
    Secretária nenhuma tira card daqui — só o administrador. */
 var MARCO_EXCLUSOES = "2026-08-17";
@@ -1910,7 +1928,7 @@ function abrirExclItem(ref, filtro){
     });
     bt.appendChild(ops);
     P.corpo.appendChild(bt);
-    if(s === "aguardando") P.corpo.appendChild(novo("div", "pp-caixa aviso", '<span class="pp-txt">Aguardando o dono aprovar. Só o administrador libera a proteção ou tira a linha da tela.</span>'));
+    if(s === "aguardando") P.corpo.appendChild(novo("div", "pp-caixa aviso", '<span class="pp-txt">Aguardando o Gabriel aprovar ou negar (aqui no Cortex ou no Telegram).</span>'));
     var bn = novo("div", "pp-bloco", '<label class="pp-rot" for="nota-excl">Anotação</label>');
     notaEl.id = "nota-excl"; notaEl.rows = 2; notaEl.placeholder = "Por que apagou, com quem confirmou…"; notaEl.value = x.nota || "";
     notaEl.addEventListener("change", function(){
@@ -1930,10 +1948,13 @@ function abrirExclItem(ref, filtro){
     if(ehDono()){
       var adm = novo("div", "pp-adm", '<span class="pp-rot">Administrador</span>');
       var linhaB = novo("div", "pp-adm-bt");
-      if(x.aguardando_dono){
-        var ba = botao("btn btn-p", "Aprovar e liberar", function(){ aprovarExclusao(x, ba); });
-        ba.title = "Confirma que era para apagar mesmo: a reconciliação libera na próxima rodada";
+      if(x.aguardando_dono && ehGabriel()){
+        var ba = botao("btn btn-p", "Aprovar e liberar", function(){ decidirExclusao(x, "aprovar", ba); });
+        ba.title = "Era para apagar mesmo: as sessões saem, a cobrança presa é cancelada e a linha some";
         linhaB.appendChild(ba);
+        var bng = botao("btn btn-s", "Negar", function(){ decidirExclusao(x, "negar", bng); });
+        bng.title = "Não era para apagar: volta para a recepção corrigir no Feegow";
+        linhaB.appendChild(bng);
       }
       var bx = botao("btn btn-s", "Tirar da tela", function(){ dispensarExclusao(x, bx); });
       bx.title = "Só esconde a linha: NÃO solta a proteção do faturamento";
@@ -2078,7 +2099,9 @@ function desenharAdmin(){
                '<td>'+escapa(x.dia_semana||"?")+' às '+escapa(x.horario||"?")+'</td>'+
                '<td>'+x.n_sessoes+'<br><small>'+escapa(x.datas_fmt||"")+'</small></td>'+
                '<td>'+escapa(x.autora||"—")+(x.nota?'<br><small>'+escapa(x.nota)+'</small>':'')+'</td>'+
-               '<td><button class="gv-btn verde mini adm-aprova" data-i="'+i+'">👑 Aprovar</button></td></tr>';
+               '<td>'+(ehGabriel()
+                 ? '<button class="gv-btn verde mini adm-aprova" data-i="'+i+'">👑 Aprovar</button> <button class="gv-btn mini adm-nega" data-i="'+i+'">Negar</button>'
+                 : '<small>Aguardando o Gabriel</small>')+'</td></tr>';
         });
         h += '</table>';
       }
@@ -2142,6 +2165,12 @@ function desenharAdmin(){
         (function(btn){
           btn.addEventListener("click", function(){ aprovarExclusao(aguard[parseInt(btn.getAttribute("data-i"),10)], btn); });
         })(aps[i]);
+      }
+      var ngs = main.querySelectorAll(".adm-nega");
+      for(var k=0;k<ngs.length;k++){
+        (function(btn){
+          btn.addEventListener("click", function(){ decidirExclusao(aguard[parseInt(btn.getAttribute("data-i"),10)], "negar", btn); });
+        })(ngs[k]);
       }
     }
     document.getElementById("admModoR").onclick = function(){ estado.donoModo = "resumo"; desenharAdmin(); };
